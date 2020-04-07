@@ -1,14 +1,20 @@
-__pycache__
-resources
-settings.py
+# IDE files
 .vscode
 .idea
 .DS_Store
+
+#py files
+__pycache__
+*.egg-info/
+
+# keys and configs
 credentials.json
 token.json
 local.db
-node_modules
 
+# special directories
+node_modules/
+resources/
 orig/
 cropped/
 venv/

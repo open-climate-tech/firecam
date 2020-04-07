@@ -18,7 +18,7 @@ Library code to manage image archives
 
 """
 
-import goog_helper
+from firecam.lib import goog_helper
 
 import os
 import logging

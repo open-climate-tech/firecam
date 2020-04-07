@@ -31,8 +31,8 @@ from oauth2client import file, client, tools
 from apiclient.http import MediaIoBaseDownload
 from apiclient.http import MediaFileUpload
 
-import collect_args
-import img_archive
+from firecam.lib import collect_args
+from firecam.lib import img_archive
 
 # If modifying these scopes, delete the file token.json.
 # TODO: This is getting too big.  We should ask for different subsets for each app
@@ -374,6 +374,18 @@ def getParentParser():
     """Get the parent argparse object needed by Google APIs
     """
     return tools.argparser
+
+
+
+GS_URL_REGEXP = '^gs://([a-z0-9_.-]+)/(.+)$'
+def parseGCSPath(path):
+    matches = re.findall(GS_URL_REGEXP, path)
+    if matches and (len(matches) == 1):
+        return {
+            'bucket': matches[0][0],
+            'name': matches[0][1],
+        }
+    return None
 
 
 def listBuckets(storageSvc, projectName):
