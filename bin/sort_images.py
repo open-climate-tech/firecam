@@ -1,4 +1,4 @@
-# Copyright 2018 The Fuego Authors.
+# Copyright 2020 Open Climate Tech Contributors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -23,19 +23,12 @@ This script will unzip the images, update the image metadata sheet, and upload t
 
 """
 
-import sys
-import os
-fuegoRoot = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(fuegoRoot, 'lib'))
-sys.path.insert(0, fuegoRoot)
-import settings
-settings.fuegoRoot = fuegoRoot
-import collect_args
-import goog_helper
-import img_archive
-
-sys.path.insert(0, os.path.join(settings.fuegoRoot, 'image_crop'))
-import crop_single
+import os, sys
+from firecam.lib import settings
+from firecam.lib import collect_args
+from firecam.lib import goog_helper
+from firecam.lib import img_archive
+from firecam.image_crop import crop_single
 
 import zipfile
 import tempfile

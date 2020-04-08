@@ -1,4 +1,4 @@
-# Copyright 2018 The Fuego Authors.
+# Copyright 2020 Open Climate Tech Contributors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -31,7 +31,7 @@ from PIL import Image, ImageMath
 
 
 def getImgPath(outputDir, cameraID, timestamp, cropCoords=None, diffMinutes=0):
-    """Generate properly formatted image filename path following Fuego conventions
+    """Generate properly formatted image filename path following Firecam conventions
        E.g.: lo-s-mobo-c__2018-06-06T11;12;23_Diff1_Crop_627x632x1279x931.jpg
 
     Args:
@@ -56,7 +56,7 @@ def getImgPath(outputDir, cameraID, timestamp, cropCoords=None, diffMinutes=0):
 
 
 def repackFileName(parsedName):
-    """Generate properly formatted image filename following Fuego conventions
+    """Generate properly formatted image filename following Firecam conventions
        based on information from parsedName dictionary
        E.g.: lo-s-mobo-c__2018-06-06T11;12;23_Diff1_Crop_627x632x1279x931.jpg
 

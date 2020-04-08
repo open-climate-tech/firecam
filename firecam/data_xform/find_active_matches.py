@@ -1,4 +1,4 @@
-# Copyright 2018 The Fuego Authors.
+# Copyright 2020 Open Climate Tech Contributors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,17 +18,12 @@ Find fire camera location matches and ensure that archives have data for specifi
 
 """
 
-import os
-import sys
-fuegoRoot = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, os.path.join(fuegoRoot, 'lib'))
-sys.path.insert(0, fuegoRoot)
-import settings
-settings.fuegoRoot = fuegoRoot
-import collect_args
-import goog_helper
-import db_manager
-import img_archive
+import os, sys
+from firecam.lib import settings
+from firecam.lib import collect_args
+from firecam.lib import goog_helper
+from firecam.lib import img_archive
+from firecam.lib import db_manager
 
 import time, datetime
 import dateutil.parser

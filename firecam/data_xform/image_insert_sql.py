@@ -1,4 +1,4 @@
-# Copyright 2018 The Fuego Authors.
+# Copyright 2020 Open Climate Tech Contributors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,25 +14,22 @@
 # ==============================================================================
 """
 
-Takes csv export of Fuego images table and push it to sqlite DB
+Takes csv export of Images table and push it to sqlite DB
 
 """
 
-import sys
-import os
-fuegoRoot = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(fuegoRoot, 'lib'))
-sys.path.insert(0, fuegoRoot)
-import settings
-settings.fuegoRoot = fuegoRoot
-import db_manager
-import collect_args
+import os, sys
+from firecam.lib import settings
+from firecam.lib import collect_args
+from firecam.lib import db_manager
 
 import time
 import csv
 import dateutil.parser
 
-manager = db_manager.DbManager(os.path.join(settings.fuegoRoot + 'resources/local.db'))
+manager = db_manager.DbManager(sqliteFile=settings.db_file,
+                                psqlHost=settings.psqlHost, psqlDb=settings.psqlDb,
+                                psqlUser=settings.psqlUser, psqlPasswd=settings.psqlPasswd)
 
 def insert_entire_images(csvFile):
     csvreader = csv.reader(csvFile)
@@ -71,8 +68,8 @@ def insert_cropped_images(csvFile):
 
 def main():
     optArgs = [
-        ["e", "entireImage", "csv filename with data on entire images (Fuego Images)"],
-        ["c", "croppedImages", "csv filename with data on cropped images (Fuego Cropped Images)"],
+        ["e", "entireImage", "csv filename with data on entire images (Images)"],
+        ["c", "croppedImages", "csv filename with data on cropped images (Cropped Images)"],
     ]
     args = collect_args.collectArgs([], optionalArgs=optArgs)
     if args.entireImage:

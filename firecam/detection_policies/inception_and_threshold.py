@@ -1,4 +1,4 @@
-# Copyright 2018 The Fuego Authors.
+# Copyright 2020 Open Climate Tech Contributors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -21,16 +21,10 @@ historical scores.
 
 """
 
-import os
-import sys
-fuegoRoot = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, os.path.join(fuegoRoot, 'lib'))
-sys.path.insert(0, fuegoRoot)
-import settings
-settings.fuegoRoot = fuegoRoot
-import goog_helper
-import tf_helper
-import rect_to_squares
+import os, sys
+from firecam.lib import goog_helper
+from firecam.lib import tf_helper
+from firecam.lib import rect_to_squares
 
 import pathlib
 from PIL import Image, ImageFile, ImageDraw, ImageFont

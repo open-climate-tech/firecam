@@ -1,4 +1,4 @@
-# Copyright 2018 The Fuego Authors.
+# Copyright 2020 Open Climate Tech Contributors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -22,16 +22,11 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import sys
-import os
-fuegoRoot = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(fuegoRoot, 'lib'))
-sys.path.insert(0, fuegoRoot)
-import settings
-settings.fuegoRoot = fuegoRoot
-import collect_args
-import rect_to_squares
-import tf_helper
+import os, sys
+from firecam.lib import settings
+from firecam.lib import collect_args
+from firecam.lib import rect_to_squares
+from firecam.lib import tf_helper
 
 import pathlib
 import subprocess
@@ -110,7 +105,7 @@ def calcScoresInMemory(model_file, label_file, imgPath):
 
 def imageDisplay(imgOrig, title=''):
     rootTk = tk.Tk()
-    rootTk.title('Fuego: ' + title)
+    rootTk.title('Firecam: ' + title)
     screen_width = rootTk.winfo_screenwidth() - 100
     screen_height = rootTk.winfo_screenheight() - 100
 

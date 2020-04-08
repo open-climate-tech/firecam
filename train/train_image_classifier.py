@@ -1,4 +1,4 @@
-# Copyright 2018 The Fuego Authors.
+# Copyright 2020 Open Climate Tech Contributors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -28,8 +28,8 @@
 # ==============================================================================
 """Generic training script that trains a model using a given dataset.
 
-Minor changes made for Fuego project to use firecam dataset
-These changes are annotated by comment "### Fuego:"
+Minor changes made for Firecam project to use firecam dataset
+These changes are annotated by comment "### Firecam:"
 """
 
 from __future__ import absolute_import
@@ -38,10 +38,10 @@ from __future__ import print_function
 
 import tensorflow as tf
 
-### Fuego: Next four lines changed for Fuego firecam
+### Firecam: Next four lines changed for firecam
 ### Also added an if clause for using dataset_firecam later in this file
-import sys
-import settings
+import os, sys
+from firecam.lib import settings
 sys.path.insert(0, settings.tfSlimDir)
 import dataset_firecam
 
@@ -440,7 +440,7 @@ def main(_):
     ######################
     # Select the dataset #
     ######################
-    ### Fuego: Added special if clause for Fuego firecam
+    ### Firecam: Added special if clause for firecam
     if FLAGS.dataset_name == 'firecam':
         dataset = dataset_firecam.get_split(FLAGS.dataset_split_name, FLAGS.dataset_dir)
     else:

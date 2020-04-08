@@ -1,0 +1,18 @@
+{
+    "// service account": 0,
+    "keyFilename": "xxx/yyy.json",
+
+    "// oauth": 0,
+    "googleTokenFile": "xxx/token.json",
+    "googleCredsFile": "xxx/credentials.json",
+
+    "// DB selection sqlite or cloud-postgres": 0,
+    "db_file": "xxx/local.db",
+    "// db_file": "",
+    "psqlHost": "127.0.0.1",
+    "psqlDb": "postgres",
+    "psqlUser": "postgres",
+    "psqlPasswd": "secret",
+
+    "pubsubTopic": "xxx"
+}

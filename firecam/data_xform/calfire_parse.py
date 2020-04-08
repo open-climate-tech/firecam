@@ -1,4 +1,4 @@
-# Copyright 2018 The Fuego Authors.
+# Copyright 2020 Open Climate Tech Contributors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -23,8 +23,8 @@ import urllib.request
 from html.parser import HTMLParser
 
 url = 'http://www.fire.ca.gov/current_incidents'
-# file = 'c:/Users/kinshuk/Downloads/calfire_current_top.html'
-file = 'c:/Users/kinshuk/Downloads/calfire-2017.html'
+# file = 'xxx/calfire_current_top.html'
+file = 'xxx/calfire-2017.html'
 year = 2017
 
 class MyHTMLParser(HTMLParser):
