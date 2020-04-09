@@ -16,8 +16,9 @@
 Helper functions for google cloud APIs (drive, sheets)
 """
 
-import os
-import sys
+import os, sys
+from firecam.lib import img_archive
+
 import re
 import io
 import shutil
@@ -31,8 +32,7 @@ from oauth2client import file, client, tools
 from apiclient.http import MediaIoBaseDownload
 from apiclient.http import MediaFileUpload
 
-from firecam.lib import collect_args
-from firecam.lib import img_archive
+from google.cloud import storage
 
 # If modifying these scopes, delete the file token.json.
 # TODO: This is getting too big.  We should ask for different subsets for each app
@@ -379,6 +379,14 @@ def getParentParser():
 
 GS_URL_REGEXP = '^gs://([a-z0-9_.-]+)/(.+)$'
 def parseGCSPath(path):
+    """Parse GCS bucket and path names out of given gs:// style full path
+
+    Args:
+        path (str): full path
+
+    Returns:
+        Dict with bucket and name
+    """
     matches = re.findall(GS_URL_REGEXP, path)
     if matches and (len(matches) == 1):
         return {
@@ -388,51 +396,81 @@ def parseGCSPath(path):
     return None
 
 
-def listBuckets(storageSvc, projectName):
-    """List all buckets in given Google Cloud Storage project
-
-    Args:
-        storageSvc: Storage service (from getGoogleServices()['storage'])
-        projectName (str): Cloud project Name
+def getStorageClient(serviceKey = None):
+    """Get an authenticated GCS client
 
     Returns:
-        List of bucket names or None
+        Authenticated GCP Storage client
     """
-    fields = 'nextPageToken,items(name)'
-    res = storageSvc.buckets().list(project = projectName, fields = fields).execute()
-    if res and 'items' in res:
-        return [item['name'] for item in res['items']]
-    return None
+    if serviceKey:
+        storageClient = storage.Client.from_service_account_json(serviceKey)
+    else:
+        storageClient = storage.Client()
+    return storageClient
 
 
-def listBucketObjects(storageSvc, bucketName, prefix='', getDirs=False):
-    """List all objects in given Google Cloud Storage bucket matching given prefix and getDirs
+def listBuckets(storageClient):
+    """List all Cloud storage buckets in given client
 
     Args:
-        storageSvc: Storage service (from getGoogleServices()['storage'])
+        storageClient: Authenticated GCP Storage client
+
+    Returns:
+        List of bucket names
+    """
+    return [bucket.name for bucket in storageClient.list_buckets()]
+
+
+def listBucketFiles(storageClient, bucketName, prefix='', deep=False):
+    """List all files in given Google Cloud Storage bucket matching given prefix and getDirs
+
+    Args:
+        storageClient: Authenticated GCP Storage client
         bucketName (str): Cloud Storage bucket name
         prefix (str): optional string that must be at start of filename
-        getDirs (bool): if true, return subdirectories vs. files
+        deep (bool): if true, return all files in "deeply" nested "folders"
 
     Returns:
         List of file names (note names are full paths in cloud storage)
     """
-    fields = 'nextPageToken,items(name),prefixes'
-    res = storageSvc.objects().list(bucket = bucketName, fields = fields,
-                                    prefix = prefix, delimiter = '/').execute()
-    if res:
-        if getDirs and ('prefixes' in res):
-            return res['prefixes']
-        elif ('items' in res) and not getDirs:
-            return [item['name'] for item in res['items']]
-    return None
+    delimiter = '' if deep else '/'
+    blobs = storageClient.list_blobs(bucketName, prefix=prefix, delimiter=delimiter)
+    return [blob.name for blob in blobs]
 
 
-def downloadBucketObject(storageSvc, bucketName, fileID, localFilePath):
+def getBucketFile(storageClient, bucketName, fileID):
+    """Get given file from given GCS bucket
+
+    Args:
+        storageClient: Authenticated GCP Storage client
+        bucketName (str): Cloud Storage bucket name
+        fileID (str): file path inside bucket
+    """
+    bucket = storageClient.bucket(bucketName)
+    blob = bucket.blob(fileID)
+    return blob
+
+
+def readBucketFile(storageClient, bucketName, fileID):
+    """Read contents of the given file in given bucket
+
+    Args:
+        storageClient: Authenticated GCP Storage client
+        bucketName (str): Cloud Storage bucket name
+        fileID (str): file path inside bucket
+
+    Returns:
+        string content of the file
+    """
+    blob = getBucketFile(storageClient, bucketName, fileID)
+    return blob.download_as_string()
+
+
+def downloadBucketFile(storageClient, bucketName, fileID, localFilePath):
     """Download the given file in given bucket into local file with given path
 
     Args:
-        storageSvc: Storage service (from getGoogleServices()['storage'])
+        storageClient: Authenticated GCP Storage client
         bucketName (str): Cloud Storage bucket name
         fileID (str): file path inside bucket
         localFilePath (str): path to local file where to store the data
@@ -440,47 +478,30 @@ def downloadBucketObject(storageSvc, bucketName, fileID, localFilePath):
     if os.path.isfile(localFilePath):
         return # already downloaded, nothing to do
 
-    # download file from cloud storage to memory object
-    request = storageSvc.objects().get_media(bucket = bucketName, object = fileID)
-    fh = io.BytesIO()
-    downloader = MediaIoBaseDownload(fh, request)
-    done = False
-    while done is False:
-        status, done = downloader.next_chunk()
-        print("Download {}%.".format(int(status.progress() * 100)))
-
-    # store memory object data to local file
-    fh.seek(0)
-    with open(localFilePath, 'wb') as f:
-        shutil.copyfileobj(fh, f)
+    blob = getBucketFile(storageClient, bucketName, fileID)
+    blob.download_to_filename(localFilePath)
 
 
-def uploadBucketObject(storageSvc, bucketName, fileID, localFilePath):
+def uploadBucketFile(storageClient, bucketName, fileID, localFilePath):
     """Upload the given file to given bucket
 
     Args:
-        storageSvc: Storage service (from getGoogleServices()['storage'])
+        storageClient: Authenticated GCP Storage client
         bucketName (str): Cloud Storage bucket name
         fileID (str): file path inside bucket
         localFilePath (str): path to local file where to read the data from
-
-    Returns:
-        Cloud storage file object
     """
-    file_metadata = {'name': fileID}
-    media = MediaFileUpload(localFilePath, mimetype = 'image/jpeg')
-    res = storageSvc.objects().insert(bucket = bucketName, body = file_metadata,
-                                      media_body = media).execute()
-    return res
+    blob = getBucketFile(storageClient, bucketName, fileID)
+    blob.upload_from_filename(localFilePath)
 
 
-def deleteBucketObject(storageSvc, bucketName, fileID):
+def deleteBucketFile(storageClient, bucketName, fileID):
     """Delete the given file from given bucket
 
     Args:
-        storageSvc: Storage service (from getGoogleServices()['storage'])
+        storageClient: Authenticated GCP Storage client
         bucketName (str): Cloud Storage bucket name
         fileID (str): file path inside bucket
     """
-    # the return value seems to be empty string, so nothing useful to return
-    storageSvc.objects().delete(bucket = bucketName, object = fileID).execute()
+    blob = getBucketFile(storageClient, bucketName, fileID)
+    blob.delete()

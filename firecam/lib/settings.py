@@ -31,12 +31,15 @@ def readSettingsFile():
     """
     configPath = os.environ['OCT_FIRE_SETTINGS']
     parsedPath = goog_helper.parseGCSPath(configPath)
-    config = ''
+    configStr = ''
     if parsedPath:
-        raise Exception('GCS config not supported yet')
+        storageClient = goog_helper.getStorageClient()
+        configStr = goog_helper.readBucketFile(storageClient, parsedPath['bucket'], parsedPath['name'])
     else:
         with open(configPath, "r") as fh:
-            config = json.loads(fh.read())
+            configStr = fh.read()
+    config = json.loads(configStr)
+    # logging.warning('config %s', config)
     return config
 
 

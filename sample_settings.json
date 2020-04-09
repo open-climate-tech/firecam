@@ -1,6 +1,6 @@
 {
     "// service account": 0,
-    "keyFilename": "xxx/yyy.json",
+    "gcpServiceKey": "xxx/yyy.json",
 
     "// oauth": 0,
     "googleTokenFile": "xxx/token.json",
