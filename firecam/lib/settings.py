@@ -29,7 +29,7 @@ def readSettingsFile():
     Returns:
         dict with parsed settings JSON
     """
-    configPath = os.environ['SETTINGS_PATH']
+    configPath = os.environ['OCT_FIRE_SETTINGS']
     parsedPath = goog_helper.parseGCSPath(configPath)
     config = ''
     if parsedPath:

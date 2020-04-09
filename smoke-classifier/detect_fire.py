@@ -1,4 +1,4 @@
-# Copyright 2018 The Fuego Authors.
+# Copyright 2020 Open Climate Tech Contributors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,7 +13,6 @@
 # limitations under the License.
 # ==============================================================================
 """
-@author: Kinshuk Govil
 
 This is the main code for reading images from webcams and detecting fires
 
@@ -23,23 +22,19 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import os
-import sys
-fuegoRoot = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, os.path.join(fuegoRoot, 'lib'))
-sys.path.insert(0, fuegoRoot)
-import settings
-settings.fuegoRoot = fuegoRoot
-import collect_args
-import rect_to_squares
-import goog_helper
+import os, sys
+from firecam.lib import settings
+from firecam.lib import collect_args
+from firecam.lib import goog_helper
+from firecam.lib import img_archive
+
+from firecam.lib import rect_to_squares
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' # quiet down tensorflow logging (must be done before tf_helper)
-import tf_helper
-import db_manager
-import email_helper
-import sms_helper
-import img_archive
-from detection_policies import policies
+from firecam.lib import tf_helper
+from firecam.lib import db_manager
+from firecam.lib import email_helper
+from firecam.lib import sms_helper
+from firecam.detection_policies import policies
 
 import logging
 import pathlib
@@ -238,7 +233,7 @@ def smsFireNotification(dbManager, cameraID):
         dbManager (DbManager):
         cameraID (str): camera name
     """
-    message = 'Fuego fire notification in camera %s. Please check email for details' % cameraID
+    message = 'Firecam fire notification in camera %s. Please check email for details' % cameraID
     dbResult = dbManager.getNotifications(filterActivePhone = True)
     phones = [x['phone'] for x in dbResult]
     if len(phones) > 0:

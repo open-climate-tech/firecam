@@ -1,4 +1,4 @@
-# Copyright 2018 The Fuego Authors.
+# Copyright 2020 Open Climate Tech Contributors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,23 +14,18 @@
 # ==============================================================================
 """
 
-Reads data from csv export of "first image" subsheet of Fuego Cropped Images sheet
+Reads data from csv export of "first image" subsheet of Cropped Images sheet
 to generate all the segments of the image that don't contain smoke.  These will be
 used for non-smoke training set. 
 
 """
 
-import os
-import sys
-fuegoRoot = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, os.path.join(fuegoRoot, 'lib'))
-sys.path.insert(0, fuegoRoot)
-import settings
-settings.fuegoRoot = fuegoRoot
-import collect_args
-import goog_helper
-import rect_to_squares
-import img_archive
+import os, sys
+from firecam.lib import settings
+from firecam.lib import collect_args
+from firecam.lib import goog_helper
+from firecam.lib import img_archive
+from firecam.lib import rect_to_squares
 
 import re
 import logging
@@ -61,7 +56,7 @@ def checkCoords(coords, cropInfo):
 def main():
     reqArgs = [
         ["o", "outputDir", "local directory to save images and segments"],
-        ["i", "inputCsv", "csvfile with contents of Fuego Cropped Images"],
+        ["i", "inputCsv", "csvfile with contents of Cropped Images"],
     ]
     optArgs = [
         ["s", "startRow", "starting row"],
