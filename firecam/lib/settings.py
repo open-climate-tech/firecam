@@ -30,14 +30,7 @@ def readSettingsFile():
         dict with parsed settings JSON
     """
     configPath = os.environ['OCT_FIRE_SETTINGS']
-    parsedPath = goog_helper.parseGCSPath(configPath)
-    configStr = ''
-    if parsedPath:
-        storageClient = goog_helper.getStorageClient()
-        configStr = goog_helper.readBucketFile(storageClient, parsedPath['bucket'], parsedPath['name'])
-    else:
-        with open(configPath, "r") as fh:
-            configStr = fh.read()
+    configStr = goog_helper.readFile(configPath)
     config = json.loads(configStr)
     # logging.warning('config %s', config)
     return config

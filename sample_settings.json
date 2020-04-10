@@ -14,5 +14,8 @@
     "psqlUser": "postgres",
     "psqlPasswd": "secret",
 
+    "// HPWREN archives location": 0,
+    "hpwrenArchives": "xxx.txt",
+
     "pubsubTopic": "xxx"
 }

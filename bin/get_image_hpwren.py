@@ -54,7 +54,7 @@ def main():
     assert startTimeDT.day == endTimeDT.day
     assert endTimeDT >= startTimeDT
 
-    camArchives = img_archive.getHpwrenCameraArchives(googleServices['sheet'], settings)
+    camArchives = img_archive.getHpwrenCameraArchives(settings.hpwrenArchives)
     files = img_archive.getHpwrenImages(googleServices, settings, outputDir, camArchives, args.cameraID, startTimeDT, endTimeDT, gapMinutes)
     if files:
         logging.warning('Found %d files.', len(files))

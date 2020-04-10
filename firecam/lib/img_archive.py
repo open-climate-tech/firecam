@@ -502,23 +502,44 @@ def downloadFilesHpwren(googleServices, settings, outputDir, hpwrenSource, gapMi
     return downloadFilesForDate(googleServices, settings, outputDir, hpwrenSource, gapMinutes, verboseLogs)
 
 
-def getHpwrenCameraArchives(sheetSvc, settings):
-    """Get the HPWREN camera archive directories from Google sheet settings.camerasSheet
+def getHpwrenCameraArchives(hpwrenArchivesPath):
+    """Get the HPWREN camera archive directories from given file
 
     Args:
-        sheetSvc: Google sheet service (from getGoogleServices()['sheet'])
-        settings: settings module
+        hpwrenArchivesPath (str): path (local of GCS) to file with archive info
 
     Returns:
         List of archive directories
     """
-    data = goog_helper.readFromSheet(sheetSvc, settings.camerasSheet, settings.camerasSheetRange)
+    archiveData = goog_helper.readFile(hpwrenArchivesPath)
     camArchives = []
-    for camInfo in data:
+    for line in archiveData.split('\n'):
+        camInfo = line.split(' ')
         # logging.warning('info %d, %s', len(camInfo), camInfo)
-        if len(camInfo) != 3:
+        if len(camInfo) != 2:
+            logging.warning('Ignoring archive entry without two columns %s', camInfo)
             continue
-        camData = {'id': camInfo[1], 'dir': camInfo[2], 'name': camInfo[0]}
+        dirInfo = camInfo[1].split('/')
+        if len(dirInfo) < 2:
+            logging.warning('Ignoring archive entry without proper ID %s', dirInfo)
+            continue
+        cameraID = dirInfo[1]
+        matchesID = list(filter(lambda x: cameraID == x['id'], camArchives))
+        if matchesID:
+            if camInfo[1] not in matchesID[0]['dirs']:
+                matchesID[0]['dirs'].append(camInfo[1])
+                # logging.warning('Merging duplicate ID dir %s, %s', camInfo[1], matchesID[0])
+            continue
+        preIndex = camInfo[0].find('pre')
+        if preIndex > 0:
+            searchName = camInfo[0][:(preIndex-1)]
+            matchesName = list(filter(lambda x: searchName in x['name'], camArchives))
+            for match in matchesName:
+                if camInfo[1] not in match['dirs']:
+                    match['dirs'].append(camInfo[1])
+                    # logging.warning('Mergig pre dir %s to %s', camInfo[1], match)
+            continue
+        camData = {'id': cameraID, 'name': camInfo[0], 'dirs': [camInfo[1]]}
         # logging.warning('data %s', camData)
         camArchives.append(camData)
     logging.warning('Discovered total %d camera archive dirs', len(camArchives))
@@ -537,7 +558,7 @@ def findCameraInArchive(camArchives, cameraID):
     """
     matchingCams = list(filter(lambda x: cameraID == x['id'], camArchives))
     # logging.warning('Found %d match(es): %s', len(matchingCams), matchingCams)
-    return matchingCams
+    return matchingCams[0]['dirs']
 
 
 def getHpwrenImages(googleServices, settings, outputDir, camArchives, cameraID, startTimeDT, endTimeDT, gapMinutes):
@@ -559,11 +580,11 @@ def getHpwrenImages(googleServices, settings, outputDir, camArchives, cameraID, 
     Returns:
         List of local filesystem paths to downloaded images
     """
-    matchingCams = findCameraInArchive(camArchives, cameraID)
-    for matchingCam in matchingCams:
+    matchingDirs = findCameraInArchive(camArchives, cameraID)
+    for matchingDir in matchingDirs:
         hpwrenSource = {
             'cameraID': cameraID,
-            'dirName': matchingCam['dir'],
+            'dirName': matchingDir,
             'startTimeDT': startTimeDT,
             'endTimeDT': endTimeDT
         }

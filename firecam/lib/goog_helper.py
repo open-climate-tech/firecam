@@ -463,7 +463,7 @@ def readBucketFile(storageClient, bucketName, fileID):
         string content of the file
     """
     blob = getBucketFile(storageClient, bucketName, fileID)
-    return blob.download_as_string()
+    return blob.download_as_string().decode()
 
 
 def downloadBucketFile(storageClient, bucketName, fileID, localFilePath):
@@ -505,3 +505,23 @@ def deleteBucketFile(storageClient, bucketName, fileID):
     """
     blob = getBucketFile(storageClient, bucketName, fileID)
     blob.delete()
+
+
+def readFile(filePath):
+    """Read contents of the given file (possibly on GCS or local path)
+
+    Args:
+        filePath (str): file path
+
+    Returns:
+        string content of the file
+    """
+    parsedPath = parseGCSPath(filePath)
+    dataStr = ''
+    if parsedPath:
+        storageClient = getStorageClient()
+        dataStr = readBucketFile(storageClient, parsedPath['bucket'], parsedPath['name'])
+    else:
+        with open(filePath, "r") as fh:
+            dataStr = fh.read()
+    return dataStr
