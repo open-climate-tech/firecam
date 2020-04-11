@@ -23,7 +23,7 @@ import time
 
 class DetectAlways:
 
-    def __init__(self, settings, args, google_services, dbManager, tfConfig, camArchives, minusMinutes, useArchivedImages):
+    def __init__(self, settings, args, google_services, dbManager, camArchives, minusMinutes, useArchivedImages):
         pass
 
 

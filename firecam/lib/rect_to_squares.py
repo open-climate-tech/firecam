@@ -21,7 +21,6 @@ Simple utility to break up rectangle into squares
 import os
 import pathlib
 import math
-import collect_args
 import logging
 
 MIN_SQUARE_SIZE = 150
@@ -216,20 +215,3 @@ def cutBoxesFixed(imgOrig, outputDirectory, imageFileName, callBackFn=None):
 def cutBoxes(imgOrig, outputDirectory, imageFileName, callBackFn=None):
     return cutBoxesFixed(imgOrig, outputDirectory, imageFileName, callBackFn=None)
 
-
-def test():
-    argDefs = [
-        ["a", "X0", "X coord of first corner", int],
-        ["b", "Y0", "Y coord of first corner", int],
-        ["c", "X1", "X coord of opposite corner", int],
-        ["d", "Y1", "Y coord of opposite corner", int],
-    ]
-    args = collect_args.collectArgs(argDefs)
-    print('Rect:', (args.X0, args.Y0, args.X1, args.Y1))
-    coords = rect_to_squares(args.X0, args.Y0, args.X1, args.Y1, 1000, 1000, MIN_SQUARE_SIZE)
-    print('Squares:', coords)
-
-
-# for testing
-if __name__=="__main__":
-    test()

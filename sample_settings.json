@@ -17,5 +17,10 @@
     "// HPWREN archives location": 0,
     "hpwrenArchives": "xxx.txt",
 
+    "detectionPolicy": "inception_and_threshold",
+
+    "// settings only applicable to local setups": 0,
+    "downloadDir": "xxx/yyy",
+
     "pubsubTopic": "xxx"
 }

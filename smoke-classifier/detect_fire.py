@@ -403,16 +403,17 @@ def main():
     dbManager = db_manager.DbManager(sqliteFile=settings.db_file,
                                     psqlHost=settings.psqlHost, psqlDb=settings.psqlDb,
                                     psqlUser=settings.psqlUser, psqlPasswd=settings.psqlPasswd)
-    tfConfig = tf.ConfigProto()
-    tfConfig.gpu_options.per_process_gpu_memory_fraction = 0.1 #hopefully reduces segfaults
+    # TF2
+    # tfConfig = tf.ConfigProto()
+    # tfConfig.gpu_options.per_process_gpu_memory_fraction = 0.1 #hopefully reduces segfaults
     cameras = dbManager.get_sources(activeOnly=True, restrictType=args.restrictType)
     startTimeDT = dateutil.parser.parse(args.startTime) if args.startTime else None
     endTimeDT = dateutil.parser.parse(args.endTime) if args.endTime else None
     timeRangeSeconds = None
     useArchivedImages = False
-    camArchives = img_archive.getHpwrenCameraArchives(googleServices['sheet'], settings)
+    camArchives = img_archive.getHpwrenCameraArchives(settings.hpwrenArchives)
     DetectionPolicyClass = policies.get_policies()[settings.detectionPolicy]
-    detectionPolicy = DetectionPolicyClass(settings, args, googleServices, dbManager, tfConfig, camArchives, minusMinutes, useArchivedImages)
+    detectionPolicy = DetectionPolicyClass(settings, args, googleServices, dbManager, camArchives, minusMinutes, useArchivedImages)
     constants = { # dictionary of constants to reduce parameters in various functions
         'args': args,
         'googleServices': googleServices,

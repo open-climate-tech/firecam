@@ -36,21 +36,26 @@ import time
 
 import tensorflow as tf
 
+# TODO TF2
+# WIP port to TF2 is upcoming, but until then using random() to update other aspects of the code
+import random
+
 class InceptionV3AndHistoricalThreshold:
 
     SEQUENCE_LENGTH = 1
     SEQUENCE_SPACING_MIN = None
 
-    def __init__(self, settings, args, google_services, dbManager, tfConfig, camArchives, minusMinutes, useArchivedImages):
+    def __init__(self, settings, args, google_services, dbManager, camArchives, minusMinutes, useArchivedImages):
         self.dbManager = dbManager
         self.args = args
         self.google_services = google_services
         self.camArchives = camArchives
         self.minusMinutes = minusMinutes
         self.useArchivedImages = useArchivedImages
-        self.graph = tf_helper.load_graph(settings.model_file)
-        self.labels = tf_helper.load_labels(settings.labels_file)
-        self.tfSession = tf.Session(graph=self.graph, config=tfConfig)
+        # TODO TF2
+        # self.graph = tf_helper.load_graph(settings.model_file)
+        # self.labels = tf_helper.load_labels(settings.labels_file)
+        # self.tfSession = tf.Session(graph=self.graph)
 
 
     def _segmentImage(self, imgPath):
@@ -80,7 +85,12 @@ class InceptionV3AndHistoricalThreshold:
         """
         segments = self._segmentImage(imgPath)
         # print('si', segments)
-        tf_helper.classifySegments(self.tfSession, self.graph, self.labels, segments)
+
+        # TODO TF2
+        # tf_helper.classifySegments(self.tfSession, self.graph, self.labels, segments)
+        for segmentInfo in segments:
+            segmentInfo['score'] = random.random()/(2*0.99)
+
         segments.sort(key=lambda x: -x['score'])
         return segments
 
