@@ -19,6 +19,10 @@
 
     "detectionPolicy": "inception_and_threshold",
 
+    "// directories used by detect_fire to upload images": 0,
+    "positivesDir": "xxx/pos",
+    "detectionsDir": "xxx/detects",
+
     "// settings only applicable to local setups": 0,
     "downloadDir": "xxx/yyy",
 

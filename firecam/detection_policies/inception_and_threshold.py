@@ -96,6 +96,23 @@ class InceptionV3AndHistoricalThreshold:
         return segments
 
 
+    def dateSubDir(self, parentPath):
+        """Return a directory path under given parentPath with todays date as subdir
+
+        Args:
+            parentPath (str): path under which to add date subdir
+
+        Returns:
+            directory path
+        """
+        dateSubdir = datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d')
+        if parentPath[-1] == '/':
+            fullPath = parentPath + dateSubdir
+        else:
+            fullPath = parentPath + '/' + dateSubdir
+        return fullPath
+
+
     def _collectPositves(self, imgPath, segments):
         """Collect all positive scoring segments
 
@@ -112,11 +129,7 @@ class InceptionV3AndHistoricalThreshold:
         googleDrive = self.google_services['drive']
         for segmentInfo in segments:
             if segmentInfo['score'] > .5:
-                dateSubdir = datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d')
-                if settings.positivesDir[-1] == '/':
-                    postivesDateDir = settings.positivesDir + dateSubdir
-                else:
-                    postivesDateDir = settings.positivesDir + '/' + dateSubdir
+                postivesDateDir = self.dateSubDir(settings.positivesDir)
                 goog_helper.copyFile(segmentInfo['imgPath'], postivesDateDir)
                 positiveSegments += 1
 
@@ -243,15 +256,16 @@ class InceptionV3AndHistoricalThreshold:
         lineWidth=3
         self._drawRect(imgDraw, x0, y0, x1, y1, lineWidth, color)
 
+        fontPath = os.path.join(pathlib.Path(__file__).parent.parent, 'data/Roboto-Regular.ttf')
         fontSize=80
-        font = ImageFont.truetype(os.path.join(settings.fuegoRoot, 'lib/Roboto-Regular.ttf'), size=fontSize)
+        font = ImageFont.truetype(fontPath, size=fontSize)
         scoreStr = '%.2f' % fireSegment['score']
         textSize = imgDraw.textsize(scoreStr, font=font)
         imgDraw.text((centerX - textSize[0]/2, centerY - textSize[1]), scoreStr, font=font, fill=color)
 
         color = "blue"
         fontSize=70
-        font = ImageFont.truetype(os.path.join(settings.fuegoRoot, 'lib/Roboto-Regular.ttf'), size=fontSize)
+        font = ImageFont.truetype(fontPath, size=fontSize)
         scoreStr = '%.2f' % fireSegment['HistMax']
         textSize = imgDraw.textsize(scoreStr, font=font)
         imgDraw.text((centerX - textSize[0]/2, centerY), scoreStr, font=font, fill=color)
@@ -278,19 +292,16 @@ class InceptionV3AndHistoricalThreshold:
             fireSegment (dictionary): dictionary with information for the segment with fire/smoke
 
         Returns:
-            List of Google drive IDs for the uploaded image files
+            List of file IDs for the uploaded image files
         """
         logging.warning('Fire detected by camera %s, image %s, segment %s', camera, imgPath, str(fireSegment))
-        # upload file to google drive detection dir
-        driveFileIDs = []
-        googleDrive = self.google_services['drive']
-        driveFile = goog_helper.uploadFile(googleDrive, settings.detectionPictures, imgPath)
-        if driveFile:
-            driveFileIDs.append(driveFile['id'])
-        driveFile = goog_helper.uploadFile(googleDrive, settings.detectionPictures, annotatedFile)
-        if driveFile:
-            driveFileIDs.append(driveFile['id'])
-        logging.warning('Uploaded to google drive detections folder %s', str(driveFileIDs))
+        # copy/upload file to detection dir
+        detectionsDateDir = self.dateSubDir(settings.detectionsDir)
+        fileID = goog_helper.copyFile(imgPath, detectionsDateDir)
+        fileIDs = [fileID]
+        fileID = goog_helper.copyFile(annotatedFile, detectionsDateDir)
+        fileIDs.append(fileID)
+        logging.warning('Uploaded to detections folder %s', str(fileIDs))
 
         dbRow = {
             'CameraName': camera,
@@ -303,10 +314,10 @@ class InceptionV3AndHistoricalThreshold:
             'HistAvg': fireSegment['HistAvg'],
             'HistMax': fireSegment['HistMax'],
             'HistNumSamples': fireSegment['HistNumSamples'],
-            'ImageID': driveFileIDs[0] if driveFileIDs else ''
+            'ImageID': fileIDs[0] if fileIDs else ''
         }
         self.dbManager.add_data('detections', dbRow)
-        return driveFileIDs
+        return fileIDs
 
 
     def detect(self, image_spec):

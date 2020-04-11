@@ -397,6 +397,19 @@ def parseGCSPath(path):
     return None
 
 
+def repackGCSPath(bucketName, fileName):
+    """Reverse of parseGCSPath() above: package given bucket and file names into GCS name
+
+    Args:
+        bucketName (str): Cloud Storage bucket name
+        fileName (str): file path inside bucket
+
+    Returns:
+        GCS path
+    """
+    return 'gs://' + bucketName + '/' + fileName
+
+
 def getStorageClient():
     """Get an authenticated GCS client
 
@@ -542,9 +555,10 @@ def copyFile(srcFilePath, destDir):
         else:
             gcsName = parsedPath['name'] + '/' + srcFilePP.name
         uploadBucketFile(parsedPath['bucket'], gcsName, srcFilePath)
+        destPath = repackGCSPath(parsedPath['bucket'], gcsName)
     else:
         if not os.path.exists(destDir):
             pathlib.Path(destDir).mkdir(parents=True, exist_ok=True)
         destPath = os.path.join(destDir, srcFilePP.name)
         shutil.copy(srcFilePath, destPath)
-
+    return destPath
