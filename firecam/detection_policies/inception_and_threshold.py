@@ -22,6 +22,7 @@ historical scores.
 """
 
 import os, sys
+from firecam.lib import settings
 from firecam.lib import goog_helper
 from firecam.lib import tf_helper
 from firecam.lib import rect_to_squares
@@ -45,7 +46,7 @@ class InceptionV3AndHistoricalThreshold:
     SEQUENCE_LENGTH = 1
     SEQUENCE_SPACING_MIN = None
 
-    def __init__(self, settings, args, google_services, dbManager, camArchives, minusMinutes, useArchivedImages):
+    def __init__(self, args, google_services, dbManager, camArchives, minusMinutes, useArchivedImages):
         self.dbManager = dbManager
         self.args = args
         self.google_services = google_services
@@ -111,17 +112,15 @@ class InceptionV3AndHistoricalThreshold:
         googleDrive = self.google_services['drive']
         for segmentInfo in segments:
             if segmentInfo['score'] > .5:
-                if hasattr(settings, 'positivePicturesDir'):
-                    pp = pathlib.PurePath(segmentInfo['imgPath'])
-                    destPath = os.path.join(settings.positivePicturesDir, pp.name)
-                    shutil.copy(segmentInfo['imgPath'], destPath)
+                dateSubdir = datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d')
+                if settings.positivesDir[-1] == '/':
+                    postivesDateDir = settings.positivesDir + dateSubdir
                 else:
-                    goog_helper.uploadFile(googleDrive, settings.positivePictures, segmentInfo['imgPath'])
+                    postivesDateDir = settings.positivesDir + '/' + dateSubdir
+                goog_helper.copyFile(segmentInfo['imgPath'], postivesDateDir)
                 positiveSegments += 1
 
         if positiveSegments > 0:
-            # Commenting out saving full images for now to reduce data
-            # goog_helper.uploadFile(googleDrive, settings.positivePictures, imgPath)
             logging.warning('Found %d positives in image %s', positiveSegments, ppath.name)
 
 

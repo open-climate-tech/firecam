@@ -413,7 +413,7 @@ def main():
     useArchivedImages = False
     camArchives = img_archive.getHpwrenCameraArchives(settings.hpwrenArchives)
     DetectionPolicyClass = policies.get_policies()[settings.detectionPolicy]
-    detectionPolicy = DetectionPolicyClass(settings, args, googleServices, dbManager, camArchives, minusMinutes, useArchivedImages)
+    detectionPolicy = DetectionPolicyClass(args, googleServices, dbManager, camArchives, minusMinutes, useArchivedImages)
     constants = { # dictionary of constants to reduce parameters in various functions
         'args': args,
         'googleServices': googleServices,

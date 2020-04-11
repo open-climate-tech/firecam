@@ -17,6 +17,7 @@ Helper functions for google cloud APIs (drive, sheets)
 """
 
 import os, sys
+from firecam.lib import settings
 from firecam.lib import img_archive
 
 import re
@@ -396,36 +397,37 @@ def parseGCSPath(path):
     return None
 
 
-def getStorageClient(serviceKey = None):
+def getStorageClient():
     """Get an authenticated GCS client
 
     Returns:
         Authenticated GCP Storage client
     """
-    if serviceKey:
-        storageClient = storage.Client.from_service_account_json(serviceKey)
+    if getStorageClient.cachedClient:
+        return getStorageClient.cachedClient
+    if settings.gcpServiceKey:
+        storageClient = storage.Client.from_service_account_json(settings.gcpServiceKey)
     else:
         storageClient = storage.Client()
+    getStorageClient.cachedClient = storageClient
     return storageClient
+getStorageClient.cachedClient = None
 
 
-def listBuckets(storageClient):
+def listBuckets():
     """List all Cloud storage buckets in given client
-
-    Args:
-        storageClient: Authenticated GCP Storage client
 
     Returns:
         List of bucket names
     """
+    storageClient = getStorageClient()
     return [bucket.name for bucket in storageClient.list_buckets()]
 
 
-def listBucketFiles(storageClient, bucketName, prefix='', deep=False):
+def listBucketFiles(bucketName, prefix='', deep=False):
     """List all files in given Google Cloud Storage bucket matching given prefix and getDirs
 
     Args:
-        storageClient: Authenticated GCP Storage client
         bucketName (str): Cloud Storage bucket name
         prefix (str): optional string that must be at start of filename
         deep (bool): if true, return all files in "deeply" nested "folders"
@@ -433,44 +435,43 @@ def listBucketFiles(storageClient, bucketName, prefix='', deep=False):
     Returns:
         List of file names (note names are full paths in cloud storage)
     """
+    storageClient = getStorageClient()
     delimiter = '' if deep else '/'
     blobs = storageClient.list_blobs(bucketName, prefix=prefix, delimiter=delimiter)
     return [blob.name for blob in blobs]
 
 
-def getBucketFile(storageClient, bucketName, fileID):
+def getBucketFile(bucketName, fileID):
     """Get given file from given GCS bucket
 
     Args:
-        storageClient: Authenticated GCP Storage client
         bucketName (str): Cloud Storage bucket name
         fileID (str): file path inside bucket
     """
+    storageClient = getStorageClient()
     bucket = storageClient.bucket(bucketName)
     blob = bucket.blob(fileID)
     return blob
 
 
-def readBucketFile(storageClient, bucketName, fileID):
+def readBucketFile(bucketName, fileID):
     """Read contents of the given file in given bucket
 
     Args:
-        storageClient: Authenticated GCP Storage client
         bucketName (str): Cloud Storage bucket name
         fileID (str): file path inside bucket
 
     Returns:
         string content of the file
     """
-    blob = getBucketFile(storageClient, bucketName, fileID)
+    blob = getBucketFile(bucketName, fileID)
     return blob.download_as_string().decode()
 
 
-def downloadBucketFile(storageClient, bucketName, fileID, localFilePath):
+def downloadBucketFile(bucketName, fileID, localFilePath):
     """Download the given file in given bucket into local file with given path
 
     Args:
-        storageClient: Authenticated GCP Storage client
         bucketName (str): Cloud Storage bucket name
         fileID (str): file path inside bucket
         localFilePath (str): path to local file where to store the data
@@ -478,32 +479,30 @@ def downloadBucketFile(storageClient, bucketName, fileID, localFilePath):
     if os.path.isfile(localFilePath):
         return # already downloaded, nothing to do
 
-    blob = getBucketFile(storageClient, bucketName, fileID)
+    blob = getBucketFile(bucketName, fileID)
     blob.download_to_filename(localFilePath)
 
 
-def uploadBucketFile(storageClient, bucketName, fileID, localFilePath):
+def uploadBucketFile(bucketName, fileID, localFilePath):
     """Upload the given file to given bucket
 
     Args:
-        storageClient: Authenticated GCP Storage client
         bucketName (str): Cloud Storage bucket name
         fileID (str): file path inside bucket
         localFilePath (str): path to local file where to read the data from
     """
-    blob = getBucketFile(storageClient, bucketName, fileID)
+    blob = getBucketFile(bucketName, fileID)
     blob.upload_from_filename(localFilePath)
 
 
-def deleteBucketFile(storageClient, bucketName, fileID):
+def deleteBucketFile(bucketName, fileID):
     """Delete the given file from given bucket
 
     Args:
-        storageClient: Authenticated GCP Storage client
         bucketName (str): Cloud Storage bucket name
         fileID (str): file path inside bucket
     """
-    blob = getBucketFile(storageClient, bucketName, fileID)
+    blob = getBucketFile(bucketName, fileID)
     blob.delete()
 
 
@@ -519,9 +518,33 @@ def readFile(filePath):
     parsedPath = parseGCSPath(filePath)
     dataStr = ''
     if parsedPath:
-        storageClient = getStorageClient()
-        dataStr = readBucketFile(storageClient, parsedPath['bucket'], parsedPath['name'])
+        dataStr = readBucketFile(parsedPath['bucket'], parsedPath['name'])
     else:
         with open(filePath, "r") as fh:
             dataStr = fh.read()
     return dataStr
+
+
+def copyFile(srcFilePath, destDir):
+    """Copy given local source file to given destion directory (possibly on GCS or local path)
+
+    Args:
+        srcFilePath (str): local source file path
+        destDir (str): destination file path (local or GCS)
+    """
+    parsedPath = parseGCSPath(srcFilePath)
+    assert not parsedPath # srcFilePath must be local
+    parsedPath = parseGCSPath(destDir)
+    srcFilePP = pathlib.PurePath(srcFilePath)
+    if parsedPath:
+        if parsedPath['name'][-1] == '/':
+            gcsName = parsedPath['name'] + srcFilePP.name
+        else:
+            gcsName = parsedPath['name'] + '/' + srcFilePP.name
+        uploadBucketFile(parsedPath['bucket'], gcsName, srcFilePath)
+    else:
+        if not os.path.exists(destDir):
+            pathlib.Path(destDir).mkdir(parents=True, exist_ok=True)
+        destPath = os.path.join(destDir, srcFilePP.name)
+        shutil.copy(srcFilePath, destPath)
+

@@ -24,7 +24,7 @@ import time
 
 class DetectNever:
 
-    def __init__(self, settings, args, google_services, dbManager, camArchives, minusMinutes, useArchivedImages):
+    def __init__(self, args, google_services, dbManager, camArchives, minusMinutes, useArchivedImages):
         pass
 
 
