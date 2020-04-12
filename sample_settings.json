@@ -1,4 +1,6 @@
 {
+    "gcpProject": "xxx",
+
     "// service account": 0,
     "gcpServiceKey": "xxx/yyy.json",
 

@@ -136,14 +136,14 @@ getNextImageFromDir.index = -1
 getNextImageFromDir.tmpDir = None
 
 
-def checkAndUpdateAlerts(dbManager, camera, timestamp, driveFileIDs):
+def checkAndUpdateAlerts(dbManager, camera, timestamp, cloudFileIDs):
     """Check if alert has been recently sent out for given camera
 
     Args:
         dbManager (DbManager):
         camera (str): camera name
         timestamp (int):
-        driveFileIDs (list): List of Google drive IDs for the uploaded image files
+        cloudFileIDs (list): List of Cloud file IDs for the uploaded image files
 
     Returns:
         True if this is a new alert, False otherwise
@@ -162,13 +162,13 @@ def checkAndUpdateAlerts(dbManager, camera, timestamp, driveFileIDs):
     dbRow = {
         'CameraName': camera,
         'Timestamp': timestamp,
-        'ImageID': driveFileIDs[0] if driveFileIDs else ''
+        'ImageID': cloudFileIDs[0] if cloudFileIDs else ''
     }
     dbManager.add_data('alerts', dbRow)
     return True
 
 
-def alertFire(constants, cameraID, imgPath, annotatedFile, driveFileIDs, fireSegment, timestamp):
+def alertFire(constants, cameraID, imgPath, annotatedFile, cloudFileIDs, fireSegment, timestamp):
     """Send alerts about given fire through all channels (currently email and sms)
 
     Args:
@@ -176,15 +176,40 @@ def alertFire(constants, cameraID, imgPath, annotatedFile, driveFileIDs, fireSeg
         cameraID (str): camera name
         imgPath: filepath of the original image
         annotatedFile: filepath of the annotated image
-        driveFileIDs (list): List of Google drive IDs for the uploaded image files
+        cloudFileIDs (list): List of Cloud file IDs for the uploaded image files
         fireSegment (dictionary): dictionary with information for the segment with fire/smoke
         timestamp (int): time.time() value when image was taken
     """
-    emailFireNotification(constants, cameraID, imgPath, annotatedFile, driveFileIDs, fireSegment, timestamp)
+    pubsubFireNotification(cameraID, cloudFileIDs, fireSegment, timestamp)
+    emailFireNotification(constants, cameraID, imgPath, annotatedFile, cloudFileIDs, fireSegment, timestamp)
     smsFireNotification(constants['dbManager'], cameraID)
 
 
-def emailFireNotification(constants, cameraID, imgPath, annotatedFile, driveFileIDs, fireSegment, timestamp):
+def pubsubFireNotification(cameraID, cloudFileIDs, fireSegment, timestamp):
+    """Send a pubsub notification for a potential new fire
+
+    Sends pubsub message with information about the camera and fire score includeing
+    image attachments
+
+    Args:
+        constants (dict): "global" contants
+        cameraID (str): camera name
+        imgPath: filepath of the original image
+        annotatedFile: filepath of the annotated image
+        cloudFileIDs (list): List of Cloud file IDs for the uploaded image files
+        fireSegment (dictionary): dictionary with information for the segment with fire/smoke
+        timestamp (int): time.time() value when image was taken
+    """
+    message = {
+        'timestamp': timestamp,
+        'cameraID': cameraID,
+        'fireSegment': fireSegment,
+        'cloudFileIDs': cloudFileIDs
+    }
+    goog_helper.publish(message)
+
+
+def emailFireNotification(constants, cameraID, imgPath, annotatedFile, cloudFileIDs, fireSegment, timestamp):
     """Send an email alert for a potential new fire
 
     Send email with information about the camera and fire score includeing
@@ -195,19 +220,13 @@ def emailFireNotification(constants, cameraID, imgPath, annotatedFile, driveFile
         cameraID (str): camera name
         imgPath: filepath of the original image
         annotatedFile: filepath of the annotated image
-        driveFileIDs (list): List of Google drive IDs for the uploaded image files
+        cloudFileIDs (list): List of Cloud file IDs for the uploaded image files
         fireSegment (dictionary): dictionary with information for the segment with fire/smoke
         timestamp (int): time.time() value when image was taken
     """
     dbManager = constants['dbManager']
     subject = 'Possible (%d%%) fire in camera %s' % (int(fireSegment['score']*100), cameraID)
     body = 'Please check the attached images for fire.'
-    # commenting out links to google drive because they appear as extra attachments causing confusion
-    # and some email recipients don't even have permissions to access drive.
-    # for driveFileID in driveFileIDs:
-    #     driveTempl = '\nAlso available from google drive as https://drive.google.com/file/d/%s'
-    #     driveBody = driveTempl % driveFileID
-    #     body += driveBody
 
     # emails are sent from settings.fuegoEmail and bcc to everyone with active emails in notifications SQL table
     dbResult = dbManager.getNotifications(filterActiveEmail = True)
@@ -413,7 +432,7 @@ def main():
     useArchivedImages = False
     camArchives = img_archive.getHpwrenCameraArchives(settings.hpwrenArchives)
     DetectionPolicyClass = policies.get_policies()[settings.detectionPolicy]
-    detectionPolicy = DetectionPolicyClass(args, googleServices, dbManager, camArchives, minusMinutes, useArchivedImages)
+    detectionPolicy = DetectionPolicyClass(args, dbManager, camArchives, minusMinutes, useArchivedImages)
     constants = { # dictionary of constants to reduce parameters in various functions
         'args': args,
         'googleServices': googleServices,
@@ -454,8 +473,8 @@ def main():
         detectionResult = detectionPolicy.detect(image_spec)
         timeDetect = time.time()
         if detectionResult['fireSegment']:
-            if checkAndUpdateAlerts(dbManager, cameraID, timestamp, detectionResult['driveFileIDs']):
-                alertFire(constants, cameraID, imgPath, detectionResult['annotatedFile'], detectionResult['driveFileIDs'], detectionResult['fireSegment'], timestamp)
+            if checkAndUpdateAlerts(dbManager, cameraID, timestamp, detectionResult['cloudFileIDs']):
+                alertFire(constants, cameraID, imgPath, detectionResult['annotatedFile'], detectionResult['cloudFileIDs'], detectionResult['fireSegment'], timestamp)
         deleteImageFiles(imgPath, imgPath, detectionResult['annotatedFile'])
         if (args.heartbeat):
             heartBeat(args.heartbeat)

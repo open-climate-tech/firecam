@@ -46,10 +46,9 @@ class InceptionV3AndHistoricalThreshold:
     SEQUENCE_LENGTH = 1
     SEQUENCE_SPACING_MIN = None
 
-    def __init__(self, args, google_services, dbManager, camArchives, minusMinutes, useArchivedImages):
+    def __init__(self, args, dbManager, camArchives, minusMinutes, useArchivedImages):
         self.dbManager = dbManager
         self.args = args
-        self.google_services = google_services
         self.camArchives = camArchives
         self.minusMinutes = minusMinutes
         self.useArchivedImages = useArchivedImages
@@ -116,8 +115,8 @@ class InceptionV3AndHistoricalThreshold:
     def _collectPositves(self, imgPath, segments):
         """Collect all positive scoring segments
 
-        Copy the images for all segments that score highter than > .5 to google drive folder
-        settings.positivePictures. These will be used to train future models.
+        Copy the images for all segments that score highter than > .5 to folder
+        settings.positivesDir. These will be used to train future models.
         Also, copy the full image for reference.
 
         Args:
@@ -126,11 +125,11 @@ class InceptionV3AndHistoricalThreshold:
         """
         positiveSegments = 0
         ppath = pathlib.PurePath(imgPath)
-        googleDrive = self.google_services['drive']
         for segmentInfo in segments:
             if segmentInfo['score'] > .5:
-                postivesDateDir = self.dateSubDir(settings.positivesDir)
-                goog_helper.copyFile(segmentInfo['imgPath'], postivesDateDir)
+                if settings.positivesDir:
+                    postivesDateDir = self.dateSubDir(settings.positivesDir)
+                    goog_helper.copyFile(segmentInfo['imgPath'], postivesDateDir)
                 positiveSegments += 1
 
         if positiveSegments > 0:
@@ -282,7 +281,7 @@ class InceptionV3AndHistoricalThreshold:
         """Record that a smoke/fire has been detected
 
         Record the detection with useful metrics in 'detections' table in SQL DB.
-        Also, upload image file to google drive
+        Also, upload image file to google cloud
 
         Args:
             camera (str): camera name
@@ -341,10 +340,10 @@ class InceptionV3AndHistoricalThreshold:
             fireSegment = self._postFilter(cameraID, timestamp, segments)
             if fireSegment:
                 annotatedFile = self._drawFireBox(imgPath, fireSegment)
-                driveFileIDs = self._recordDetection(cameraID, timestamp, imgPath, annotatedFile, fireSegment)
+                cloudFileIDs = self._recordDetection(cameraID, timestamp, imgPath, annotatedFile, fireSegment)
                 detectionResult['fireSegment'] = fireSegment
                 detectionResult['annotatedFile'] = annotatedFile
-                detectionResult['driveFileIDs'] = driveFileIDs
+                detectionResult['cloudFileIDs'] = cloudFileIDs
         logging.warning('Highest score for camera %s: %f' % (cameraID, segments[0]['score']))
         for segmentInfo in segments:
             os.remove(segmentInfo['imgPath'])

@@ -26,6 +26,7 @@ import shutil
 import pathlib
 import logging
 import time, datetime, dateutil.parser
+import json
 
 from googleapiclient.discovery import build
 from httplib2 import Http
@@ -34,6 +35,7 @@ from apiclient.http import MediaIoBaseDownload
 from apiclient.http import MediaFileUpload
 
 from google.cloud import storage
+from google.cloud import pubsub_v1
 
 # If modifying these scopes, delete the file token.json.
 # TODO: This is getting too big.  We should ask for different subsets for each app
@@ -411,7 +413,7 @@ def repackGCSPath(bucketName, fileName):
 
 
 def getStorageClient():
-    """Get an authenticated GCS client
+    """Get an authenticated GCS client (caches result for performance)
 
     Returns:
         Authenticated GCP Storage client
@@ -562,3 +564,38 @@ def copyFile(srcFilePath, destDir):
         destPath = os.path.join(destDir, srcFilePP.name)
         shutil.copy(srcFilePath, destPath)
     return destPath
+
+
+def getPubsubClient():
+    """Get an authenticated GCP pubsub client (caches result for performance)
+
+    Returns:
+        Authenticated GCP pubsub client
+    """
+    if getPubsubClient.cachedClient:
+        return getPubsubClient.cachedClient
+    if settings.gcpServiceKey:
+        pubsubClient = pubsub_v1.PublisherClient.from_service_account_json(settings.gcpServiceKey)
+    else:
+        pubsubClient = pubsub_v1.PublisherClient()
+    getPubsubClient.cachedClient = pubsubClient
+    return pubsubClient
+getPubsubClient.cachedClient = None
+
+
+def publish(data):
+    """Publish given data wrapped as JSON on GCP pubsub topic
+
+    Args:
+        msg (str): message data
+
+    Returns:
+        pubsub result - message ID
+    """
+    if not settings.pubsubTopic:
+        return
+
+    pubsubClient = getPubsubClient()
+    topic_path = pubsubClient.topic_path(settings.gcpProject, settings.pubsubTopic)
+    future = pubsubClient.publish(topic_path, json.dumps(data).encode('utf-8'))
+    return future.result()
