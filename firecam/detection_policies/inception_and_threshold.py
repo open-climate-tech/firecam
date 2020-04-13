@@ -95,23 +95,6 @@ class InceptionV3AndHistoricalThreshold:
         return segments
 
 
-    def dateSubDir(self, parentPath):
-        """Return a directory path under given parentPath with todays date as subdir
-
-        Args:
-            parentPath (str): path under which to add date subdir
-
-        Returns:
-            directory path
-        """
-        dateSubdir = datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d')
-        if parentPath[-1] == '/':
-            fullPath = parentPath + dateSubdir
-        else:
-            fullPath = parentPath + '/' + dateSubdir
-        return fullPath
-
-
     def _collectPositves(self, imgPath, segments):
         """Collect all positive scoring segments
 
@@ -128,7 +111,7 @@ class InceptionV3AndHistoricalThreshold:
         for segmentInfo in segments:
             if segmentInfo['score'] > .5:
                 if settings.positivesDir:
-                    postivesDateDir = self.dateSubDir(settings.positivesDir)
+                    postivesDateDir = goog_helper.dateSubDir(settings.positivesDir)
                     goog_helper.copyFile(segmentInfo['imgPath'], postivesDateDir)
                 positiveSegments += 1
 
@@ -295,7 +278,7 @@ class InceptionV3AndHistoricalThreshold:
         """
         logging.warning('Fire detected by camera %s, image %s, segment %s', camera, imgPath, str(fireSegment))
         # copy/upload file to detection dir
-        detectionsDateDir = self.dateSubDir(settings.detectionsDir)
+        detectionsDateDir = goog_helper.dateSubDir(settings.detectionsDir)
         fileID = goog_helper.copyFile(imgPath, detectionsDateDir)
         fileIDs = [fileID]
         fileID = goog_helper.copyFile(annotatedFile, detectionsDateDir)

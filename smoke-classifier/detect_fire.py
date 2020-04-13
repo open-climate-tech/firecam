@@ -180,31 +180,34 @@ def alertFire(constants, cameraID, imgPath, annotatedFile, cloudFileIDs, fireSeg
         fireSegment (dictionary): dictionary with information for the segment with fire/smoke
         timestamp (int): time.time() value when image was taken
     """
-    pubsubFireNotification(cameraID, cloudFileIDs, fireSegment, timestamp)
+    pubsubFireNotification(cameraID, annotatedFile, fireSegment, timestamp)
     emailFireNotification(constants, cameraID, imgPath, annotatedFile, cloudFileIDs, fireSegment, timestamp)
     smsFireNotification(constants['dbManager'], cameraID)
 
 
-def pubsubFireNotification(cameraID, cloudFileIDs, fireSegment, timestamp):
+def pubsubFireNotification(cameraID, annotatedFile, fireSegment, timestamp):
     """Send a pubsub notification for a potential new fire
 
     Sends pubsub message with information about the camera and fire score includeing
     image attachments
 
     Args:
-        constants (dict): "global" contants
         cameraID (str): camera name
-        imgPath: filepath of the original image
         annotatedFile: filepath of the annotated image
-        cloudFileIDs (list): List of Cloud file IDs for the uploaded image files
         fireSegment (dictionary): dictionary with information for the segment with fire/smoke
         timestamp (int): time.time() value when image was taken
     """
+    notificationsDateDir = goog_helper.dateSubDir(settings.noticationsDir)
+    fileID = goog_helper.copyFile(annotatedFile, notificationsDateDir)
+    # convert fileID into URL usable by web UI
+    annotatedUrl = [fileID.replace('gs://', 'https://storage.googleapis.com/')]
+
     message = {
         'timestamp': timestamp,
         'cameraID': cameraID,
-        'fireSegment': fireSegment,
-        'cloudFileIDs': cloudFileIDs
+        "score": fireSegment['score'],
+        "histMax": fireSegment["HistMax"],
+        'annotatedUrl': annotatedUrl
     }
     goog_helper.publish(message)
 

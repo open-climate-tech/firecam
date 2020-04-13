@@ -521,6 +521,23 @@ def deleteBucketFile(bucketName, fileID):
     blob.delete()
 
 
+def dateSubDir(parentPath):
+    """Return a directory path under given parentPath with todays date as subdir
+
+    Args:
+        parentPath (str): path under which to add date subdir
+
+    Returns:
+        directory path
+    """
+    dateSubdir = datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d')
+    if parentPath[-1] == '/':
+        fullPath = parentPath + dateSubdir
+    else:
+        fullPath = parentPath + '/' + dateSubdir
+    return fullPath
+
+
 def readFile(filePath):
     """Read contents of the given file (possibly on GCS or local path)
 
