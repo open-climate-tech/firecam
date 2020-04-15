@@ -136,56 +136,48 @@ getNextImageFromDir.index = -1
 getNextImageFromDir.tmpDir = None
 
 
-def checkAndUpdateAlerts(dbManager, camera, timestamp, cloudFileIDs):
+def isDuplicateAlert(dbManager, cameraID, timestamp):
     """Check if alert has been recently sent out for given camera
 
     Args:
         dbManager (DbManager):
-        camera (str): camera name
-        timestamp (int):
-        cloudFileIDs (list): List of Cloud file IDs for the uploaded image files
+        cameraID (str): camera name
+        timestamp (int): time.time() value when image was taken
 
     Returns:
-        True if this is a new alert, False otherwise
+        True if this is a duplicate alert, False otherwise
     """
     # Only alert if there has not been a detection in the last hour.  This prevents spam
     # from long lasting fires.
     sqlTemplate = """SELECT * FROM detections
     where CameraName='%s' and timestamp > %s and timestamp < %s"""
-    sqlStr = sqlTemplate % (camera, timestamp - 60*60, timestamp)
+    sqlStr = sqlTemplate % (cameraID, timestamp - 60*60, timestamp)
 
     dbResult = dbManager.query(sqlStr)
     if len(dbResult) > 0:
         logging.warning('Supressing new alert due to recent detection')
-        return False
-
-    dbRow = {
-        'CameraName': camera,
-        'Timestamp': timestamp,
-        'ImageID': cloudFileIDs[0] if cloudFileIDs else ''
-    }
-    dbManager.add_data('alerts', dbRow)
-    return True
+        return True
+    return False
 
 
-def alertFire(constants, cameraID, imgPath, annotatedFile, cloudFileIDs, fireSegment, timestamp):
-    """Send alerts about given fire through all channels (currently email and sms)
+def updateAlertsDB(dbManager, cameraID, timestamp, annotatedUrl):
+    """Add new entry to Alerts table
 
     Args:
-        constants (dict): "global" contants
+        dbManager (DbManager):
         cameraID (str): camera name
-        imgPath: filepath of the original image
-        annotatedFile: filepath of the annotated image
-        cloudFileIDs (list): List of Cloud file IDs for the uploaded image files
-        fireSegment (dictionary): dictionary with information for the segment with fire/smoke
         timestamp (int): time.time() value when image was taken
+        annotatedUrl: Public URL for annotated iamge
     """
-    pubsubFireNotification(cameraID, annotatedFile, fireSegment, timestamp)
-    emailFireNotification(constants, cameraID, imgPath, annotatedFile, cloudFileIDs, fireSegment, timestamp)
-    smsFireNotification(constants['dbManager'], cameraID)
+    dbRow = {
+        'CameraName': cameraID,
+        'Timestamp': timestamp,
+        'ImageID': annotatedUrl
+    }
+    dbManager.add_data('alerts', dbRow)
 
 
-def pubsubFireNotification(cameraID, annotatedFile, fireSegment, timestamp):
+def pubsubFireNotification(cameraID, timestamp, annotatedUrl, fireSegment):
     """Send a pubsub notification for a potential new fire
 
     Sends pubsub message with information about the camera and fire score includeing
@@ -193,15 +185,10 @@ def pubsubFireNotification(cameraID, annotatedFile, fireSegment, timestamp):
 
     Args:
         cameraID (str): camera name
-        annotatedFile: filepath of the annotated image
-        fireSegment (dictionary): dictionary with information for the segment with fire/smoke
         timestamp (int): time.time() value when image was taken
+        annotatedUrl: Public URL for annotated iamge
+        fireSegment (dictionary): dictionary with information for the segment with fire/smoke
     """
-    notificationsDateDir = goog_helper.dateSubDir(settings.noticationsDir)
-    fileID = goog_helper.copyFile(annotatedFile, notificationsDateDir)
-    # convert fileID into URL usable by web UI
-    annotatedUrl = [fileID.replace('gs://', 'https://storage.googleapis.com/')]
-
     message = {
         'timestamp': timestamp,
         'cameraID': cameraID,
@@ -212,7 +199,7 @@ def pubsubFireNotification(cameraID, annotatedFile, fireSegment, timestamp):
     goog_helper.publish(message)
 
 
-def emailFireNotification(constants, cameraID, imgPath, annotatedFile, cloudFileIDs, fireSegment, timestamp):
+def emailFireNotification(constants, cameraID, timestamp, imgPath, annotatedFile, fireSegment):
     """Send an email alert for a potential new fire
 
     Send email with information about the camera and fire score includeing
@@ -221,11 +208,10 @@ def emailFireNotification(constants, cameraID, imgPath, annotatedFile, cloudFile
     Args:
         constants (dict): "global" contants
         cameraID (str): camera name
+        timestamp (int): time.time() value when image was taken
         imgPath: filepath of the original image
         annotatedFile: filepath of the annotated image
-        cloudFileIDs (list): List of Cloud file IDs for the uploaded image files
         fireSegment (dictionary): dictionary with information for the segment with fire/smoke
-        timestamp (int): time.time() value when image was taken
     """
     dbManager = constants['dbManager']
     subject = 'Possible (%d%%) fire in camera %s' % (int(fireSegment['score']*100), cameraID)
@@ -261,6 +247,30 @@ def smsFireNotification(dbManager, cameraID):
     if len(phones) > 0:
         for phone in phones:
             sms_helper.sendSms(settings, phone, message)
+
+
+def alertFire(constants, cameraID, timestamp, imgPath, annotatedFile, fireSegment):
+    """Update Alerts DB and send alerts about given fire through all channels (pubsub, email, and sms)
+
+    Args:
+        constants (dict): "global" contants
+        cameraID (str): camera name
+        timestamp (int): time.time() value when image was taken
+        imgPath: filepath of the original image
+        annotatedFile: filepath of the annotated image
+        fireSegment (dictionary): dictionary with information for the segment with fire/smoke
+    """
+    # copy annotated image to publicly accessible settings.noticationsDir
+    alertsDateDir = goog_helper.dateSubDir(settings.noticationsDir)
+    fileID = goog_helper.copyFile(annotatedFile, alertsDateDir)
+    # convert fileID into URL usable by web UI
+    annotatedUrl = fileID.replace('gs://', 'https://storage.googleapis.com/')
+
+    dbManager = constants['dbManager']
+    updateAlertsDB(dbManager, cameraID, timestamp, annotatedUrl)
+    pubsubFireNotification(cameraID, timestamp, annotatedUrl, fireSegment)
+    emailFireNotification(constants, cameraID, timestamp, imgPath, annotatedFile, fireSegment)
+    smsFireNotification(dbManager, cameraID)
 
 
 def deleteImageFiles(imgPath, origImgPath, annotatedFile):
@@ -476,8 +486,8 @@ def main():
         detectionResult = detectionPolicy.detect(image_spec)
         timeDetect = time.time()
         if detectionResult['fireSegment']:
-            if checkAndUpdateAlerts(dbManager, cameraID, timestamp, detectionResult['cloudFileIDs']):
-                alertFire(constants, cameraID, imgPath, detectionResult['annotatedFile'], detectionResult['cloudFileIDs'], detectionResult['fireSegment'], timestamp)
+            if not isDuplicateAlert(dbManager, cameraID, timestamp):
+                alertFire(constants, cameraID, timestamp, imgPath, detectionResult['annotatedFile'], detectionResult['fireSegment'])
         deleteImageFiles(imgPath, imgPath, detectionResult['annotatedFile'])
         if (args.heartbeat):
             heartBeat(args.heartbeat)
