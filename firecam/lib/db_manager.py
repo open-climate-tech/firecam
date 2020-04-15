@@ -150,7 +150,7 @@ class DbManager(object):
             ('MinusMinutes', 'INT'),
         ]
 
-        # detections between historical half and 1.0
+        # detections above halfway between historical max and 1.0
         detections_schema = [
             ('CameraName', 'TEXT'),
             ('Timestamp', 'INT'),
@@ -165,24 +165,14 @@ class DbManager(object):
             ('ImageID', 'TEXT'),
         ]
 
-        # this is what's used to send out alert emails
+        # alerts sent out via various means
         alerts_schema = [
             ('CameraName', 'TEXT'),
             ('Timestamp', 'INT'),
             ('ImageID', 'TEXT'),
         ]
 
-        archive_schema = [
-            ('CameraName', 'TEXT'),
-            ('Timestamp', 'INT'),
-            ('StorageID', 'TEXT'),
-            ('FileID', 'TEXT'),
-            ('Pan', 'REAL'),
-            ('Tilt', 'REAL'),
-            ('Zoom', 'REAL'),
-            ('md5', 'TEXT'),
-        ]
-
+        # who to notify via email and SMS
         notifications_schema = [
             ('Name', 'TEXT'),
             ('Email', 'TEXT'),
@@ -203,7 +193,6 @@ class DbManager(object):
             'scores': scores_schema,
             'detections': detections_schema,
             'alerts': alerts_schema,
-            'archive': archive_schema,
             'notifications': notifications_schema,
         }
 

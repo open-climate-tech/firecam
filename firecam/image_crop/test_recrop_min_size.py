@@ -18,7 +18,7 @@ Test recrop_min_size
 
 """
 
-import recrop_min_size
+from . import recrop_min_size
 import pytest
 
 

@@ -18,7 +18,7 @@ Test collect_args
 
 """
 
-import collect_args
+from firecam.lib import collect_args
 import pytest
 
 def testReqStr():

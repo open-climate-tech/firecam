@@ -19,17 +19,17 @@ Test always and never policies
 """
 
 import pytest
-import detect_never
-import detect_always
+from firecam.detection_policies import detect_never
+from firecam.detection_policies import detect_always
 
 def testNever():
-    neverPol = detect_never.DetectNever(None, None, None, None, None, None, None, None)
+    neverPol = detect_never.DetectNever(None, None, None, None, None)
     result = neverPol.detect(None)
     assert not result['fireSegment']
 
 
 def testAlways():
-    alwaysPol = detect_always.DetectAlways(None, None, None, None, None, None, None, None)
+    alwaysPol = detect_always.DetectAlways(None, None, None, None, None)
     result = alwaysPol.detect(None)
     assert result['fireSegment']
     assert result['fireSegment']['score']
