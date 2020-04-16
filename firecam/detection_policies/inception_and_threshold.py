@@ -170,6 +170,7 @@ class InceptionV3AndHistoricalThreshold:
         # maxFireSegment['HistAvg'] = 0.1
         # maxFireSegment['HistMax'] = 0.2
         # maxFireSegment['HistNumSamples'] = 10
+        # maxFireSegment['AdjScore'] = 0.3
         # return maxFireSegment
 
         # segments is sorted, so skip all work if max score is < .5
@@ -206,6 +207,7 @@ class InceptionV3AndHistoricalThreshold:
                         maxFireSegment['HistAvg'] = row['avgs']
                         maxFireSegment['HistMax'] = row['maxs']
                         maxFireSegment['HistNumSamples'] = row['cnt']
+                        maxFireSegment['AdjScore'] = (segmentInfo['score'] - threshold) / (1 - threshold)
 
         return maxFireSegment
 

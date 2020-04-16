@@ -160,7 +160,7 @@ def isDuplicateAlert(dbManager, cameraID, timestamp):
     return False
 
 
-def updateAlertsDB(dbManager, cameraID, timestamp, annotatedUrl):
+def updateAlertsDB(dbManager, cameraID, timestamp, annotatedUrl, fireSegment):
     """Add new entry to Alerts table
 
     Args:
@@ -168,10 +168,12 @@ def updateAlertsDB(dbManager, cameraID, timestamp, annotatedUrl):
         cameraID (str): camera name
         timestamp (int): time.time() value when image was taken
         annotatedUrl: Public URL for annotated iamge
+        fireSegment (dictionary): dictionary with information for the segment with fire/smoke
     """
     dbRow = {
         'CameraName': cameraID,
         'Timestamp': timestamp,
+        'AdjScore': fireSegment['AdjScore'],
         'ImageID': annotatedUrl
     }
     dbManager.add_data('alerts', dbRow)
@@ -192,8 +194,7 @@ def pubsubFireNotification(cameraID, timestamp, annotatedUrl, fireSegment):
     message = {
         'timestamp': timestamp,
         'cameraID': cameraID,
-        "score": fireSegment['score'],
-        "histMax": fireSegment["HistMax"],
+        "adjScore": fireSegment['AdjScore'],
         'annotatedUrl': annotatedUrl
     }
     goog_helper.publish(message)
@@ -267,7 +268,7 @@ def alertFire(constants, cameraID, timestamp, imgPath, annotatedFile, fireSegmen
     annotatedUrl = fileID.replace('gs://', 'https://storage.googleapis.com/')
 
     dbManager = constants['dbManager']
-    updateAlertsDB(dbManager, cameraID, timestamp, annotatedUrl)
+    updateAlertsDB(dbManager, cameraID, timestamp, annotatedUrl, fireSegment)
     pubsubFireNotification(cameraID, timestamp, annotatedUrl, fireSegment)
     emailFireNotification(constants, cameraID, timestamp, imgPath, annotatedFile, fireSegment)
     smsFireNotification(dbManager, cameraID)

@@ -169,6 +169,7 @@ class DbManager(object):
         alerts_schema = [
             ('CameraName', 'TEXT'),
             ('Timestamp', 'INT'),
+            ('AdjScore', 'REAL'),
             ('ImageID', 'TEXT'),
         ]
 
