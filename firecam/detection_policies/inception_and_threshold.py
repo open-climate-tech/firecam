@@ -240,6 +240,7 @@ class InceptionV3AndHistoricalThreshold:
         lineWidth=3
         self._drawRect(imgDraw, x0, y0, x1, y1, lineWidth, color)
 
+        # Write ML score in the fire box
         fontPath = os.path.join(pathlib.Path(__file__).parent.parent, 'data/Roboto-Regular.ttf')
         fontSize=80
         font = ImageFont.truetype(fontPath, size=fontSize)
@@ -247,12 +248,19 @@ class InceptionV3AndHistoricalThreshold:
         textSize = imgDraw.textsize(scoreStr, font=font)
         imgDraw.text((centerX - textSize[0]/2, centerY - textSize[1]), scoreStr, font=font, fill=color)
 
+        # Write historical max value in the fire box
         color = "blue"
         fontSize=70
         font = ImageFont.truetype(fontPath, size=fontSize)
         scoreStr = '%.2f' % fireSegment['HistMax']
         textSize = imgDraw.textsize(scoreStr, font=font)
         imgDraw.text((centerX - textSize[0]/2, centerY), scoreStr, font=font, fill=color)
+
+        # "watermark" the image
+        color = "orange"
+        fontSize=60
+        font = ImageFont.truetype(fontPath, size=fontSize)
+        imgDraw.text((20, img.size[1] - 80), "Open Climate Tech - Wildfire", font=font, fill=color)
 
         filePathParts = os.path.splitext(imgPath)
         annotatedFile = filePathParts[0] + '_Score' + filePathParts[1]
