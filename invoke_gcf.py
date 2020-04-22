@@ -51,10 +51,13 @@ def main():
     
     args = collect_args.collectArgs(reqArgs, optionalArgs=optArgs, parentParsers=[goog_helper.getParentParser()])
     googleCreds = goog_helper.getCreds(settings, args)
-    googleServices = goog_helper.getGoogleServices(settings, args)
 
-    folderName = str(uuid.uuid4())
-    folderID = goog_helper.createFolder(googleServices['drive'], settings.ffmpegFolder, folderName)
+    folderName = 'test_' + str(uuid.uuid4())
+    if settings.ffmpegFolder[-1] == '/':
+        folderID = settings.ffmpegFolder + folderName
+    else:
+        folderID = settings.ffmpegFolder + '/' + folderName
+
     url = settings.ffmpegUrl
     if args.localhost:
         url = 'http://localhost:8080'

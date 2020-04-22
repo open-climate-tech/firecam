@@ -10,10 +10,10 @@
   "author": "Fuego",
   "license": "Apache-2.0",
   "dependencies": {
-    "@ffmpeg-installer/ffmpeg": "^1.0.19",
+    "@ffmpeg-installer/ffmpeg": "^1.0.20",
+    "@google-cloud/storage": "^4.7.0",
     "fluent-ffmpeg": "^2.1.2",
-    "googleapis": "^40.0.1",
-    "request": "^2.88.0",
-    "rimraf": "^2.6.3"
+    "request": "^2.88.2",
+    "rimraf": "^2.7.1"
   }
 }

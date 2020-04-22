@@ -1,6 +1,5 @@
 /*
-* ==============================================================================
-* Copyright 2018 The Fuego Authors.
+* Copyright 2020 Open Climate Tech Contributors
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -16,6 +15,9 @@
 * ==============================================================================
 */
 
+'use strict';
+// Cloud function to convert mp4 videos to sequence of jpg images
+
 
 // Deployment instructions
 // gcloud functions deploy fuego-ffmpeg1 --runtime nodejs10 --trigger-http --entry-point=extractMp4 --memory=2048MB --timeout=540s
@@ -25,9 +27,8 @@ const fs = require('fs');
 const path = require('path');
 const request = require('request');
 const rimraf = require('rimraf');
-const google = require('googleapis');
-const gDrive = new google.drive_v3.Drive();
-const gAuthLib = require("google-auth-library");
+const {Storage} = require('@google-cloud/storage');
+
 const ffmpegPath = require('@ffmpeg-installer/ffmpeg').path;
 const FfmpegCommand = require('fluent-ffmpeg');
 FfmpegCommand.setFfmpegPath(ffmpegPath);
@@ -48,10 +49,10 @@ function getTmpDir() {
 
 
 function listFiles(dir) {
-    files = fs.readdirSync(dir);
-    sizes = [];
+    const files = fs.readdirSync(dir);
+    const sizes = [];
     files.forEach((file) => {
-        ss = fs.statSync(path.join(dir, file));
+        const ss = fs.statSync(path.join(dir, file));
         sizes.push(ss.size);
     });
     console.log('ListFiles: ', sizes.length, sizes.join(', '));
@@ -95,180 +96,69 @@ function getJpegs(mp4File, outFileSpec, cb) {
 }
 
  
-function gdriveAuthSericeAccount(keyFile, cb) {
-    function authNow(authClient) {
-        // When running in google cloud function environment, there is no authorize method
-        // and the authClient is ready to use, but when running in framework simulator on
-        // local host, authorize() is needed.
-        if (!authClient.authorize) {
-            cb(null, authClient);
-            return;
-        }
-        authClient.authorize(function (err, tokens) {
-            if (err) {
-                console.log(err);
-                cb(err);
-                return;
-            } else {
-                console.log("Successfully connected!");
-                cb(null, authClient);
-            }
-        });
-    }
-    const scopes = ['https://www.googleapis.com/auth/drive'];
-    var jwtClient;
-    if (keyFile) {
-        console.log('with key');
-        const keyJson = require(keyFile);
-        jwtClient = new google.google.auth.JWT(keyJson.client_email, null, keyJson.private_key, scopes);
-        authNow(jwtClient);
-    } else {
-        console.log('app default without key');
-        gAuth = new gAuthLib.GoogleAuth({scopes: scopes});
-        gAuth.getApplicationDefault(function (err, jwtClient, projectId) {
-            if (err) {
-                console.log('gad error', err);
-                cb(err);
-                return;
-            } else {
-                console.log('get project', projectId);
-                authNow(jwtClient);
-            }
-        });
-    }
-}
-
-function gdriveAuthToken(credsPath, tokenPath, cb) {
-    credsJ = JSON.parse(fs.readFileSync(credsPath));
-    tokenJ = JSON.parse(fs.readFileSync(tokenPath));
-    oauth2 = new google.google.auth.OAuth2(credsJ.installed.client_id, credsJ.installed.client_secret, credsJ.installed.redirect_uris[0]);
-    oauth2.setCredentials({refresh_token: tokenJ.refresh_token});
-    cb(null, oauth2);
-}
-
-function gdriveList(authClient, parentDir) {
-    gDrive.files.list({
-        auth: authClient,
-        supportsTeamDrives: true,
-        includeTeamDriveItems: true,
-        q: '"' + parentDir + '" in parents and trashed = False',
-    }, function (err, response) {
-        if (err) {
-            console.log('The API returned an error: ' + err);
-            return;
-        }
-        var files = response.data.files;
-        if (files.length == 0) {
-            console.log('No files found.');
-        } else {
-            console.log('Files from Google Drive:');
-            for (var i = 0; i < files.length; i++) {
-                var file = files[i];
-                console.log('%s (%s)', file.name, file.id);
-            }
-        }
-    });
-}
-function resolveAfter2Seconds(x) { 
-    return new Promise(resolve => {
-      setTimeout(() => {
-        resolve(x);
-      }, 2000);
-    });
-  }
-  
-  function gdriveUploadCB(authClient, filePath, parentDir) {
-    gDrive.files.create({
-        auth: authClient,
-        resource: {
-            'name': path.basename(filePath),
-            'parents': [parentDir]
-        },
-        media: {
-            mimeType: 'image/jpeg',
-            body: fs.createReadStream(filePath)    
-        },
-        supportsTeamDrives: true,
-        fields: 'id'
-    }, function (err, file) {
-        if (err) {
-            // Handle error
-            console.error('Upload error', err);
-        } else {
-            console.log('File: ', file.status, file.statusText, file.data);
-        }
-    });
-}
-
-function gdriveUploadPromise(authClient, filePath, parentDir, newFileName) {
-    return new Promise((resolve,reject) => {
-        gDrive.files.create({
-            auth: authClient,
-            resource: {
-                'name': newFileName,
-                'parents': [parentDir]
-            },
-            media: {
-                mimeType: 'image/jpeg',
-                body: fs.createReadStream(filePath)    
-            },
-            supportsTeamDrives: true,
-            fields: 'id'
-        }, function (err, file) {
-            if (err) {
-                // Handle error
-                console.error('Upload error', err);
-                reject(err);
-            } else {
-                // console.log('File: ', file.status, file.statusText, file.data);
-                resolve(file);
-            }
-        });
-    });
-}
-
-async function gdriveUploadAsync(authClient, filePath, parentDir) {
-    try {
-        var file = await gdriveUploadPromise(authClient, filePath, parentDir);
-        console.log('await file', file.status, file.statusText, file.data);
-    } catch (err) {
-        console.log('await err', err);
-    }
-}
-
 function getPaddedTwoDigits(value) {
-    valueStr = value.toString()
+    let valueStr = value.toString()
     if (value < 10) {
         valueStr = '0' + valueStr;
     }
     return valueStr;
 }
 
-async function uploadFiles(fromDir, authClient, uploadDir, driveFilesPrefix, qNum, cb) {
-    batchSize = 8; // up to 8 files in parallel gets nice speedup in google cloud environment
-    fileNames = fs.readdirSync(fromDir);
+const GS_URL_REGEXP = /^gs:\/\/([a-z0-9_.-]+)\/(.+)$/;
+
+/**
+ * Parse the given string path into bucket and name if it is GCS path
+ * @param {string} path
+ * @return {object} with bucket and name properties
+ */
+function parsePath(path) {
+  const parsed = GS_URL_REGEXP.exec(path);
+  if (parsed && Array.isArray(parsed)) {
+    let name = parsed[2];
+    if (name.endsWith('/')) { // strip the final / if any
+      name = name.slice(0,name.length-1);
+    }
+    return {
+      bucket: parsed[1],
+      name: name,
+    }
+  }
+}
+
+async function uploadFiles(fromDir, uploadDir, imgCamDatePrefix, qNum, cb) {
+    // const storage = new Storage({keyFilename: "key.json"});
+    const storage = new Storage();
+    const parsedUploadDir = parsePath(uploadDir);
+    console.log('upload dir', parsedUploadDir);
+    const bucket = storage.bucket(parsedUploadDir.bucket);
+
+    const batchSize = 8; // up to 8 files in parallel gets nice speedup in google cloud environment
+    let fileNames = fs.readdirSync(fromDir);
     fileNames = fileNames.filter(fn => fn.endsWith('.jpg')); // skip the mp4
     fileNames = fileNames.sort(); // sort by name to ensure correct time ordering
-    files = [];
-    batchProms = [];
+    let files = [];
+    let batchProms = [];
     for (var i = 0; i < fileNames.length; i++) {
-        filePath = path.join(fromDir, fileNames[i]);
-        hour = getPaddedTwoDigits((qNum-1)*3 + Math.floor(i/60));
-        minute = getPaddedTwoDigits(i % 60);
-        newFileName = driveFilesPrefix + hour + ';' + minute + ';00.jpg'
+        const filePath = path.join(fromDir, fileNames[i]);
+        const hour = getPaddedTwoDigits((qNum-1)*3 + Math.floor(i/60));
+        const minute = getPaddedTwoDigits(i % 60);
+        const newFileName = imgCamDatePrefix + hour + ';' + minute + ';00.jpg';
+        const destFileFullName = parsedUploadDir.name + '/' + newFileName;
+
         try {
-            batchProms.push(gdriveUploadPromise(authClient, filePath, uploadDir, newFileName));
+            batchProms.push(bucket.upload(filePath, {destination: destFileFullName}));
             if ((batchProms.length >= batchSize) || (i == (fileNames.length - 1))) {
-                batchFiles = [];
+                let batchFiles = [];
                 for (var j = 0; j < batchProms.length; j++) {
-                    fileInfo = await batchProms[j].catch(function(err) {
+                    const fileInfo = await batchProms[j].catch(function(err) {
                         console.log('upload await err', err.message, err);
                     });
-                    batchFiles.push(fileInfo);
+                    batchFiles.push(fileInfo[0]);
                 }
-                batchProms = [];
                 files = files.concat(batchFiles);
-                console.log('await files', i, batchFiles.map(fi=>fi.status));
+                console.log('await files', i, batchFiles.map(fi=>fi.name.split('/').pop()));
+                batchProms = [];
+                batchFiles = [];
             }
         } catch (err) {
             console.log('await err', err);
@@ -299,10 +189,10 @@ exports.extractMp4 = (req, res) => {
     const tmpDir = getTmpDir();
     const mp4File = path.join(tmpDir, 'q.mp4');
     console.log('File: ', mp4File);
-    driveFilesPrefix = req.body.cameraID + '__' +
-                        req.body.dateDir.slice(0,4) + '-' +
-                        req.body.dateDir.slice(4,6) + '-' +
-                        req.body.dateDir.slice(6,8) + 'T';
+    const imgCamDatePrefix = req.body.cameraID + '__' +
+                                req.body.dateDir.slice(0,4) + '-' +
+                                req.body.dateDir.slice(4,6) + '-' +
+                                req.body.dateDir.slice(6,8) + 'T';
     downloadMp4(hpwrenUrl, mp4File, function(err, resp, body) {
         if (err) {
             res.status(400).send('Could not download mp4');
@@ -318,21 +208,14 @@ exports.extractMp4 = (req, res) => {
             }
             console.log('Listing files after ffmpeg');
             listFiles(tmpDir);
-            gdriveAuthSericeAccount(null, function(err, authClient) {
+            uploadFiles(tmpDir, req.body.uploadDir, imgCamDatePrefix, req.body.qNum, function(err, files) {
                 if (err) {
-                    res.status(400).send('Could not auth drive');
+                    res.status(400).send('Could not upload jpegs');
                     return;
                 }
-                // console.log('auth done', authClient);
-                uploadFiles(tmpDir, authClient, req.body.uploadDir, driveFilesPrefix, req.body.qNum, function(err, files) {
-                    if (err) {
-                        res.status(400).send('Could not upload jpegs');
-                        return;
-                    }
-                    rimraf.sync(tmpDir);
-                    console.log('All done');
-                    res.status(200).send('done');
-                });
+                rimraf.sync(tmpDir);
+                console.log('All done');
+                res.status(200).send('done');
             });
         });
     });
@@ -345,10 +228,10 @@ function testHandler() {
         body: {
             hostName: 'c1',
             cameraID: 'rm-w-mobo-c',
-            yearDir: 2017,
-            dateDir: 20170613,
-            qNum: 3, // 'Q3.mp4'
-            uploadDir: '1KCdRENKi_b9HgiZ9nzq05P5rTuRH71q2',
+            yearDir: '2017',
+            dateDir: '20170613',
+            qNum: '3', // 'Q3.mp4'
+            uploadDir: 'gs://bucket/ffmpeg/testX',
         }
     }, { // fake res
         status: () => ({send: (m)=>{console.log('msg', m)}})
@@ -358,36 +241,6 @@ function testHandler() {
 
 console.log('argv: ', process.argv)
 if ((process.argv.length > 1) && !process.argv[1].includes('functions-framework')) {
-    const testDir = '1KCdRENKi_b9HgiZ9nzq05P5rTuRH71q2';
-    const TOKEN_PATH = '../../keys/token.json';
-    const CREDS_PATH = '../../keys/credentials.json';
     // export GOOGLE_APPLICATION_CREDENTIALS='..../service-account.json'
-    const KEY_FILE = '../../keys/service-account.json';
     testHandler();
-    // gdriveAuthToken(CREDS_PATH, TOKEN_PATH, function(err, authClient) {
-    // gdriveAuthSericeAccount(KEY_FILE, function(err, authClient) {
-    // gdriveAuthSericeAccount(null, function(err, authClient) {
-        // if (err) {
-        //     return;
-        // }
-        // gdriveList(authClient, testDir);
-        // gdriveUploadCB(authClient,
-        //     'index.js',
-        //     testDir
-        // );
-
-        // gdriveUploadPromise(authClient,
-        //     'index.js',
-        //     testDir
-        // ).then(file => {
-        //     console.log('prom res', file.status, file.statusText, file.data);
-        // }).catch(err => {
-        //     console.log('prom rej', err);
-        // });
-
-        // gdriveUploadAsync(authClient,
-        //     'index.js',
-        //     testDir
-        // );
-    // });
 }
