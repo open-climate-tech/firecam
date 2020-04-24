@@ -37,6 +37,9 @@ from apiclient.http import MediaFileUpload
 from google.cloud import storage
 from google.cloud import pubsub_v1
 
+from google.auth.transport.requests import Request
+import google.oauth2.id_token
+
 # If modifying these scopes, delete the file token.json.
 # TODO: This is getting too big.  We should ask for different subsets for each app
 SCOPES = [
@@ -85,6 +88,22 @@ def getGoogleServices(settings, args):
         'mail': build('gmail', 'v1', http=creds.authorize(Http())),
         'creds': creds
     }
+
+
+def getServiceIdToken(audience):
+    """Get ID token for service account for given audience.  Caches the value per audience for performance
+
+    Args:
+        audience (str): target audience (e.g. cloud function URL)
+
+    Returns:
+        token string
+    """
+    if audience in getServiceIdToken.cached:
+        return getServiceIdToken.cached[audience]
+    getServiceIdToken.cached[audience] = google.oauth2.id_token.fetch_id_token(Request(), audience)
+    return getServiceIdToken.cached[audience]
+getServiceIdToken.cached = {}
 
 
 def createFolder(service, parentDirID, folderName):
@@ -392,9 +411,12 @@ def parseGCSPath(path):
     """
     matches = re.findall(GS_URL_REGEXP, path)
     if matches and (len(matches) == 1):
+        name = matches[0][1]
+        if name[-1] == '/': # strip trailing slash
+            name = name[0:-1]
         return {
             'bucket': matches[0][0],
-            'name': matches[0][1],
+            'name': name,
         }
     return None
 
@@ -420,7 +442,7 @@ def getStorageClient():
     """
     if getStorageClient.cachedClient:
         return getStorageClient.cachedClient
-    if settings.gcpServiceKey:
+    if getattr(settings, 'gcpServiceKey', None):
         storageClient = storage.Client.from_service_account_json(settings.gcpServiceKey)
     else:
         storageClient = storage.Client()
@@ -439,21 +461,27 @@ def listBuckets():
     return [bucket.name for bucket in storageClient.list_buckets()]
 
 
-def listBucketFiles(bucketName, prefix='', deep=False):
-    """List all files in given Google Cloud Storage bucket matching given prefix and getDirs
+def listBucketEntries(bucketName, prefix='', getDirs=False, deep=False):
+    """List all files or dirs in given Google Cloud Storage bucket matching given prefix, getDirs, deep
 
     Args:
         bucketName (str): Cloud Storage bucket name
         prefix (str): optional string that must be at start of filename
+        getDirs (bool): if true, return all subdirs vs. files in given prefix
         deep (bool): if true, return all files in "deeply" nested "folders"
 
     Returns:
         List of file names (note names are full paths in cloud storage)
     """
     storageClient = getStorageClient()
+    if getDirs:
+        assert not deep # can't combine directory listen with deep traversal
     delimiter = '' if deep else '/'
     blobs = storageClient.list_blobs(bucketName, prefix=prefix, delimiter=delimiter)
-    return [blob.name for blob in blobs]
+    if getDirs:
+        return [prefix[0:-1] for prefix in blobs.prefixes] # remove the trailing '/'
+    else:
+        return [blob.name for blob in blobs]
 
 
 def getBucketFile(bucketName, fileID):

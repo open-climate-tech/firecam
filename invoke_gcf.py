@@ -28,7 +28,8 @@ import uuid
 import logging
 
 def callGCF(url, creds, cameraID, folderID):
-    headers = {'Authorization': f'bearer {creds.id_token_jwt}'}
+    token = goog_helper.getServiceIdToken(url)
+    headers = {'Authorization': 'bearer {}'.format(token)}
     data = {
         'hostName': 'c1',
         'cameraID': cameraID,
@@ -47,12 +48,13 @@ def main():
     ]
     optArgs = [
         ["l", "localhost", "localhost for testing"],
+        ["f", "folder", "name of folder"],
     ]
     
     args = collect_args.collectArgs(reqArgs, optionalArgs=optArgs, parentParsers=[goog_helper.getParentParser()])
     googleCreds = goog_helper.getCreds(settings, args)
 
-    folderName = 'test_' + str(uuid.uuid4())
+    folderName = args.folder if args.folder else 'test_' + str(uuid.uuid4())
     if settings.ffmpegFolder[-1] == '/':
         folderID = settings.ffmpegFolder + folderName
     else:

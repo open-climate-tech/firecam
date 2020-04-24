@@ -276,14 +276,12 @@ def downloadHttpFileAtTime(outputDir, urlPartsQ, cameraID, closestTime, verboseL
     return imgPath
 
 
-def downloadDriveFileAtTime(driveSvc, outputDir, hpwrenSource, closestEntry):
-    """Download HPWREN image from google drive folder from ffmpeg Google Cloud Function
+def downloadGCSFileAtTime(outputDir, closestEntry):
+    """Download HPWREN image from GCS folder from ffmpeg Google Cloud Function
 
     Args:
-        driveSvc: Drive service (from getGoogleServices()['drive'])
         outputDir (str): Output directory path
-        hpwrenSource (dict): Dictionary containing various HPWREN source information
-        closestEntry (dict): Desired timestamp and drive file ID
+        closestEntry (dict): Desired timestamp and GCS file
 
     Returns:
         Local filesystem path to downloaded image
@@ -294,7 +292,8 @@ def downloadDriveFileAtTime(driveSvc, outputDir, hpwrenSource, closestEntry):
         logging.warning('File %s already downloaded', imgPath)
         return imgPath
 
-    goog_helper.downloadFileByID(driveSvc, closestEntry['id'], imgPath)
+    parsedPath = goog_helper.parseGCSPath(closestEntry['id'])
+    goog_helper.downloadBucketFile(parsedPath['bucket'], parsedPath['name'], imgPath)
     return imgPath
 
 
@@ -334,7 +333,8 @@ def callGCF(gcfUrl, creds, hpwrenSource, qNum, folderID):
     Returns:
         Cloud function result
     """
-    headers = {'Authorization': 'bearer {}'.format(creds.id_token_jwt)}
+    token = goog_helper.getServiceIdToken(gcfUrl)
+    headers = {'Authorization': 'bearer {}'.format(token)}
     gcfParams = {
         'hostName': hpwrenSource['server'],
         'cameraID': hpwrenSource['cameraID'],
@@ -347,8 +347,8 @@ def callGCF(gcfUrl, creds, hpwrenSource, qNum, folderID):
     return response.content
 
 
-def getDriveMp4(googleServices, settings, hpwrenSource, qNum):
-    """Extract images from Q MP4 video into google drive folder
+def getGCSMp4(googleServices, settings, hpwrenSource, qNum):
+    """Extract images from Q MP4 video into GCS folder
 
     Args:
         googleServices (): Google services and credentials
@@ -357,36 +357,30 @@ def getDriveMp4(googleServices, settings, hpwrenSource, qNum):
         qNum (int): Q number (1-8) where each Q represents 3 hour period
 
     Returns:
-        Dictionary with drive folder ID containing images and imgTimes metadata
+        list of files in GCS bucket with metadata
     """
+    ffmpegParsedGCS = goog_helper.parseGCSPath(settings.ffmpegFolder)
     folderName = hpwrenSource['cameraID'] + '__' + hpwrenSource['dateDirName'] + 'Q' + str(qNum)
-    dirs = goog_helper.searchFiles(googleServices['drive'], settings.ffmpegFolder, prefix=folderName)
-    logging.warning('Found drive dirs %s', dirs)
-    folderID = dirs[0]['id'] if dirs else None
-    if not folderID:
-        logging.warning('Creating drive folder %s', folderName)
-        folderID = goog_helper.createFolder(googleServices['drive'], settings.ffmpegFolder, folderName)
-        hpwrenSource['gDriveFolder'] = folderID
-
-    files = goog_helper.searchAllFiles(googleServices['drive'], folderID)
-    if len(files) == 0:
-        logging.warning('Calling Cloud Function for folder %s', folderID)
-        gcfRes = callGCF(settings.ffmpegUrl, googleServices['creds'], hpwrenSource, qNum, folderID)
+    folderPath = ffmpegParsedGCS['name'] + '/' + folderName
+    files = goog_helper.listBucketEntries(ffmpegParsedGCS['bucket'], prefix=(folderPath + '/'))
+    logging.warning('Found %d GCS files', len(files))
+    if not files:
+        logging.warning('Calling Cloud Function for folder %s', folderName)
+        uploadDir = goog_helper.repackGCSPath(ffmpegParsedGCS['bucket'],folderPath)
+        gcfRes = callGCF(settings.ffmpegUrl, googleServices['creds'], hpwrenSource, qNum, uploadDir)
         logging.warning('Cloud function result %s', gcfRes)
-        files = goog_helper.searchAllFiles(googleServices['drive'], folderID)
+        files = goog_helper.listBucketEntries(ffmpegParsedGCS['bucket'], prefix=(folderPath + '/'))
     # logging.warning('GDM4: files %d %s', len(files), files)
     imgTimes = []
-    for fileInfo in files:
-        nameParsed = parseFilename(fileInfo['name'])
+    for filePath in files:
+        fileName = filePath.split('/')[-1]
+        nameParsed = parseFilename(fileName)
         imgTimes.append({
             'time': nameParsed['unixTime'],
-            'id': fileInfo['id'],
-            'name': fileInfo['name']
+            'id': goog_helper.repackGCSPath(ffmpegParsedGCS['bucket'], filePath),
+            'name': fileName
         })
-    return {
-        'folderID': folderID,
-        'imgTimes': imgTimes
-    }
+    return imgTimes
 
 
 outputDirCheckOnly = '/CHECK:WITHOUT:DOWNLOAD'
@@ -434,10 +428,8 @@ def downloadFilesForDate(googleServices, settings, outputDir, hpwrenSource, gapM
                 if not mp4Url:
                     return downloaded_files
                 if outputDir != outputDirCheckOnly:
-                    mp4Info = getDriveMp4(googleServices, settings, hpwrenSource, qNum)
+                    imgTimes = getGCSMp4(googleServices, settings, hpwrenSource, qNum)
                     useHttp = False
-                    hpwrenSource['gDriveFolder'] = mp4Info['folderID']
-                    imgTimes = mp4Info['imgTimes']
                     # logging.warning('imgTimes %d %s', len(imgTimes), imgTimes)
             lastQNum = qNum
 
@@ -451,7 +443,7 @@ def downloadFilesForDate(googleServices, settings, outputDir, hpwrenSource, gapM
             if useHttp:
                 downloaded = downloadHttpFileAtTime(outputDir, urlPartsQ, hpwrenSource['cameraID'], closestTime, verboseLogs)
             else:
-                downloaded = downloadDriveFileAtTime(googleServices['drive'], outputDir, hpwrenSource, closestEntry)
+                downloaded = downloadGCSFileAtTime(outputDir, closestEntry)
             if downloaded and verboseLogs:
                 logging.warning('Successful download for time %s', str(datetime.datetime.fromtimestamp(closestTime)))
             if downloaded:

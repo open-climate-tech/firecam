@@ -20,7 +20,7 @@
 
 
 // Deployment instructions
-// gcloud functions deploy fuego-ffmpeg1 --runtime nodejs10 --trigger-http --entry-point=extractMp4 --memory=2048MB --timeout=540s
+// gcloud functions deploy oct-ffmpeg1 --runtime nodejs10 --trigger-http --entry-point=extractMp4 --memory=2048MB --timeout=540s
 
 const os = require('os');
 const fs = require('fs');
@@ -44,7 +44,7 @@ function getHpwrenUrl(hostName, cameraID, yearDir, dateDir, qNum) {
 }
 
 function getTmpDir() {
-    return fs.mkdtempSync(path.join(os.tmpdir(), 'fuego_ffmpeg_'));
+    return fs.mkdtempSync(path.join(os.tmpdir(), 'firecam_ffmpeg_'));
 }
 
 

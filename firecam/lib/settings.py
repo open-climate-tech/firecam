@@ -40,6 +40,9 @@ def readSettingsFile():
 settingsJson = readSettingsFile()
 for (key, val) in settingsJson.items():
     setattr(sys.modules[__name__], key, val)
+    # set environment variable GOOGLE_APPLICATION_CREDENTIALS if value is specified in config
+    if (key == 'gcpServiceKey') and val and not os.environ.get('GOOGLE_APPLICATION_CREDENTIALS'):
+        os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = val
 
 
 # configure logging module to add timestamps and pid, and to silence useless logs
