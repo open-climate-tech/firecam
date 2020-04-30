@@ -19,14 +19,19 @@
     "// HPWREN archives location": 0,
     "hpwrenArchives": "xxx.txt",
 
+    "pubsubTopic": "xxx",
+
     "detectionPolicy": "inception_and_threshold",
 
     "// directories used by detect_fire to upload images": 0,
     "positivesDir": "xxx/pos",
     "detectionsDir": "xxx/detects",
+    "noticationsDir": "xxx/notifs",
+
+    "// ffmpeg settings": 0,
+    "ffmpegFolder": "xxx/y",
+    "ffmpegUrl": "https://xxx/yy",
 
     "// settings only applicable to local setups": 0,
-    "downloadDir": "xxx/yyy",
-
-    "pubsubTopic": "xxx"
+    "downloadDir": "xxx/yyy"
 }

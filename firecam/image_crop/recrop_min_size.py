@@ -248,7 +248,7 @@ def main():
         ["x", "minDiffX", "(optional) override default minDiffX of 299"],
         ["y", "minDiffY", "(optional) override default minDiffY of 299"],
         ["a", "minArea", "(optional) override default throw away areas < 1/100 of 299x299"],
-        ["t", "throwSize", "(optional) override default throw away size of 1000x1000"],
+        ["t", "throwSize", "(optional) override default throw away size of 598x598"],
         ["g", "growRatio", "(optional) override default grow ratio of 1.2"],
         ["m", "minusMinutes", "(optional) subtract images from given number of minutes ago"],
     ]
@@ -257,13 +257,13 @@ def main():
     endRow = int(args.endRow) if args.endRow else 1e9
     minDiffX = int(args.minDiffX) if args.minDiffX else 299
     minDiffY = int(args.minDiffY) if args.minDiffY else 299
-    throwSize = int(args.throwSize) if args.throwSize else 1000
+    throwSize = int(args.throwSize) if args.throwSize else 299*2
     growRatio = float(args.growRatio) if args.growRatio else 1.2
     minArea = int(args.minArea) if args.minArea else int(299*2.99)
     minusMinutes = int(args.minusMinutes) if args.minusMinutes else 0
 
     googleServices = goog_helper.getGoogleServices(settings, args)
-    camArchives = img_archive.getHpwrenCameraArchives(googleServices['sheet'], settings)
+    camArchives = img_archive.getHpwrenCameraArchives(settings.hpwrenArchives)
     if minusMinutes:
         timeGapDelta = datetime.timedelta(seconds = 60*minusMinutes)
     cameraCache = {}
@@ -292,40 +292,18 @@ def main():
                 logging.warning('Skipping tiny image with area: %d, name=%s', (maxX - minX) * (maxY - minY), fileName)
                 skippedTiny.append((rowIndex, fileName, (maxX - minX) * (maxY - minY)))
                 continue
-            # get base image from google drive that was uploaded by sort_images.py
 
-            dirID = getCameraDir(googleServices['drive'], cameraCache, fileName)#-##REPLACE DEP. GDRIVE W HPREWN#
-            localFilePath = os.path.join(settings.downloadDir, fileName)#sets a path for that image() not yet downloadedby this iteration
-            print('local', localFilePath)
+            nameParsed = img_archive.parseFilename(fileName)
+            imgDT = datetime.datetime.fromtimestamp(nameParsed['unixTime'])
+            localFilePath = os.path.join(settings.downloadDir, fileName)
             if not os.path.isfile(localFilePath):# if file has not been downloaded by a previous iteration
-                print('download', fileName)
-                #+##REPLACE DEP. GDRIVE W HPREWN#nameParsed = img_archive.parseFilename(fileName)#parses file name into dictionary of parts name,unixtime,etc.
-                #+##REPLACE DEP. GDRIVE W HPREWN#matchingCams = list(filter(lambda x: nameParsed['cameraID'] == x['id'], camArchives))#filter through camArchives for ids matching cameraid
-                #+##REPLACE DEP. GDRIVE W HPREWN#if len(matchingCams) != 1:#if we cannot determine where the image will come from we cannot use the image
-                #+##REPLACE DEP. GDRIVE W HPREWN#    logging.warning('Skipping camera without archive: %d, %s', len(matchingCams), str(matchingCams))
-                #+##REPLACE DEP. GDRIVE W HPREWN#    skippedArchive.append((rowIndex, fileName, matchingCams))
-                #+##REPLACE DEP. GDRIVE W HPREWN#    continue
-                #+##REPLACE DEP. GDRIVE W HPREWN#archiveDirs = matchingCams[0]['dirs']
-                #+##REPLACE DEP. GDRIVE W HPREWN#logging.warning('Found %s directories', archiveDirs)
-                #+##REPLACE DEP. GDRIVE W HPREWN#time = datetime.datetime.fromtimestamp(nameParsed['unixTime'])
-                #+##REPLACE DEP. GDRIVE W HPREWN#for dirName in archiveDirs:#search directories of camera for a time near
-                #+##REPLACE DEP. GDRIVE W HPREWN#    logging.warning('Searching for files in dir %s', dirName)
-                #+##REPLACE DEP. GDRIVE W HPREWN#    imgPaths = img_archive.downloadFilesHpwren(settings.downloadDir, nameParsed['cameraID'], dirName, time, time, 1, 0)
-                #+##REPLACE DEP. GDRIVE W HPREWN#    if imgPaths:
-                #+##REPLACE DEP. GDRIVE W HPREWN#        localFilePath = imgPaths[0]
-                #+##REPLACE DEP. GDRIVE W HPREWN#        break
-                #+##REPLACE DEP. GDRIVE W HPREWN#if not imgPaths:
-                #+##REPLACE DEP. GDRIVE W HPREWN#    logging.warning('Skipping image not found: %s', fileName)
-                #+##REPLACE DEP. GDRIVE W HPREWN#    skippedArchive.append((rowIndex, fileName, time))#archive that images were skipped
-                #+##REPLACE DEP. GDRIVE W HPREWN#    continue
-                goog_helper.downloadFile(googleServices['drive'], dirID, fileName, localFilePath)#-##REPLACE DEP. GDRIVE W HPREWN#
-            imgOrig = Image.open(localFilePath)#opens image
+                files = img_archive.getHpwrenImages(googleServices, settings, settings.downloadDir, camArchives, nameParsed['cameraID'], imgDT, imgDT, 1)
+                localFilePath = files[0]
+            imgOrig = Image.open(localFilePath)
 
             # if in subracted images mode, download an earlier image and subtract
             if minusMinutes:
-                nameParsed = img_archive.parseFilename(fileName)#parses file name into dictionary of parts name,unixtime,etc.
-                dt = datetime.datetime.fromtimestamp(nameParsed['unixTime'])
-                dt -= timeGapDelta
+                dt = imgDT - timeGapDelta
                 earlierImgPath = None
                 files = img_archive.getHpwrenImages(googleServices, settings, settings.downloadDir, camArchives, nameParsed['cameraID'], dt, dt, 1)
                 if files:
