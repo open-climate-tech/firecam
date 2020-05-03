@@ -251,6 +251,7 @@ def main():
         ["t", "throwSize", "(optional) override default throw away size of 598x598"],
         ["g", "growRatio", "(optional) override default grow ratio of 1.2"],
         ["m", "minusMinutes", "(optional) subtract images from given number of minutes ago"],
+        ["r", "review", "(optional) download original crops without augmentation"],
     ]
     args = collect_args.collectArgs(reqArgs, optionalArgs=optArgs, parentParsers=[goog_helper.getParentParser()])
     startRow = int(args.startRow) if args.startRow else 0
@@ -284,7 +285,7 @@ def main():
             maxX = int(maxX)
             maxY = int(maxY)
             oldCoords = (minX, minY, maxX, maxY)
-            if ((maxX - minX) > throwSize) and ((maxY - minY) > throwSize):
+            if ((maxX - minX) > throwSize) or ((maxY - minY) > throwSize):
                 logging.warning('Skip large image: dx=%d, dy=%d, name=%s', maxX - minX, maxY - minY, fileName)
                 skippedHuge.append((rowIndex, fileName, maxX - minX, maxY - minY))
                 continue
@@ -320,9 +321,12 @@ def main():
                 fileNameParts = os.path.splitext(fileName)
                 fileName = str(fileNameParts[0]) + ('_Diff%d' % minusMinutes) + fileNameParts[1]
 
-            # crop the full sized image to show just the smoke, but shifted and flipped
-            # shifts and flips increase number of segments for training and also prevent overfitting by perturbing data
-            cropCoords = getCropCoords((minX, minY, maxX, maxY), minDiffX, minDiffY, growRatio, (imgOrig.size[0], imgOrig.size[1]))
+            if args.review:
+                cropCoords = [oldCoords]
+            else:
+                # crop the full sized image to show just the smoke, but shifted and flipped
+                # shifts and flips increase number of segments for training and also prevent overfitting by perturbing data
+                cropCoords = getCropCoords((minX, minY, maxX, maxY), minDiffX, minDiffY, growRatio, (imgOrig.size[0], imgOrig.size[1]))
             for newCoords in cropCoords:
                 # XXXX - save work if old=new?
                 print('coords old,new', oldCoords, newCoords)
@@ -331,10 +335,11 @@ def main():
                 cropImgPath = os.path.join(args.outputDir, cropImgName)
                 cropped_img = imgOrig.crop(newCoords)
                 cropped_img.save(cropImgPath, format='JPEG')
-                flipped_img = cropped_img.transpose(Image.FLIP_LEFT_RIGHT)
-                flipImgName = imgNameNoExt + '_Crop_' + 'x'.join(list(map(lambda x: str(x), newCoords))) + '_Flip.jpg'
-                flipImgPath = os.path.join(args.outputDir, flipImgName)
-                flipped_img.save(flipImgPath, format='JPEG')
+                if not args.review:
+                    flipped_img = cropped_img.transpose(Image.FLIP_LEFT_RIGHT)
+                    flipImgName = imgNameNoExt + '_Crop_' + 'x'.join(list(map(lambda x: str(x), newCoords))) + '_Flip.jpg'
+                    flipImgPath = os.path.join(args.outputDir, flipImgName)
+                    flipped_img.save(flipImgPath, format='JPEG')
             print('Processed row: %s, file: %s' % (rowIndex, fileName))
             if args.display:
                 displayCoords = [oldCoords] + cropCoords

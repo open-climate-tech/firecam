@@ -80,6 +80,7 @@ def getGoogleServices(settings, args):
     Returns:
         Dictionary with service tokens
     """
+    return {'creds': None} # unused for now
     creds = getCreds(settings, args)
     return {
         'drive': build('drive', 'v3', http=creds.authorize(Http())),
