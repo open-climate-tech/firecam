@@ -90,7 +90,7 @@ def parseFilename(fileName):
     # regex to match diff minutes spec for subtracted images
     regexDiff = '(_Diff(\d+))?'
     # regex to match optional crop information e.g., Axis-Cowles_2019-02-19T16;23;49_Crop_270x521x569x820.jpg
-    regexOptionalCrop = '(_Crop_(\d+)x(\d+)x(\d+)x(\d+))?'
+    regexOptionalCrop = '(_Crop_(-?\d+)x(-?\d+)x(\d+)x(\d+))?'
     matchesExp = re.findall(regexExpanded + regexDiff + regexOptionalCrop, fileName)
     # regex to match names like 1499546263.jpg
     regexUnixTime = '(1\d{9})'
