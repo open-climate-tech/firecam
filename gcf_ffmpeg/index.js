@@ -179,12 +179,12 @@ async function uploadFiles(fromDir, uploadDir, imgCamDatePrefix, qNum, cb) {
 exports.extractMp4 = (req, res) => {
     console.log('query', req.query);
     console.log('bodyM', req.body);
-    if (!req.body || !req.body.hostName || !req.body.cameraID || !req.body.yearDir || !req.body.dateDir || !req.body.qNum) {
+    if (!req.body || !req.body.hostName || !req.body.cameraID || !req.body.archiveCamDir || !req.body.yearDir || !req.body.dateDir || !req.body.qNum) {
         console.log('Missing parameters');
         res.status(400).send('Missing parameters');
         return;
     }
-    var hpwrenUrl = getHpwrenUrl(req.body.hostName, req.body.cameraID, req.body.yearDir, req.body.dateDir, req.body.qNum);
+    var hpwrenUrl = getHpwrenUrl(req.body.hostName, req.body.archiveCamDir, req.body.yearDir, req.body.dateDir, req.body.qNum);
     console.log('URL: ', hpwrenUrl);
     const tmpDir = getTmpDir();
     const mp4File = path.join(tmpDir, 'q.mp4');
@@ -227,6 +227,7 @@ function testHandler() {
         query: {},
         body: {
             hostName: 'c1',
+            archiveCamDir: 'rm-w-mobo-c',
             cameraID: 'rm-w-mobo-c',
             yearDir: '2017',
             dateDir: '20170613',

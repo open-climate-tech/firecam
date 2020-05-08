@@ -338,6 +338,7 @@ def callGCF(gcfUrl, creds, hpwrenSource, qNum, folderID):
     gcfParams = {
         'hostName': hpwrenSource['server'],
         'cameraID': hpwrenSource['cameraID'],
+        'archiveCamDir': hpwrenSource['urlParts'][1],
         'yearDir': hpwrenSource['year'],
         'dateDir': hpwrenSource['dateDirName'],
         'qNum': qNum,

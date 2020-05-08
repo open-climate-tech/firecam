@@ -1,5 +1,5 @@
 {
-  "name": "fuego_ffmpeg",
+  "name": "firecam_ffmpeg",
   "version": "0.1.0",
   "description": "Decode mpegs into jpegs",
   "main": "index.js",
@@ -7,7 +7,7 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "functions-framework --target=extractMp4"
   },
-  "author": "Fuego",
+  "author": "Open Climate Tech",
   "license": "Apache-2.0",
   "dependencies": {
     "@ffmpeg-installer/ffmpeg": "^1.0.20",
