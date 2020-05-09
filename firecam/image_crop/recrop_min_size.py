@@ -305,17 +305,25 @@ def main():
             # if in subracted images mode, download an earlier image and subtract
             if minusMinutes:
                 dt = imgDT - timeGapDelta
-                earlierImgPath = None
-                files = img_archive.getHpwrenImages(googleServices, settings, settings.downloadDir, camArchives, nameParsed['cameraID'], dt, dt, 1)
-                if files:
-                    earlierImgPath = files[0]
-                else:
-                    logging.warning('Skipping image without prior image: %s, %s', str(dt), fileName)
-                    skippedArchive.append((rowIndex, fileName, dt))
-                    continue
+                nameParsed['unixTime'] -= 60*minusMinutes
+                earlierName = img_archive.repackFileName(nameParsed)
+                earlierImgPath = os.path.join(settings.downloadDir, earlierName)
+                if not os.path.isfile(earlierImgPath):# if file has not been downloaded by a previous iteration
+                    files = img_archive.getHpwrenImages(googleServices, settings, settings.downloadDir, camArchives, nameParsed['cameraID'], dt, dt, 1)
+                    if files:
+                        earlierImgPath = files[0]
+                    else:
+                        logging.warning('Skipping image without prior image: %s, %s', str(dt), fileName)
+                        skippedArchive.append((rowIndex, fileName, dt))
+                        continue
                 logging.warning('Subtracting old image %s', earlierImgPath)
                 earlierImg = Image.open(earlierImgPath)
                 diffImg = img_archive.diffImages(imgOrig, earlierImg)
+                extremas = diffImg.getextrema()
+                if extremas[0][0] == 128 or extremas[0][1] == 128 or extremas[1][0] == 128 or extremas[1][1] == 128 or extremas[2][0] == 128 or extremas[2][1] == 128:
+                    logging.warning('Skipping no diffs %s, name=%s', str(extremas), fileName)
+                    skippedTiny.append((rowIndex, fileName, extremas))
+                    continue
                 # realImgOrig = imgOrig # is this useful?
                 imgOrig = diffImg
                 fileNameParts = os.path.splitext(fileName)
@@ -329,7 +337,7 @@ def main():
                 cropCoords = getCropCoords((minX, minY, maxX, maxY), minDiffX, minDiffY, growRatio, (imgOrig.size[0], imgOrig.size[1]))
             for newCoords in cropCoords:
                 # XXXX - save work if old=new?
-                print('coords old,new', oldCoords, newCoords)
+                logging.warning('coords old %s, new %s', str(oldCoords), str(newCoords))
                 imgNameNoExt = str(os.path.splitext(fileName)[0])
                 cropImgName = imgNameNoExt + '_Crop_' + 'x'.join(list(map(lambda x: str(x), newCoords))) + '.jpg'
                 cropImgPath = os.path.join(args.outputDir, cropImgName)
@@ -340,7 +348,7 @@ def main():
                     flipImgName = imgNameNoExt + '_Crop_' + 'x'.join(list(map(lambda x: str(x), newCoords))) + '_Flip.jpg'
                     flipImgPath = os.path.join(args.outputDir, flipImgName)
                     flipped_img.save(flipImgPath, format='JPEG')
-            print('Processed row: %s, file: %s' % (rowIndex, fileName))
+            logging.warning('Processed row: %d, file: %s', rowIndex, fileName)
             if args.display:
                 displayCoords = [oldCoords] + cropCoords
                 displayImageWithScores(imgOrig, displayCoords)

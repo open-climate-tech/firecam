@@ -50,10 +50,7 @@ def main():
     endRow = int(args.endRow) if args.endRow else 1e9
 
     googleServices = goog_helper.getGoogleServices(settings, args)
-    cookieJar = None
-    camArchives = None
-    cookieJar = img_archive.loginAjax()
-    camArchives = img_archive.getHpwrenCameraArchives(googleServices['sheet'], settings)
+    camArchives = img_archive.getHpwrenCameraArchives(settings.hpwrenArchives)
     timeGapDelta = datetime.timedelta(seconds = 60*minusMinutes)
     skippedBadParse = []
     skippedArchive = []
@@ -68,7 +65,7 @@ def main():
             print('Reached end row', rowIndex, endRow)
             break
 
-        if (fileName[:3] == 'v2_') or (fileName[:3] == 'v3_'):
+        if (fileName[:3] == 'v2_') or (fileName[:3] == 'v3_') or (not 'mobo-c' in fileName):
             continue # skip replicated files
         logging.warning('Processing row %d, file: %s', rowIndex, fileName)
         parsedName = img_archive.parseFilename(fileName)
@@ -77,33 +74,30 @@ def main():
             logging.warning('Skipping file with unexpected parsed data: %s, %s', fileName, str(parsedName))
             skippedBadParse.append((rowIndex, fileName, parsedName))
             continue # skip files without crop info or with diff
-        matchingCams = list(filter(lambda x: parsedName['cameraID'] == x['id'], camArchives))
-        if len(matchingCams) != 1:
-            logging.warning('Skipping camera without archive: %d, %s', len(matchingCams), str(matchingCams))
-            skippedArchive.append((rowIndex, fileName, matchingCams))
-            continue
-        archiveDirs = matchingCams[0]['dirs']
-        logging.warning('Found %s directories', archiveDirs)
-        earlierImgPath = None
-        dt = datetime.datetime.fromtimestamp(parsedName['unixTime'])
-        dt -= timeGapDelta
-        for dirName in archiveDirs:
-            logging.warning('Searching for files in dir %s', dirName)
-            imgPaths = img_archive.getFilesAjax(cookieJar, settings.downloadDir, parsedName['cameraID'], dirName, dt, dt, 1)
-            if imgPaths:
-                earlierImgPath = imgPaths[0]
-                break # done
-        if not earlierImgPath:
-            logging.warning('Skipping image without prior image: %s, %s', str(dt), fileName)
-            skippedArchive.append((rowIndex, fileName, dt))
-            continue
+        parsedName['unixTime'] -= 60*minusMinutes
+        earlierName = img_archive.repackFileName(parsedName)
+        earlierImgPath = os.path.join(settings.downloadDir, earlierName)
+        if not os.path.isfile(earlierImgPath):# if file has not been downloaded by a previous iteration
+            dt = datetime.datetime.fromtimestamp(parsedName['unixTime'])
+            dt -= timeGapDelta
+            files = img_archive.getHpwrenImages(googleServices, settings, settings.downloadDir, camArchives, parsedName['cameraID'], dt, dt, 1)
+            if files:
+                earlierImgPath = files[0]
+            else:
+                logging.warning('Skipping image without prior image: %s, %s', str(dt), fileName)
+                skippedArchive.append((rowIndex, fileName, dt))
+                continue
         logging.warning('Subtracting old image %s', earlierImgPath)
         earlierImg = Image.open(earlierImgPath)
-        print('CR', (parsedName['minX'], parsedName['minY'], parsedName['maxX'], parsedName['maxY']))
         croppedEarlyImg = earlierImg.crop((parsedName['minX'], parsedName['minY'], parsedName['maxX'], parsedName['maxY']))
 
         imgOrig = Image.open(os.path.join(args.inputDir, fileName))
         diffImg = img_archive.diffImages(imgOrig, croppedEarlyImg)
+        extremas = diffImg.getextrema()
+        if extremas[0][0] == 128 or extremas[0][1] == 128 or extremas[1][0] == 128 or extremas[1][1] == 128 or extremas[2][0] == 128 or extremas[2][1] == 128:
+            logging.warning('Skipping no diffs %s, name=%s', str(extremas), fileName)
+            skippedBadParse.append((rowIndex, fileName, extremas))
+            continue
         parsedName['diffMinutes'] = minusMinutes
         diffImgPath = os.path.join(args.outputDir, img_archive.repackFileName(parsedName))
         logging.warning('Saving new image %s', diffImgPath)
