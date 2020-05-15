@@ -551,7 +551,10 @@ def findCameraInArchive(camArchives, cameraID):
     """
     matchingCams = list(filter(lambda x: cameraID == x['id'], camArchives))
     # logging.warning('Found %d match(es): %s', len(matchingCams), matchingCams)
-    return matchingCams[0]['dirs']
+    if matchingCams:
+        return matchingCams[0]['dirs']
+    else:
+        return []
 
 
 def getHpwrenImages(googleServices, settings, outputDir, camArchives, cameraID, startTimeDT, endTimeDT, gapMinutes):
