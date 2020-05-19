@@ -462,6 +462,11 @@ def listBuckets():
     return [bucket.name for bucket in storageClient.list_buckets()]
 
 
+def firstItem(iter):
+    for x in iter:
+        return x
+
+
 def listBucketEntries(bucketName, prefix='', getDirs=False, deep=False):
     """List all files or dirs in given Google Cloud Storage bucket matching given prefix, getDirs, deep
 
@@ -480,6 +485,7 @@ def listBucketEntries(bucketName, prefix='', getDirs=False, deep=False):
     delimiter = '' if deep else '/'
     blobs = storageClient.list_blobs(bucketName, prefix=prefix, delimiter=delimiter)
     if getDirs:
+        firstItem(blobs) # for some reason 'prefixes' is not filled until iterator is started
         return [prefix[0:-1] for prefix in blobs.prefixes] # remove the trailing '/'
     else:
         return [blob.name for blob in blobs]
@@ -550,6 +556,33 @@ def deleteBucketFile(bucketName, fileID):
     blob.delete()
 
 
+def downloadBucketDir(bucketName, dirID, localDirPath):
+    """Recursively download all files in given bucket/dirID into local directry with given path
+
+    Args:
+        bucketName (str): Cloud Storage bucket name
+        dirID (str): dir path inside bucket
+        localDirPath (str): path to local directry where to store the data
+    """
+    if not os.path.exists(localDirPath):
+        os.makedirs(localDirPath)
+    # ensure trailing /
+    if dirID[-1] != '/':
+        dirID += '/'
+    # download files at current directory level
+    files = listBucketEntries(bucketName, prefix=dirID)
+    for f in files:
+        name = f.split('/')[-1]
+        localFilePath = os.path.join(localDirPath, name)
+        downloadBucketFile(bucketName, f, localFilePath)
+    # recursively download directories
+    dirs = listBucketEntries(bucketName, prefix=dirID, getDirs=True)
+    for d in dirs:
+        name = d.split('/')[-1]
+        nextPath = os.path.join(localDirPath, name)
+        downloadBucketDir(bucketName, d, nextPath)
+
+
 def dateSubDir(parentPath):
     """Return a directory path under given parentPath with todays date as subdir
 
@@ -587,7 +620,7 @@ def readFile(filePath):
 
 
 def copyFile(srcFilePath, destDir):
-    """Copy given local source file to given destion directory (possibly on GCS or local path)
+    """Copy given local source file to given destination directory (possibly on GCS or local path)
 
     Args:
         srcFilePath (str): local source file path
