@@ -90,7 +90,7 @@ def main():
     camInfo = matchingCams[0]
     logging.warning('Cam details: %s', camInfo)
 
-    if args.mode == 'del':
+    if args.mode == 'delete':
         sqlTemplate = """DELETE FROM sources WHERE name = '%s' """
         execCameraSql(dbManager, sqlTemplate, args.cameraID, isQuery=False)
         return
