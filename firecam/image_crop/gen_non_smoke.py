@@ -94,7 +94,7 @@ def main():
             cropInfo = list(map(lambda x: int(x), cropInfo[0]))
             logging.warning('Dims: %s', cropInfo)
             imgOrig = Image.open(localFilePath)
-            rect_to_squares.cutBoxesFixed(imgOrig, args.outputDir, fileName, lambda x: checkCoords(x, cropInfo))
+            rect_to_squares.cutBoxesFiles(imgOrig, args.outputDir, fileName, lambda x: checkCoords(x, cropInfo))
 
 
 if __name__=="__main__":

@@ -148,7 +148,7 @@ def processFolder(imgDirectory, camera, fire, googleServices):
         appendToMainSheet(googleServices['sheet'], newPath, times, camera, imgClass, fire)
         if (lastSmokeTimestamp == None) or (times['unixTime'] - lastSmokeTimestamp >= settings.cropEveryNMinutes * 60):
             lastSmokeTimestamp = times['unixTime']
-            result = crop_single.imageDisplay(newPath, temporaryDir.name, showSquaresArg=False)
+            result = crop_single.imageDisplay(newPath, temporaryDir.name)
             if len(result) > 0:
                 for entry in result:
                     print('crop data', entry['name'], entry['coords'])
