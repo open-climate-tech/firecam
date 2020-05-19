@@ -322,59 +322,6 @@ def uploadFile(service, dirID, localFilePath):
     return None
 
 
-def getDirForClassCamera(service, classLocations, imgClass, cameraID):
-    """Find Google drive folder ID & name for given camera in Fuego Cropping/Pictures/<imgClass> folder
-
-    Args:
-        service: Drive service (from getGoogleServices()['drive'])
-        classLocations (dict): Dict of immgClass -> drive folder ID
-        imgClass (str): image class (smoke, nonSmoke, etc..)
-        cameraID (str): ID of the camera
-
-    Returns:
-        Tuple (ID, name) containing the folder ID and name
-    """
-    parent = classLocations[imgClass]
-    dirs = driveListFilesByName(service, parent, cameraID)
-    if len(dirs) != 1:
-        logging.error('Expected 1 directory with name %s, but found %d: %s', cameraID, len(dirs), dirs)
-        logging.error('Searching in dir: %s', parent)
-        logging.error('ImgClass %s, locations: %s', imgClass, classLocations)
-        raise Exception('getDirForClassCam: Directory not found')
-    dirID = dirs[0]['id']
-    dirName = dirs[0]['name']
-    return (dirID, dirName)
-
-
-def downloadClassImage(service, classLocations, imgClass, fileName, outputDirectory):
-    """Download image file with given name from given image class from Fuego Cropping/Pictures/<imgClass> folder
-
-    Args:
-        service: Drive service (from getGoogleServices()['drive'])
-        classLocations (dict): Dict of immgClass -> drive folder ID
-        imgClass (str): image class (smoke, nonSmoke, etc..)
-        fileName (str): Name of image file
-        outputDirectory (str): Local directory where to store the file
-
-    Returns:
-        Local file system path to downloaded file
-    """
-    localFilePath = os.path.join(outputDirectory, fileName)
-    if os.path.isfile(localFilePath):
-        return localFilePath # already downloaded, nothing to do
-
-    # parse cameraID from fileName
-    parsed = img_archive.parseFilename(fileName)
-    cameraID = parsed['cameraID']
-
-    # find subdir for camera
-    (dirID, dirName) = getDirForClassCamera(service, classLocations, imgClass, cameraID)
-
-    # find file in camera subdir
-    downloadFile(service, dirID, fileName, localFilePath)
-    return localFilePath
-
-
 def readFromSheet(service, sheetID, cellRange):
     """Read data from Google sheet for given cell range
 

@@ -44,6 +44,8 @@ from googleapiclient.discovery import build
 from httplib2 import Http
 from tkinter.filedialog import askdirectory
 
+# TODO: Update to use GCS vs. drive
+
 def uploadToDrive(service, imgPath, cameraID, imgClass):
     parent = settings.IMG_CLASSES[imgClass]
     dirName = ''

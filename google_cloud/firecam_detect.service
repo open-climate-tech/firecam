@@ -1,5 +1,5 @@
 [Unit]
-Description=Fuego wildifre detection
+Description=Firecam wildfire detection
 After=docker.service
 StartLimitIntervalSec=0
 

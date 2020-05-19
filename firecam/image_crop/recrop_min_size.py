@@ -92,16 +92,6 @@ def displayImageWithScores(imgOrig, segments):
     rootTk.mainloop()
 
 
-def getCameraDir(service, cameraCache, fileName):
-    parsed = img_archive.parseFilename(fileName)
-    cameraID = parsed['cameraID']
-    dirID = cameraCache.get(cameraID)
-    if not dirID:
-        (dirID, dirName) = goog_helper.getDirForClassCamera(service, settings.IMG_CLASSES, 'smoke', cameraID)
-        cameraCache[cameraID] = dirID
-    return dirID
-
-
 def expandMinAndMax(val0, val1, minimumDiff, growRatio, minLimit, maxLimit):
     """Expand the image dimension range
 

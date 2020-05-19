@@ -33,17 +33,6 @@ import csv
 from PIL import Image
 
 
-def getCameraDir(service, cameraCache, fileName):
-    parsed = img_archive.parseFilename(fileName)
-    # logging.warning('parsed: %s', parsed)
-    cameraID = parsed['cameraID']
-    dirID = cameraCache.get(cameraID)
-    if not dirID:
-        (dirID, dirName) = goog_helper.getDirForClassCamera(service, settings.IMG_CLASSES, 'smoke', cameraID)
-        cameraCache[cameraID] = dirID
-    return dirID
-
-
 def checkCoords(coords, cropInfo):
     if (coords[0] > cropInfo[2]) or (coords[2] < cropInfo[0]) or (coords[1] > cropInfo[3]) or (coords[3] < cropInfo[1]):
         return False
@@ -82,11 +71,12 @@ def main():
             if not cameraName:
                 continue
             fileName = re.sub('_Crop[^.]+', '', cropName) # get back filename for whole image
-            dirID = getCameraDir(googleServices['drive'], cameraCache, fileName)
-            localFilePath = os.path.join(args.outputDir, fileName)
-            if not os.path.isfile(localFilePath):
-                goog_helper.downloadFile(googleServices['drive'], dirID, fileName, localFilePath)
-            logging.warning('local %s', fileName)
+            # TODO: update to img_archive.download...
+            # dirID = getCameraDir(googleServices['drive'], cameraCache, fileName)
+            # localFilePath = os.path.join(args.outputDir, fileName)
+            # if not os.path.isfile(localFilePath):
+            #     goog_helper.downloadFile(googleServices['drive'], dirID, fileName, localFilePath)
+            # logging.warning('local %s', fileName)
             cropInfo = re.findall('_Crop_(\d+)x(\d+)x(\d+)x(\d+)', cropName)
             if len(cropInfo) != 1:
                 logging.error('Failed to parse crop info %s, %s', cropName, cropInfo)
