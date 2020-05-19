@@ -109,6 +109,7 @@ class DbManager(object):
 
         cameras_schema = [
             ('Name', 'TEXT'),
+            ('Network', 'TEXT'),
             ('Latitude', 'REAL'),
             ('Longitude', 'REAL'),
             ('cameraIDs', 'TEXT')
@@ -148,6 +149,7 @@ class DbManager(object):
             ('Score', 'REAL'),
             ('SecondsInDay', 'INT'),
             ('MinusMinutes', 'INT'),
+            ('ModelId', 'TEXT'),
         ]
 
         # detections above halfway between historical max and 1.0
@@ -163,6 +165,7 @@ class DbManager(object):
             ('HistMax', 'REAL'),
             ('HistNumSamples', 'INT'),
             ('ImageID', 'TEXT'),
+            ('ModelId', 'TEXT'),
         ]
 
         # alerts sent out via various means
@@ -171,6 +174,7 @@ class DbManager(object):
             ('Timestamp', 'INT'),
             ('AdjScore', 'REAL'),
             ('ImageID', 'TEXT'),
+            ('CroppedID', 'TEXT'),
         ]
 
         # who to notify via email and SMS
