@@ -28,79 +28,10 @@ from firecam.lib import collect_args
 from firecam.lib import rect_to_squares
 from firecam.lib import tf_helper
 
+import logging
 import pathlib
-import subprocess
-import re
-import numpy as np
-import tensorflow as tf
-import math
 import tkinter as tk
 from PIL import Image, ImageTk, ImageDraw, ImageFont
-
-
-# alternate version that uses in-memory image segments without persisting to disk
-from skimage import io
-import numpy as np
-
-def read_tensor_from_array(data,
-                            input_height=299,
-                            input_width=299,
-                            input_mean=0,
-                            input_std=255):
-  float_caster = data
-  dims_expander = tf.expand_dims(float_caster, 0)
-  resized = tf.image.resize_bilinear(dims_expander, [input_height, input_width])
-  normalized = tf.divide(tf.subtract(resized, [input_mean]), [input_std])
-  sess = tf.Session()
-  result = sess.run(normalized)
-
-  return result
-
-
-def calcScoresInMemory(model_file, label_file, imgPath):
-    # XXXX
-    config = tf.ConfigProto()
-    config.gpu_options.per_process_gpu_memory_fraction = 0.1
-
-    graph_def = tf.GraphDef()
-    with tf.gfile.FastGFile(model_file, 'rb') as f:
-        graph_def.ParseFromString(f.read())
-        tf.import_graph_def(graph_def, name='')
-
-    # Unpersists graph from file
-    # with tf.Session(config=config) as sess:  #config=tf.ConfigProto(log_device_placement=True)
-    with tf.Session(config=config) as sess:
-
-        image = io.imread(imgPath, plugin='matplotlib')
-        print(image.shape)
-        # hardcoded for testing the code path.
-        coords=[
-            ( 0,0,341,339 ),
-            ( 341,0,682,339 ),
-            ( 682,0,1024,339 ),
-            ( 0,290,341,631 ),
-            ( 341,290,682,631 ),
-            ( 682,290,1024,631 ),
-            ( 0,597,341,938 ),
-            ( 341,597,682,938 ),
-            ( 682,597,1024,938 ),
-        ]
-        for (minX,minY,maxX,maxY) in coords:
-            print('coord', (minX,minY,maxX,maxY))
-            cropped_image=image[minY:maxY, minX:maxX]
-            print('shape', cropped_image.shape)
-            image_data = np.array(cropped_image)[:,:,0:3]
-            res = read_tensor_from_array(image_data)
-            # Feed the image_data as input to the graph and get first prediction
-            softmax_tensor = sess.graph.get_tensor_by_name('final_result:0')
-            try:
-                predictions = sess.run(softmax_tensor, {'Placeholder:0': res})
-                print('preds', predictions)
-            except:
-                print("image fault", imgPath, (minX,minY,maxX,maxY))
-                #Caused by image not decoding properly, even though it was a .jpg. Crashed the entire session.
-                print(image_data.shape)
-                continue
 
 
 def imageDisplay(imgOrig, title=''):
@@ -173,7 +104,8 @@ def drawBoxesAndScores(imgOrig, segments):
         centerX = (x0 + x1)/2
         centerY = (y0 + y1)/2
         fontSize=60
-        font = ImageFont.truetype(os.path.join(settings.fuegoRoot, 'lib/Roboto-Regular.ttf'), size=fontSize)
+        fontPath = os.path.join(str(pathlib.Path(__file__).parent.parent), 'firecam/data/Roboto-Regular.ttf')
+        font = ImageFont.truetype(fontPath, size=fontSize)
         scoreStr = '%.2f' % segmentInfo['score']
         textSize = imgDraw.textsize(scoreStr, font=font)
         centerX -= textSize[0]/2
@@ -187,37 +119,27 @@ def main():
         ["o", "output", "output directory name"],
     ]
     optArgs = [
-        ["l", "labels", "labels file generated during retraining"],
         ["m", "model", "model file generated during retraining"],
         ["d", "display", "(optional) specify any value to display image and boxes"]
     ]
     args = collect_args.collectArgs(reqArgs, optionalArgs=optArgs)
     model_file = args.model if args.model else settings.model_file
-    labels_file = args.labels if args.labels else settings.labels_file
 
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-    graph = tf_helper.load_graph(model_file)
-    labels = tf_helper.load_labels(labels_file)
     segments = []
-    with tf.Session(graph=graph) as tfSession:
-        if True: # chops image in segment files and classifies each segment
-            imgOrig = Image.open(args.image)
-            segments = rect_to_squares.cutBoxes(imgOrig, args.output, args.image)
-            tf_helper.classifySegments(tfSession, graph, labels, segments)
 
-        if False: # version that classifies entire image without cropping
-            imgOrig = Image.open(args.image)
-            segments = [{'imgPath': args.image}]
-            tf_helper.classifySegments(tfSession, graph, labels, segments)
+    model = tf_helper.loadModel(model_file)
+    imgOrig = Image.open(args.image)
+    crops, segments = rect_to_squares.cutBoxesArray(imgOrig)
+    tf_helper.classifySegments(model, crops, segments)
 
-        if False: # chops image into in-memory segments and classifies each segment
-            calcScoresInMemory(args.model, args.labels, args.image)
 
-        for segmentInfo in segments:
-            print(segmentInfo['imgPath'], segmentInfo['score'])
-        if args.display:
-            drawBoxesAndScores(imgOrig, segments)
-            displayImageWithScores(imgOrig, [])
+    for segmentInfo in segments:
+        # print(segmentInfo['imgPath'], segmentInfo['score'])
+        print(segmentInfo['MinX'], segmentInfo['MinY'], segmentInfo['score'])
+    if args.display:
+        drawBoxesAndScores(imgOrig, segments)
+        displayImageWithScores(imgOrig, [])
 
 
 if __name__=="__main__":
