@@ -30,9 +30,7 @@ class DetectNever:
 
     def detect(self, image_spec):
         detectionResult = {
-            'annotatedFile': '',
             'fireSegment': None,
-            'driveFileIDs': '',
             'timeMid': time.time()
         }
         return detectionResult

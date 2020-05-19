@@ -29,11 +29,9 @@ class DetectAlways:
 
     def detect(self, image_spec):
         detectionResult = {
-            'annotatedFile': '',
             'fireSegment': {
                 'score': 0.9
             },
-            'driveFileIDs': '',
             'timeMid': time.time()
         }
         return detectionResult

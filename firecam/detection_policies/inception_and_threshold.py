@@ -34,12 +34,9 @@ import shutil
 import datetime
 import math
 import time
+import tempfile
 
 import tensorflow as tf
-
-# TODO TF2
-# WIP port to TF2 is upcoming, but until then using random() to update other aspects of the code
-import random
 
 class InceptionV3AndHistoricalThreshold:
 
@@ -52,10 +49,15 @@ class InceptionV3AndHistoricalThreshold:
         self.camArchives = camArchives
         self.minusMinutes = minusMinutes
         self.useArchivedImages = useArchivedImages
-        # TODO TF2
-        # self.graph = tf_helper.load_graph(settings.model_file)
-        # self.labels = tf_helper.load_labels(settings.labels_file)
-        # self.tfSession = tf.Session(graph=self.graph)
+        # if model is on GCS, download it locally first
+        modelLocation = settings.model_file
+        self.modelId = '/'.join(modelLocation.split('/')[-2:]) # the last two dirpath components
+        gcsModel = goog_helper.parseGCSPath(modelLocation)
+        if gcsModel:
+            tmpDir = tempfile.TemporaryDirectory()
+            goog_helper.downloadBucketDir(gcsModel['bucket'], gcsModel['name'], tmpDir.name)
+            modelLocation = tmpDir.name
+        self.model = tf_helper.loadModel(modelLocation)
 
 
     def _segmentImage(self, imgPath):
@@ -68,10 +70,9 @@ class InceptionV3AndHistoricalThreshold:
             List of dictionary containing information on each segment
         """
         img = Image.open(imgPath)
-        ppath = pathlib.PurePath(imgPath)
-        segments = rect_to_squares.cutBoxes(img, str(ppath.parent), imgPath)
+        crops, segments = rect_to_squares.cutBoxesArray(img)
         img.close()
-        return segments
+        return crops, segments
 
 
     def _segmentAndClassify(self, imgPath):
@@ -83,13 +84,10 @@ class InceptionV3AndHistoricalThreshold:
         Returns:
             list of segments with scores sorted by decreasing score
         """
-        segments = self._segmentImage(imgPath)
-        # print('si', segments)
-
-        # TODO TF2
-        # tf_helper.classifySegments(self.tfSession, self.graph, self.labels, segments)
-        for segmentInfo in segments:
-            segmentInfo['score'] = random.random()/(2*0.99)
+        crops, segments = self._segmentImage(imgPath)
+        if len(crops) == 0:
+            return []
+        tf_helper.classifySegments(self.model, crops, segments)
 
         segments.sort(key=lambda x: -x['score'])
         return segments
@@ -108,15 +106,27 @@ class InceptionV3AndHistoricalThreshold:
         """
         positiveSegments = 0
         ppath = pathlib.PurePath(imgPath)
+        imgNameNoExt = str(os.path.splitext(ppath.name)[0])
+        imgObj = None
         for segmentInfo in segments:
             if segmentInfo['score'] > .5:
                 if settings.positivesDir:
                     postivesDateDir = goog_helper.dateSubDir(settings.positivesDir)
-                    goog_helper.copyFile(segmentInfo['imgPath'], postivesDateDir)
+                    cropImgName = imgNameNoExt + '_Crop_' + segmentInfo['coordStr'] + '.jpg'
+                    cropImgPath = os.path.join(str(ppath.parent), cropImgName)
+                    if not imgObj:
+                        imgObj = Image.open(imgPath)
+                    cropped_img = imgObj.crop(segmentInfo['coords'])
+                    cropped_img.save(cropImgPath, format='JPEG')
+                    cropped_img.close()
+                    goog_helper.copyFile(cropImgPath, postivesDateDir)
+                    os.remove(cropImgPath)
                 positiveSegments += 1
 
         if positiveSegments > 0:
             logging.warning('Found %d positives in image %s', positiveSegments, ppath.name)
+        if imgObj:
+            imgObj.close()
 
 
     def _recordScores(self, camera, timestamp, segments):
@@ -141,7 +151,8 @@ class InceptionV3AndHistoricalThreshold:
                 'MaxY': segmentInfo['MaxY'],
                 'Score': segmentInfo['score'],
                 'MinusMinutes': self.minusMinutes,
-                'SecondsInDay': secondsInDay
+                'SecondsInDay': secondsInDay,
+                'ModelId': self.modelId
             }
             dbRows.append(dbRow)
         self.dbManager.add_data('scores', dbRows)
@@ -212,65 +223,7 @@ class InceptionV3AndHistoricalThreshold:
         return maxFireSegment
 
 
-    def _drawRect(self, imgDraw, x0, y0, x1, y1, width, color):
-        for i in range(width):
-            imgDraw.rectangle((x0+i,y0+i,x1-i,y1-i),outline=color)
-
-
-    def _drawFireBox(self, imgPath, fireSegment):
-        """Draw bounding box with fire detection with score on image
-
-        Stores the resulting annotated image as new file
-
-        Args:
-            imgPath (str): filepath of the image
-
-        Returns:
-            filepath of new image file
-        """
-        img = Image.open(imgPath)
-        imgDraw = ImageDraw.Draw(img)
-        x0 = fireSegment['MinX']
-        y0 = fireSegment['MinY']
-        x1 = fireSegment['MaxX']
-        y1 = fireSegment['MaxY']
-        centerX = (x0 + x1)/2
-        centerY = (y0 + y1)/2
-        color = "red"
-        lineWidth=3
-        self._drawRect(imgDraw, x0, y0, x1, y1, lineWidth, color)
-
-        # Write ML score in the fire box
-        fontPath = os.path.join(pathlib.Path(__file__).parent.parent, 'data/Roboto-Regular.ttf')
-        fontSize=80
-        font = ImageFont.truetype(fontPath, size=fontSize)
-        scoreStr = '%.2f' % fireSegment['score']
-        textSize = imgDraw.textsize(scoreStr, font=font)
-        imgDraw.text((centerX - textSize[0]/2, centerY - textSize[1]), scoreStr, font=font, fill=color)
-
-        # Write historical max value in the fire box
-        color = "blue"
-        fontSize=70
-        font = ImageFont.truetype(fontPath, size=fontSize)
-        scoreStr = '%.2f' % fireSegment['HistMax']
-        textSize = imgDraw.textsize(scoreStr, font=font)
-        imgDraw.text((centerX - textSize[0]/2, centerY), scoreStr, font=font, fill=color)
-
-        # "watermark" the image
-        color = "orange"
-        fontSize=60
-        font = ImageFont.truetype(fontPath, size=fontSize)
-        imgDraw.text((20, img.size[1] - 80), "Open Climate Tech - Wildfire", font=font, fill=color)
-
-        filePathParts = os.path.splitext(imgPath)
-        annotatedFile = filePathParts[0] + '_Score' + filePathParts[1]
-        img.save(annotatedFile, format="JPEG")
-        del imgDraw
-        img.close()
-        return annotatedFile
-
-
-    def _recordDetection(self, camera, timestamp, imgPath, annotatedFile, fireSegment):
+    def _recordDetection(self, camera, timestamp, imgPath, fireSegment):
         """Record that a smoke/fire has been detected
 
         Record the detection with useful metrics in 'detections' table in SQL DB.
@@ -280,20 +233,16 @@ class InceptionV3AndHistoricalThreshold:
             camera (str): camera name
             timestamp (int):
             imgPath: filepath of the image
-            annotatedFile: filepath of the image with annotated box and score
             fireSegment (dictionary): dictionary with information for the segment with fire/smoke
 
         Returns:
-            List of file IDs for the uploaded image files
+            File IDs for the uploaded image file
         """
         logging.warning('Fire detected by camera %s, image %s, segment %s', camera, imgPath, str(fireSegment))
         # copy/upload file to detection dir
         detectionsDateDir = goog_helper.dateSubDir(settings.detectionsDir)
         fileID = goog_helper.copyFile(imgPath, detectionsDateDir)
-        fileIDs = [fileID]
-        fileID = goog_helper.copyFile(annotatedFile, detectionsDateDir)
-        fileIDs.append(fileID)
-        logging.warning('Uploaded to detections folder %s', str(fileIDs))
+        logging.warning('Uploaded to detections folder %s', fileID)
 
         dbRow = {
             'CameraName': camera,
@@ -306,10 +255,11 @@ class InceptionV3AndHistoricalThreshold:
             'HistAvg': fireSegment['HistAvg'],
             'HistMax': fireSegment['HistMax'],
             'HistNumSamples': fireSegment['HistNumSamples'],
-            'ImageID': fileIDs[0] if fileIDs else ''
+            'ImageID': fileID,
+            'ModelId': self.modelId
         }
         self.dbManager.add_data('detections', dbRow)
-        return fileIDs
+        return fileID
 
 
     def detect(self, image_spec):
@@ -319,28 +269,20 @@ class InceptionV3AndHistoricalThreshold:
         timestamp = last_image_spec['timestamp']
         cameraID = last_image_spec['cameraID']
         detectionResult = {
-            'annotatedFile': '',
             'fireSegment': None
         }
-        annotatedFile = None
-
         segments = self._segmentAndClassify(imgPath)
         detectionResult['timeMid'] = time.time()
+        if len(segments) == 0: # happens sometimes when camera is malfunctioning
+            return detectionResult
         if self.args.collectPositves:
             self._collectPositves(imgPath, segments)
         if not self.useArchivedImages:
             self._recordScores(cameraID, timestamp, segments)
             fireSegment = self._postFilter(cameraID, timestamp, segments)
             if fireSegment:
-                annotatedFile = self._drawFireBox(imgPath, fireSegment)
-                cloudFileIDs = self._recordDetection(cameraID, timestamp, imgPath, annotatedFile, fireSegment)
+                self._recordDetection(cameraID, timestamp, imgPath, fireSegment)
                 detectionResult['fireSegment'] = fireSegment
-                detectionResult['annotatedFile'] = annotatedFile
-                detectionResult['cloudFileIDs'] = cloudFileIDs
         logging.warning('Highest score for camera %s: %f' % (cameraID, segments[0]['score']))
-        for segmentInfo in segments:
-            os.remove(segmentInfo['imgPath'])
 
         return detectionResult
-
-
