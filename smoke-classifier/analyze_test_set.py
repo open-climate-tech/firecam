@@ -25,7 +25,10 @@ from firecam.lib import settings
 from firecam.lib import collect_args
 from firecam.lib import tf_helper
 from firecam.lib import rect_to_squares
+from firecam.lib import img_archive
 
+import time
+import random
 import numpy as np
 import logging
 import pathlib
@@ -33,8 +36,7 @@ import tensorflow as tf
 from PIL import Image, ImageFile
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
-config = tf.ConfigProto()
-config.gpu_options.per_process_gpu_memory_fraction = 0.1
+useFrozen = False
 
 def listJpegs(dirName):
     allEntries = os.listdir(dirName)
@@ -46,64 +48,67 @@ def listJpegs(dirName):
 
 def segmentImage(imgPath):
     img = Image.open(imgPath)
-    ppath = pathlib.PurePath(imgPath)    
-    return rect_to_squares.cutBoxes(img, str(ppath.parent), imgPath)
+    return rect_to_squares.cutBoxesArray(img)
 
     
-def deleteImageFiles(segments):
-    for segmentInfo in segments:
-        os.remove(segmentInfo['imgPath'])
-
-
-def classifyImages(graph, labels, imageList, className, outFile):
-    numPositive = 0
+def classifyImages(model, imageList, className, outFile):
     count = 0
     image_name = []
     crop_name = []
     score_name = []
     class_name = []
+    positives = []
+    negatives = []
     try:
-        config = tf.ConfigProto()
-        config.gpu_options.per_process_gpu_memory_fraction = 0.1 #hopefully reduces segfaults
-        with tf.Session(graph=graph, config=config) as tfSession:
-            for image in imageList:
-                isPositive = False
-                segments = segmentImage(image)
-                try:
-                    tf_helper.classifySegments(tfSession, graph, labels, segments)
-                    for i in range(len(segments)):
-                        image_name += [image[35:]]
-                        crop_name += [segments[i]['imgPath'][35:]]
-                        score_name += [segments[i]['score']]
-                        class_name += [className]
-                        if segments[i]['score'] > .5:
-                            isPositive = True
+        for image in imageList:
+            t0 = time.time()
+            isPositive = False
+            ppath = pathlib.PurePath(image)
+            nameParsed = img_archive.parseFilename(image)
+            crops, segments = segmentImage(image)
+            t1 = time.time()
+            try:
+                if useFrozen:
+                    tf_helper.classifyFrozenTf2(model, crops, segments)
+                else:
+                    tf_helper.classifySegments(model, crops, segments)
+                for i in range(len(segments)):
+                    image_name += [ppath.name]
+                    crop_name += [segments[i]['coordStr']]
+                    # for testing
+                    # segments[i]['score'] = random.random()*.55
+                    score_name += [segments[i]['score']]
+                    class_name += [className]
+                    if segments[i]['score'] > .5:
+                        isPositive = True
 
-                except Exception as e:
-                    logging.error('FAILURE processing %s. Count: %d, Error: %s', image, count, str(e))
-                    test_data = [image_name, crop_name, score_name, class_name]
-                    np.savetxt(outFile + '-ERROR-' + image + '.txt', np.transpose(test_data), fmt = "%s")
-                    deleteImageFiles(segments)
-                    sys.exit()
-                
-                deleteImageFiles(segments)
-                count += 1
-                if isPositive:
-                    numPositive += 1
-                sys.stdout.write('\r>> Caclulated %d/%d of class %s' % (
-                    count, len(imageList), className))
-                sys.stdout.flush()
+            except Exception as e:
+                logging.error('FAILURE processing %s. Count: %d, Error: %s', image, count, str(e))
+                test_data = [image_name, crop_name, score_name, class_name]
+                np.savetxt(outFile + '-ERROR-' + image + '.txt', np.transpose(test_data), fmt = "%s")
+                sys.exit()
+
+            t2 = time.time()
+
+            count += 1
+            if isPositive:
+                positives.append(ppath.name)
+            else:
+                negatives.append(ppath.name)
+            sys.stdout.write('\r>> Caclulated %d/%d of class %s' % (
+                count, len(imageList), className))
+            # logging.warning('Timing %f: %f, %f' % (t2-t0, t1-t0, t2-t1))
+            sys.stdout.flush()
     except Exception as e:
         logging.error('Failure after %d images of class %s. Error: %s', count, className, str(e))
         try:
             test_data = [image_name, crop_name, score_name, class_name]
             np.savetxt(outFile + '-ERROR.txt', np.transpose(test_data), fmt = "%s")
-            deleteImageFiles(segments)
         except Exception as e:
             logging.error('Total Failure, Moving On. Error: %s', str(e))
     sys.stdout.write('\n')
     sys.stdout.flush()
-    return (image_name, crop_name, score_name, class_name, numPositive)
+    return (image_name, crop_name, score_name, class_name, positives, negatives)
 
 
 def main():
@@ -132,8 +137,10 @@ def main():
     class_name += ["Class"]
 
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' # quiet down tensorflow logging
-    graph = tf_helper.load_graph(model_file)
-    labels = tf_helper.load_labels(labels_file)
+    if useFrozen:
+        model = tf_helper.loadFrozenModelTf2(model_file)
+    else:
+        model = tf_helper.loadModel(model_file)
 
     smokeDir = os.path.join(args.directory, 'test_set_smoke')
     smoke_image_list = listJpegs(smokeDir)
@@ -146,28 +153,33 @@ def main():
     np.savetxt(smokeFile, smoke_image_list, fmt = "%s")
     nonSmokeFile = os.path.join(args.directory, 'test_other.txt')
     np.savetxt(nonSmokeFile, other_image_list, fmt = "%s")
+    outFile = open(args.outputFile, 'w')
 
-    (i,cr,s,cl, numPositive) = classifyImages(graph, labels, smoke_image_list, 'smoke', args.outputFile)
+    (i,cr,s,cl, positives, negatives) = classifyImages(model, smoke_image_list, 'smoke', args.outputFile)
     image_name += i
     crop_name += cr
     score_name += s
     class_name += cl
     logging.warning('Done with smoke images')
-    truePositive = numPositive
-    falseNegative = len(smoke_image_list) - numPositive
+    truePositive = len(positives)
+    falseNegative = len(smoke_image_list) - len(positives)
     logging.warning('True Positive: %d', truePositive)
     logging.warning('False Negative: %d', falseNegative)
+    outFile.write('True Positives: ' + ', '.join(positives) + '\n')
+    outFile.write('False Negative: ' + ', '.join(negatives) + '\n')
 
-    (i,cr,s,cl, numPositive) = classifyImages(graph, labels, other_image_list, 'other', args.outputFile)
+    (i,cr,s,cl, positives, negatives) = classifyImages(model, other_image_list, 'other', args.outputFile)
     image_name += i
     crop_name += cr
     score_name += s
     class_name += cl
     logging.warning('Done with nonSmoke images')
-    falsePositive = numPositive
-    trueNegative = len(other_image_list) - numPositive
+    falsePositive = len(positives)
+    trueNegative = len(other_image_list) - len(positives)
     logging.warning('False Positive: %d', falsePositive)
     logging.warning('True Negative: %d', trueNegative)
+    outFile.write('False Positives: ' + ', '.join(positives) + '\n')
+    outFile.write('True Negative: ' + ', '.join(negatives) + '\n')
 
     accuracy = (truePositive + trueNegative)/(truePositive + trueNegative + falsePositive + falseNegative)
     logging.warning('Accuracy: %f', accuracy)
@@ -179,7 +191,8 @@ def main():
     logging.warning('F1: %f', f1)
 
     test_data = [image_name, crop_name, score_name, class_name]
-    np.savetxt(args.outputFile, np.transpose(test_data), fmt = "%s")
+    np.savetxt(outFile, np.transpose(test_data), fmt = "%s")
+    outFile.close()
     print("DONE")
 
 
