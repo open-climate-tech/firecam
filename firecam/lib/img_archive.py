@@ -333,7 +333,10 @@ def callGCF(gcfUrl, creds, hpwrenSource, qNum, folderID):
     Returns:
         Cloud function result
     """
-    token = goog_helper.getServiceIdToken(gcfUrl)
+    if creds:
+        token = creds.id_token_jwt
+    else:
+        token = goog_helper.getServiceIdToken(gcfUrl)
     headers = {'Authorization': 'bearer {}'.format(token)}
     gcfParams = {
         'hostName': hpwrenSource['server'],
