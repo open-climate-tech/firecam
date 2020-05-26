@@ -138,8 +138,9 @@ def main():
         ["c", "cameraID", "ID (code name) of camera"],
         ['n', 'longitude', 'longitude of fire', float],
         ['t', 'latitude', 'latitude of fire', float],
-        ['d', 'distance', '(optional default=20) distance in miles from fire', float],
+        ['m', 'maxDistance', '(optional default=20) max distance in miles from fire', float],
         ["e", "endTime", "ending date and time in ISO format (e.g., 2019-02-22T14:34:56 in Pacific time zone)"],
+        ["d", "durationMinutes", "alternative spec for endTime as start + duration", int],
         ["g", "gapMinutes", "override default of 1 minute gap between images to download"],
         ["o", "outputDir", "directory to save the output image"],
     ]
@@ -147,11 +148,14 @@ def main():
     args = collect_args.collectArgs(reqArgs, optionalArgs=optArgs, parentParsers=[goog_helper.getParentParser()])
     googleServices = goog_helper.getGoogleServices(settings, args)
     gapMinutes = int(args.gapMinutes) if args.gapMinutes else 1
-    distanceMiles = float(args.distance if args.distance else 20)
+    distanceMiles = float(args.maxDistance if args.maxDistance else 20)
     outputDir = args.outputDir if args.outputDir else settings.downloadDir
     startTimeDT = dateutil.parser.parse(args.startTime)
     if args.endTime:
         endTimeDT = dateutil.parser.parse(args.endTime)
+    elif args.durationMinutes:
+        durationDelta = datetime.timedelta(seconds = 60 * args.durationMinutes)
+        endTimeDT = startTimeDT + durationDelta
     else:
         endTimeDT = startTimeDT
     assert startTimeDT.year == endTimeDT.year
