@@ -35,8 +35,11 @@ import datetime
 import math
 import time
 import tempfile
+import random
 
 import tensorflow as tf
+
+testMode = False
 
 class InceptionV3AndHistoricalThreshold:
 
@@ -57,7 +60,7 @@ class InceptionV3AndHistoricalThreshold:
             tmpDir = tempfile.TemporaryDirectory()
             goog_helper.downloadBucketDir(gcsModel['bucket'], gcsModel['name'], tmpDir.name)
             modelLocation = tmpDir.name
-        self.model = tf_helper.loadModel(modelLocation)
+        self.model = tf_helper.loadModel(modelLocation) if not testMode else None
 
 
     def _segmentImage(self, imgPath):
@@ -87,7 +90,12 @@ class InceptionV3AndHistoricalThreshold:
         crops, segments = self._segmentImage(imgPath)
         if len(crops) == 0:
             return []
-        tf_helper.classifySegments(self.model, crops, segments)
+        # testMode fakes all scores
+        if testMode:
+            for segmentInfo in segments:
+                segmentInfo['score'] = random.random()
+        else:
+            tf_helper.classifySegments(self.model, crops, segments)
 
         segments.sort(key=lambda x: -x['score'])
         return segments
@@ -176,13 +184,14 @@ class InceptionV3AndHistoricalThreshold:
             Dictionary with information for the segment most likely to be smoke
             or None
         """
-        # # enable the next few lines fakes a detection to test alerting functionality
-        # maxFireSegment = segments[0]
-        # maxFireSegment['HistAvg'] = 0.1
-        # maxFireSegment['HistMax'] = 0.2
-        # maxFireSegment['HistNumSamples'] = 10
-        # maxFireSegment['AdjScore'] = 0.3
-        # return maxFireSegment
+        # testMode fakes a detection to test alerting functionality
+        if testMode:
+            maxFireSegment = segments[0]
+            maxFireSegment['HistAvg'] = 0.1
+            maxFireSegment['HistMax'] = 0.2
+            maxFireSegment['HistNumSamples'] = 10
+            maxFireSegment['AdjScore'] = 0.3
+            return maxFireSegment
 
         # segments is sorted, so skip all work if max score is < .5
         if segments[0]['score'] < .5:
