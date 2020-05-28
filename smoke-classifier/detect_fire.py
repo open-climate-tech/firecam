@@ -42,6 +42,7 @@ import tempfile
 import shutil
 import time, datetime, dateutil.parser
 import random
+import math
 import re
 import hashlib
 import gc
@@ -49,6 +50,7 @@ from urllib.request import urlretrieve
 import tensorflow as tf
 from PIL import Image, ImageFile, ImageDraw, ImageFont
 ImageFile.LOAD_TRUNCATED_IMAGES = True
+import ffmpeg
 
 
 def getNextImage(dbManager, cameras, cameraID=None):
@@ -110,15 +112,17 @@ def stretchBounds(minOrig, maxOrig, limit):
         Tuple (min, max) of stretched range
     """
     size = maxOrig - minOrig
+    finalSize = 3*size
+    finalSize = math.ceil(finalSize/2)*2 # make even
     if (minOrig - size < 0):
         minNew = 0
-        maxNew = min(minNew + size*3, limit)
-    elif (maxOrig + size > limit):
+        maxNew = min(minNew + finalSize, limit)
+    elif (maxOrig + size >= limit - 1):  # (limit - 1 to workaround rounding up to even)
         maxNew = limit
-        minNew = max(maxNew - size*3, 0)
+        minNew = max(maxNew - finalSize, 0)
     else:
         minNew = minOrig - size
-        maxNew = maxOrig + size
+        maxNew = min(minNew + finalSize, limit)
     return (minNew, maxNew)
 
 
@@ -127,7 +131,7 @@ def drawRect(imgDraw, x0, y0, x1, y1, width, color):
         imgDraw.rectangle((x0 + i, y0 + i, x1 - i, y1 -i), outline=color)
 
 
-def drawFireBox(img, destPath, fireSegment, x0, y0, x1, y1, writeScores=False):
+def drawFireBox(img, destPath, fireSegment, x0, y0, x1, y1, timestamp=None, writeScores=False):
     """Draw bounding box with fire detection and optionally write scores
 
     Also watermarks the image and stores the resulting annotated image as new file
@@ -163,6 +167,20 @@ def drawFireBox(img, destPath, fireSegment, x0, y0, x1, y1, writeScores=False):
         textSize = imgDraw.textsize(scoreStr, font=font)
         imgDraw.text((x1 - textSize[0], y0 - textSize[1]), scoreStr, font=font, fill=color)
 
+    if timestamp:
+        fontSize=32
+        font = ImageFont.truetype(fontPath, size=fontSize)
+        timeStr = datetime.datetime.fromtimestamp(timestamp).isoformat()
+        # first little bit of black outline
+        color = "black"
+        for i in range(0,5):
+            for j in range(0,5):
+                imgDraw.text((i, j), timeStr, font=font, fill=color)
+
+        # now actual data in orange
+        color = "orange"
+        imgDraw.text((2, 2), timeStr, font=font, fill=color)
+
     # "watermark" the image
     color = "orange"
     fontSize=32
@@ -173,10 +191,13 @@ def drawFireBox(img, destPath, fireSegment, x0, y0, x1, y1, writeScores=False):
     del imgDraw
 
 
-def genAnnotatedImages(imgPath, fireSegment):
-    """Generate annotated images (one cropped, and other full size)
+def genAnnotatedImages(constants, cameraID, timestamp, imgPath, fireSegment):
+    """Generate annotated images (one cropped video, and other full size image)
 
     Args:
+        constants (dict): "global" contants
+        cameraID (str): camera name
+        timestamp (int): time.time() value when image was taken
         imgPath (str): filepath of the image
         fireSegment (dict): dict describing segment with fire
 
@@ -193,16 +214,37 @@ def genAnnotatedImages(imgPath, fireSegment):
     (cropX0, cropX1) = stretchBounds(x0, x1, img.size[0])
     (cropY0, cropY1) = stretchBounds(y0, y1, img.size[1])
     cropCoords = (cropX0, cropY0, cropX1, cropY1)
-    croppedImg = img.crop(cropCoords)
-    croppedPath = filePathParts[0] + '_AnnCrop_' + 'x'.join(list(map(lambda x: str(x), cropCoords))) + filePathParts[1]
-    drawFireBox(croppedImg, croppedPath, fireSegment, x0 - cropX0, y0 - cropY0, x1 - cropX0, y1 - cropY0)
-    croppedImg.close()
+    # get images spanning a few minutes so reviewers can evaluate based on progression
+    startTimeDT = datetime.datetime.fromtimestamp(timestamp - 5*60)
+    endTimeDT = datetime.datetime.fromtimestamp(timestamp - 1*60)
+
+    with tempfile.TemporaryDirectory() as tmpDirName:
+        oldImages = img_archive.getHpwrenImages(constants['googleServices'], settings, tmpDirName,
+                                                constants['camArchives'], cameraID, startTimeDT, endTimeDT, 1)
+        imgSequence = oldImages or []
+        imgSequence.append(imgPath)
+        for (i, imgFile) in enumerate(imgSequence):
+            imgParsed = img_archive.parseFilename(imgFile)
+            cropName = 'img' + ("%03d" % i) + filePathParts[1]
+            croppedPath = os.path.join(tmpDirName, cropName)
+            imgSeq = Image.open(imgFile)
+            croppedImg = imgSeq.crop(cropCoords)
+            drawFireBox(croppedImg, croppedPath, fireSegment, x0 - cropX0, y0 - cropY0, x1 - cropX0, y1 - cropY0, timestamp=imgParsed['unixTime'])
+            imgSeq.close()
+            croppedImg.close()
+        # now make movie from this sequence of cropped images
+        moviePath = filePathParts[0] + '_AnnCrop_' + 'x'.join(list(map(lambda x: str(x), cropCoords))) + '.mp4'
+        (
+            ffmpeg.input(os.path.join(tmpDirName, 'img%03d.jpg'), framerate=1)
+                .filter('fps', fps=25, round='up')
+                .output(moviePath, pix_fmt='yuv420p').run()
+        )
 
     annotatedPath = filePathParts[0] + '_Ann' + filePathParts[1]
     drawFireBox(img, annotatedPath, fireSegment, x0, y0, x1, y1)
     img.close()
 
-    return (croppedPath, annotatedPath)
+    return (moviePath, annotatedPath)
 
 
 def isDuplicateAlert(dbManager, cameraID, timestamp):
@@ -333,7 +375,7 @@ def alertFire(constants, cameraID, timestamp, imgPath, fireSegment):
         imgPath: filepath of the original image
         fireSegment (dictionary): dictionary with information for the segment with fire/smoke
     """
-    (croppedPath, annotatedPath) = genAnnotatedImages(imgPath, fireSegment)
+    (croppedPath, annotatedPath) = genAnnotatedImages(constants, cameraID, timestamp, imgPath, fireSegment)
 
     # copy annotated image to publicly accessible settings.noticationsDir
     alertsDateDir = goog_helper.dateSubDir(settings.noticationsDir)
