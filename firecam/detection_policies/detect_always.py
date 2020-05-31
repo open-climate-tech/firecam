@@ -23,7 +23,7 @@ import time
 
 class DetectAlways:
 
-    def __init__(self, args, dbManager, camArchives, minusMinutes, useArchivedImages):
+    def __init__(self, args, dbManager, minusMinutes, stateless):
         pass
 
 

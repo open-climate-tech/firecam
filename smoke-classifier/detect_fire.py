@@ -206,10 +206,10 @@ def genAnnotatedImages(constants, cameraID, timestamp, imgPath, fireSegment):
     """
     filePathParts = os.path.splitext(imgPath)
     img = Image.open(imgPath)
-    x0 = fireSegment['MinX']
-    y0 = fireSegment['MinY']
-    x1 = fireSegment['MaxX']
-    y1 = fireSegment['MaxY']
+    x0 = fireSegment['MinX'] if 'MinX' in fireSegment else 0
+    y0 = fireSegment['MinY'] if 'MinY' in fireSegment else 0
+    x1 = fireSegment['MaxX'] if 'MaxX' in fireSegment else img.size[0]
+    y1 = fireSegment['MaxY'] if 'MaxY' in fireSegment else img.size[0]
 
     (cropX0, cropX1) = stretchBounds(x0, x1, img.size[0])
     (cropY0, cropY1) = stretchBounds(y0, y1, img.size[1])
@@ -284,7 +284,7 @@ def updateAlertsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, fir
     dbRow = {
         'CameraName': cameraID,
         'Timestamp': timestamp,
-        'AdjScore': fireSegment['AdjScore'],
+        'AdjScore': fireSegment['AdjScore'] if 'AdjScore' in fireSegment else fireSegment['score'],
         'ImageID': annotatedUrl,
         'CroppedID': croppedUrl
     }
@@ -307,8 +307,8 @@ def pubsubFireNotification(cameraID, timestamp, croppedUrl, annotatedUrl, fireSe
         'timestamp': timestamp,
         'cameraID': cameraID,
         "mlScore": str(fireSegment['score']),
-        "histMax": str(fireSegment['HistMax']),
-        "adjScore": str(fireSegment['AdjScore']),
+        "histMax": str(fireSegment['HistMax'] if 'HistMax' in fireSegment else 0),
+        "adjScore": str(fireSegment['AdjScore'] if 'AdjScore' in fireSegment else fireSegment['score']),
         'croppedUrl': croppedUrl,
         'annotatedUrl': annotatedUrl
     }
@@ -564,7 +564,7 @@ def main():
     useArchivedImages = False
     camArchives = img_archive.getHpwrenCameraArchives(settings.hpwrenArchives)
     DetectionPolicyClass = policies.get_policies()[settings.detectionPolicy]
-    detectionPolicy = DetectionPolicyClass(args, dbManager, camArchives, minusMinutes, useArchivedImages)
+    detectionPolicy = DetectionPolicyClass(args, dbManager, minusMinutes, stateless=useArchivedImages)
     constants = { # dictionary of constants to reduce parameters in various functions
         'args': args,
         'googleServices': googleServices,

@@ -26,6 +26,7 @@ from firecam.lib import collect_args
 from firecam.lib import tf_helper
 from firecam.lib import rect_to_squares
 from firecam.lib import img_archive
+from firecam.detection_policies import policies
 
 import time
 import random
@@ -36,7 +37,6 @@ import tensorflow as tf
 from PIL import Image, ImageFile
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
-useFrozen = False
 
 def listJpegs(dirName):
     allEntries = os.listdir(dirName)
@@ -51,7 +51,7 @@ def segmentImage(imgPath):
     return rect_to_squares.cutBoxesArray(img)
 
     
-def classifyImages(model, imageList, className, outFile):
+def classifyImages(detectionPolicy, imageList, className, outFile):
     count = 0
     image_name = []
     crop_name = []
@@ -65,22 +65,27 @@ def classifyImages(model, imageList, className, outFile):
             isPositive = False
             ppath = pathlib.PurePath(image)
             nameParsed = img_archive.parseFilename(image)
-            crops, segments = segmentImage(image)
-            t1 = time.time()
+
+            image_spec = [{}]
+            image_spec[-1]['path'] = image
+            image_spec[-1]['timestamp'] = nameParsed['unixTime']
+            image_spec[-1]['cameraID'] = nameParsed['cameraID']
+
             try:
-                if useFrozen:
-                    tf_helper.classifyFrozenTf2(model, crops, segments)
-                else:
-                    tf_helper.classifySegments(model, crops, segments)
-                for i in range(len(segments)):
-                    image_name += [ppath.name]
-                    crop_name += [segments[i]['coordStr']]
-                    # for testing
-                    # segments[i]['score'] = random.random()*.55
-                    score_name += [segments[i]['score']]
-                    class_name += [className]
-                    if segments[i]['score'] > .5:
-                        isPositive = True
+                detectionResult = detectionPolicy.detect(image_spec)
+                if detectionResult['fireSegment']:
+                    isPositive = True
+                if detectionResult['segments']:
+                    segments = detectionResult['segments']
+                    for i in range(len(segments)):
+                        image_name += [ppath.name]
+                        crop_name += [segments[i]['coordStr']]
+                        # for testing
+                        # segments[i]['score'] = random.random()*.55
+                        score_name += [segments[i]['score']]
+                        class_name += [className]
+                        if segments[i]['score'] > .5:
+                            isPositive = True
 
             except Exception as e:
                 logging.error('FAILURE processing %s. Count: %d, Error: %s', image, count, str(e))
@@ -111,7 +116,15 @@ def classifyImages(model, imageList, className, outFile):
     return (image_name, crop_name, score_name, class_name, positives, negatives)
 
 
+def safeDiv(dividend, divisor):
+    if divisor == 0:
+        return 0
+    return dividend / divisor
+
+
 def main():
+    os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' # quiet down tensorflow logging
+
     reqArgs = [
         ["d", "directory", "directory containing the image sets"],
         ["o", "outputFile", "output file name"],
@@ -123,6 +136,8 @@ def main():
     args = collect_args.collectArgs(reqArgs, optionalArgs=optArgs)
     model_file = args.model if args.model else settings.model_file
     labels_file = args.labels if args.labels else settings.labels_file
+    DetectionPolicyClass = policies.get_policies()[settings.detectionPolicy]
+    detectionPolicy = DetectionPolicyClass(args, None, 0, stateless=True, modelLocation=model_file)
 
     test_data = []
 
@@ -135,12 +150,6 @@ def main():
     crop_name += ["Crop"]
     score_name += ["Score"]
     class_name += ["Class"]
-
-    os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' # quiet down tensorflow logging
-    if useFrozen:
-        model = tf_helper.loadFrozenModelTf2(model_file)
-    else:
-        model = tf_helper.loadModel(model_file)
 
     smokeDir = os.path.join(args.directory, 'test_set_smoke')
     smoke_image_list = listJpegs(smokeDir)
@@ -155,7 +164,7 @@ def main():
     np.savetxt(nonSmokeFile, other_image_list, fmt = "%s")
     outFile = open(args.outputFile, 'w')
 
-    (i,cr,s,cl, positives, negatives) = classifyImages(model, smoke_image_list, 'smoke', args.outputFile)
+    (i,cr,s,cl, positives, negatives) = classifyImages(detectionPolicy, smoke_image_list, 'smoke', args.outputFile)
     image_name += i
     crop_name += cr
     score_name += s
@@ -168,7 +177,7 @@ def main():
     outFile.write('True Positives: ' + ', '.join(positives) + '\n')
     outFile.write('False Negative: ' + ', '.join(negatives) + '\n')
 
-    (i,cr,s,cl, positives, negatives) = classifyImages(model, other_image_list, 'other', args.outputFile)
+    (i,cr,s,cl, positives, negatives) = classifyImages(detectionPolicy, other_image_list, 'other', args.outputFile)
     image_name += i
     crop_name += cr
     score_name += s
@@ -181,13 +190,13 @@ def main():
     outFile.write('False Positives: ' + ', '.join(positives) + '\n')
     outFile.write('True Negative: ' + ', '.join(negatives) + '\n')
 
-    accuracy = (truePositive + trueNegative)/(truePositive + trueNegative + falsePositive + falseNegative)
+    accuracy = safeDiv(truePositive + trueNegative, truePositive + trueNegative + falsePositive + falseNegative)
     logging.warning('Accuracy: %f', accuracy)
-    precision = truePositive/(truePositive + falsePositive)
+    precision = safeDiv(truePositive, truePositive + falsePositive)
     logging.warning('Precision: %f', precision)
-    recall = truePositive/(truePositive + falseNegative)
+    recall = safeDiv(truePositive, truePositive + falseNegative)
     logging.warning('Recall: %f', recall)
-    f1 = 2 * precision*recall/(precision + recall)
+    f1 = safeDiv(2 * precision*recall, precision + recall)
     logging.warning('F1: %f', f1)
 
     test_data = [image_name, crop_name, score_name, class_name]

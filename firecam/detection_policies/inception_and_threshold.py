@@ -40,27 +40,33 @@ import random
 import tensorflow as tf
 
 testMode = False
+useFrozen = False
 
 class InceptionV3AndHistoricalThreshold:
 
     SEQUENCE_LENGTH = 1
     SEQUENCE_SPACING_MIN = None
 
-    def __init__(self, args, dbManager, camArchives, minusMinutes, useArchivedImages):
+    def __init__(self, args, dbManager, minusMinutes, stateless, modelLocation=None):
         self.dbManager = dbManager
         self.args = args
-        self.camArchives = camArchives
         self.minusMinutes = minusMinutes
-        self.useArchivedImages = useArchivedImages
-        # if model is on GCS, download it locally first
-        modelLocation = settings.model_file
+        self.stateless = stateless
+        if not modelLocation:
+            modelLocation = settings.model_file
         self.modelId = '/'.join(modelLocation.split('/')[-2:]) # the last two dirpath components
+        # if model is on GCS, download it locally first
         gcsModel = goog_helper.parseGCSPath(modelLocation)
         if gcsModel:
             tmpDir = tempfile.TemporaryDirectory()
             goog_helper.downloadBucketDir(gcsModel['bucket'], gcsModel['name'], tmpDir.name)
             modelLocation = tmpDir.name
-        self.model = tf_helper.loadModel(modelLocation) if not testMode else None
+        if testMode:
+            self.model = None
+        elif useFrozen:
+            self.model = tf_helper.loadFrozenModelTf2(modelLocation)
+        else:
+            self.model = tf_helper.loadModel(modelLocation)
 
 
     def _segmentImage(self, imgPath):
@@ -94,6 +100,8 @@ class InceptionV3AndHistoricalThreshold:
         if testMode:
             for segmentInfo in segments:
                 segmentInfo['score'] = random.random()
+        elif useFrozen:
+            tf_helper.classifyFrozenTf2(self.model, crops, segments)
         else:
             tf_helper.classifySegments(self.model, crops, segments)
 
@@ -281,12 +289,13 @@ class InceptionV3AndHistoricalThreshold:
             'fireSegment': None
         }
         segments = self._segmentAndClassify(imgPath)
+        detectionResult['segments'] = segments
         detectionResult['timeMid'] = time.time()
         if len(segments) == 0: # happens sometimes when camera is malfunctioning
             return detectionResult
-        if self.args.collectPositves:
+        if getattr(self.args, 'collectPositves', None):
             self._collectPositves(imgPath, segments)
-        if not self.useArchivedImages:
+        if not self.stateless:
             self._recordScores(cameraID, timestamp, segments)
             fireSegment = self._postFilter(cameraID, timestamp, segments)
             if fireSegment:
