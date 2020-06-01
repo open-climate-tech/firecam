@@ -86,7 +86,6 @@ class DbManager(object):
             ('counter', 'INT')
         ]
 
-        # no longer used?
         fires_schema = [
             ('Name', 'TEXT'),
             ('Url', 'TEXT'),
@@ -114,27 +113,14 @@ class DbManager(object):
             ('Longitude', 'REAL'),
             ('cameraIDs', 'TEXT')
         ]
-        
-        images_schema = [
-            ('ImageID', 'TEXT'),
-            ('ImageClass', 'TEXT'),
-            ('FireName', 'TEXT'),
-            ('CameraName', 'TEXT'),
-            ('Timestamp', 'INT'),
-            ('Smoke', 'TEXT'),
-            ('Fog', 'TEXT'),
-            ('Rain', 'TEXT'),
-            ('Glare', 'TEXT'),
-            ('Snow', 'TEXT'),
-        ]
 
-        cropped_schema = [
-            ('CroppedID', 'TEXT'),
+        bbox_schema = [
+            ('ImageName', 'TEXT'),
             ('MinX', 'INT'),
             ('MinY', 'INT'),
             ('MaxX', 'INT'),
             ('MaxY', 'INT'),
-            ('EntireImageID', 'TEXT'),
+            ('InsertionTime', 'INT'),
         ]
 
         # all the detection squares ever found. anything from 0 to 1.0
@@ -193,8 +179,7 @@ class DbManager(object):
             'counters': counters_schema,
             'fires': fires_schema,
             'cameras': cameras_schema,
-            'images': images_schema,
-            'cropped': cropped_schema,
+            'bbox': bbox_schema,
             'scores': scores_schema,
             'detections': detections_schema,
             'alerts': alerts_schema,
