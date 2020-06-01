@@ -44,7 +44,8 @@ import google.oauth2.id_token
 # TODO: This is getting too big.  We should ask for different subsets for each app
 SCOPES = [
     # 'https://www.googleapis.com/auth/gmail.send',
-    'profile' # to get id_token for gcf_ffmpeg
+    'email', # to check any malicious activity in GCF callers
+    'profile' # to get id_token for GCF calls
 ]
 
 
