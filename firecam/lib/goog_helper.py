@@ -106,6 +106,22 @@ def getServiceIdToken(audience):
 getServiceIdToken.cached = {}
 
 
+def getIdToken(googleServices, url):
+    """Get an ID token usable for GCF calls
+
+    Args:
+        googleServices (): Google services and credentials
+
+    Returns:
+        ID token string
+    """
+    if googleServices['creds']:
+        token = googleServices['creds'].id_token_jwt
+    else:
+        token = goog_helper.getServiceIdToken(gcfUrl)
+    return token
+
+
 def getParentParser():
     """Get the parent argparse object needed by Google APIs
     """

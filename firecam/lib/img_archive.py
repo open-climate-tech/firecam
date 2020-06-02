@@ -320,12 +320,12 @@ def getMp4Url(urlPartsDate, qNum, verboseLogs):
     return None
 
 
-def callGCF(gcfUrl, creds, hpwrenSource, qNum, folderID):
+def gcfFfmpeg(gcfUrl, googleServices, hpwrenSource, qNum, folderID):
     """invoke the Google Cloud Function for ffpeg decompression with proper parameters and credentials
 
     Args:
         gcfUrl (str): URL for ffmpeg cloud function
-        creds (): Google credentials to identify caller
+        googleServices (): Google services and credentials
         hpwrenSource (dict): Dictionary containing various HPWREN source information
         qNum (int): Q number (1-8) where each Q represents 3 hour period
         folderID (str): google drive ID of folder where to extract images
@@ -333,10 +333,7 @@ def callGCF(gcfUrl, creds, hpwrenSource, qNum, folderID):
     Returns:
         Cloud function result
     """
-    if creds:
-        token = creds.id_token_jwt
-    else:
-        token = goog_helper.getServiceIdToken(gcfUrl)
+    token = goog_helper.getIdToken(googleServices, gcfUrl)
     headers = {'Authorization': 'bearer {}'.format(token)}
     gcfParams = {
         'hostName': hpwrenSource['server'],
@@ -371,7 +368,7 @@ def getGCSMp4(googleServices, settings, hpwrenSource, qNum):
     if not files:
         logging.warning('Calling Cloud Function for folder %s', folderName)
         uploadDir = goog_helper.repackGCSPath(ffmpegParsedGCS['bucket'],folderPath)
-        gcfRes = callGCF(settings.ffmpegUrl, googleServices['creds'], hpwrenSource, qNum, uploadDir)
+        gcfRes = gcfFfmpeg(settings.ffmpegUrl, googleServices, hpwrenSource, qNum, uploadDir)
         logging.warning('Cloud function result %s', gcfRes)
         files = goog_helper.listBucketEntries(ffmpegParsedGCS['bucket'], prefix=(folderPath + '/'))
     # logging.warning('GDM4: files %d %s', len(files), files)
