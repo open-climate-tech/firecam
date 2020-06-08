@@ -23,17 +23,39 @@ import os, sys
 import json
 from firecam.lib import goog_helper
 
+def findSettingsFile():
+    """Find the path with the settings file by searching the usual suspects
+       (cwd, ~, ~/Desktop, ~/Documents) in order
+
+    Returns:
+        (string) path to file if it exists
+    """
+    settingsName = 'oct-fire-settings.json'
+    userPath = os.path.expanduser('~')
+    if os.path.exists(settingsName):
+        return settingsName
+    elif os.path.exists(os.path.join(userPath, settingsName)):
+        return os.path.join(userPath, settingsName)
+    elif os.path.exists(os.path.join(userPath, 'Desktop', settingsName)):
+        return os.path.join(userPath, 'Desktop', settingsName)
+    elif os.path.exists(os.path.join(userPath, 'Documents', settingsName)):
+        return os.path.join(userPath, 'Documents', settingsName)
+    raise Exception('Could not locate settings file')
+
+
 def readSettingsFile():
     """Read the settings JSON file and parse into a dict
 
     Returns:
         dict with parsed settings JSON
     """
-    configPath = os.environ['OCT_FIRE_SETTINGS']
-    configStr = goog_helper.readFile(configPath)
-    config = json.loads(configStr)
-    # logging.warning('config %s', config)
-    return config
+    settingsPath = os.environ['OCT_FIRE_SETTINGS']
+    if not settingsPath:
+        settingsPath = findSettingsFile()
+    settingsStr = goog_helper.readFile(settingsPath)
+    settingsDict = json.loads(settingsStr)
+    # logging.warning('settings %s', settingsDict)
+    return settingsDict
 
 
 # set module attributes based on json file data
