@@ -16,11 +16,16 @@
 
 Package config
 
-Steps to produce test package:
-1) python setup.py sdist bdist_wheel
-2) twine upload --repository testpypi --skip-existing dist/*
+To produce package files:
+python setup.py sdist bdist_wheel
 
-Steps to download test package:
+To upload to testPyPi
+twine upload --repository testpypi --skip-existing dist/*
+
+To upload to real PyPi
+twine upload --skip-existing dist/*
+
+To download from testPyPi
 pip install --extra-index-url https://test.pypi.org/simple/  -U oct_firecam
 
 """
@@ -31,7 +36,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="oct-firecam",
-    version="0.0.7",
+    version="0.1.0",
     author="Open Climate Tech",
     description="Detect wildfires from camera images",
     long_description=long_description,
