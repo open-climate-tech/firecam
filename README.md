@@ -8,4 +8,4 @@ The following [paper](https://doi.org/10.3390/rs12010166) published in Remote Se
 
 The code in this repository is released under [Apache License 2.0](LICENSE).
 The datasets are licensed under the [Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International Public License](https://creativecommons.org/licenses/by-nc-sa/4.0/legalcode).
-The original images were collected from the [HPWREN camera network](https://hpwren.ucsd.edu/cameras/) and the bounding boxes coordiantes are provided by Fuego.
+The original images were collected from the [HPWREN camera network](https://hpwren.ucsd.edu/cameras/) and the bounding boxes coordiantes are provided by Open Climate Tech.
