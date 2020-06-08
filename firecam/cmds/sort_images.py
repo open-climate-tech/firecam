@@ -43,7 +43,7 @@ def unzipFile(zipFile):
     return tempDir
 
 
-def uploadCoords(coords, newPath, googleServices):
+def uploadCoords(coords, newPath, googleServices, notes):
     token = goog_helper.getIdToken(googleServices, settings.gcfLabelUrl)
     headers = {'Authorization': 'bearer {}'.format(token)}
     imgName = pathlib.PurePath(newPath).name
@@ -54,12 +54,13 @@ def uploadCoords(coords, newPath, googleServices):
         'minY': coords[1],
         'maxX': coords[2],
         'maxY': coords[3],
+        'notes': notes,
     }
     response = requests.post(settings.gcfLabelUrl, headers=headers, data=gcfParams)
     return response.content
 
 
-def processFolder(imgDirectory, googleServices):
+def processFolder(imgDirectory, googleServices, notes):
     temporaryDir = tempfile.TemporaryDirectory()
     imageFileNames = os.listdir(imgDirectory)
     # print('images', len(imageFileNames), imageFileNames)
@@ -77,12 +78,13 @@ def processFolder(imgDirectory, googleServices):
         if len(result) > 0:
             for entry in result:
                 print('crop data', entry['coords'])
-                uploadCoords(entry['coords'], imgName, googleServices)
+                uploadCoords(entry['coords'], imgName, googleServices, notes)
 
 def main():
     reqArgs = [
     ]
     optArgs = [
+        ["n", "notes", "(optional) notes/comments (e.g., test) to associate with data"],
         ["z", "zipFile", "Name of the zip file containing the images"],
         ["d", "imgDirectory", "Name of the directory containing the images or ask:dir"],
     ]
@@ -101,7 +103,7 @@ def main():
         exit(1)
 
     googleServices = goog_helper.getGoogleServices(settings, args)
-    processFolder(imgDirectory, googleServices)
+    processFolder(imgDirectory, googleServices, args.notes)
 
 
 if __name__=="__main__":

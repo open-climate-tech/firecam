@@ -66,9 +66,9 @@ exports.recordLabels = async (req, res) => {
     try {
         const db = await db_mgr.initDB(config, true);
 
-        const bboxKeys = ['ImageName', 'MinX', 'MinY', 'MaxX', 'MaxY', 'InsertionTime', 'UserID'];
+        const bboxKeys = ['ImageName', 'MinX', 'MinY', 'MaxX', 'MaxY', 'InsertionTime', 'UserID', 'Notes'];
         const bboxVals = [req.body.fileName, req.body.minX, req.body.minY, req.body.maxX, req.body.maxY,
-                          Math.floor(new Date().valueOf()/1000), userID];
+                          Math.floor(new Date().valueOf()/1000), userID, req.body.notes || ''];
         await db.insert('bbox', bboxKeys, bboxVals);
     } catch (err) {
         console.log('Failure %s', err.message);
@@ -89,6 +89,7 @@ function testHandler() {
             minY: 2,
             maxX: 3,
             maxY: 4,
+            notes: 'test',
         }
     }, { // fake res
         status: () => ({send: (m)=>{console.log('msg', m)}})

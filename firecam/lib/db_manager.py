@@ -122,6 +122,7 @@ class DbManager(object):
             ('MaxY', 'INT'),
             ('InsertionTime', 'INT'),
             ('UserID', 'TEXT'),
+            ('Notes', 'TEXT'),
         ]
 
         # all the detection squares ever found. anything from 0 to 1.0
