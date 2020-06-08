@@ -1,6 +1,6 @@
 # Wildfire detection
 
-[Wildfire detection](https://fuego.ssl.berkeley.edu/smoke-detection/) system leverages machine learning techniques to detect smoke in images from real time cameras from vantage points.  This repository contains all the code for collecting training data, training the model, and fetching images from cameras, checking for smoke, and notifying interested folks.  The repository also contains datasets used for training the model.
+[Wildfire detection](https://openclimatetech.org/#projects) system leverages machine learning techniques to detect smoke in images from real time cameras from vantage points.  This repository contains all the code for collecting training data, training the model, and fetching images from cameras, checking for smoke, and notifying interested folks.  The repository also contains datasets used for training the model.
 
 The following [paper](https://doi.org/10.3390/rs12010166) published in Remote Sensing journal provides much of the background for this project.
 

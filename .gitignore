@@ -6,6 +6,8 @@
 #py files
 __pycache__
 *.egg-info/
+build/
+dist/
 
 # keys and configs
 credentials.json
