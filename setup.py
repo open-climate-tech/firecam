@@ -36,7 +36,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="oct-firecam",
-    version="0.1.1",
+    version="0.1.2",
     author="Open Climate Tech",
     description="Detect wildfires from camera images",
     long_description=long_description,

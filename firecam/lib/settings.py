@@ -40,6 +40,8 @@ def findSettingsFile():
         return os.path.join(userPath, 'Desktop', settingsName)
     elif os.path.exists(os.path.join(userPath, 'Documents', settingsName)):
         return os.path.join(userPath, 'Documents', settingsName)
+    elif os.path.exists(os.path.join(userPath, 'Downloads', settingsName)):
+        return os.path.join(userPath, 'Downloads', settingsName)
     raise Exception('Could not locate settings file')
 
 
@@ -52,11 +54,16 @@ def readSettingsFile():
     settingsPath = os.environ['OCT_FIRE_SETTINGS'] if 'OCT_FIRE_SETTINGS' in os.environ else None
     if not settingsPath:
         settingsPath = findSettingsFile()
+        logging.warning('Using settings from %s', settingsPath)
     settingsStr = goog_helper.readFile(settingsPath)
     settingsDict = json.loads(settingsStr)
     # logging.warning('settings %s', settingsDict)
     return settingsDict
 
+
+# configure logging module to add timestamps and pid, and to silence useless logs
+logging.getLogger('googleapiclient.discovery_cache').setLevel(logging.ERROR) # silence googleapiclient logs
+logging.basicConfig(format='%(asctime)s.%(msecs)03d: %(process)d: %(message)s', datefmt='%F %T')
 
 # set module attributes based on json file data
 settingsJson = readSettingsFile()
@@ -65,8 +72,3 @@ for (key, val) in settingsJson.items():
     # set environment variable GOOGLE_APPLICATION_CREDENTIALS if value is specified in config
     if (key == 'gcpServiceKey') and val and not os.environ.get('GOOGLE_APPLICATION_CREDENTIALS'):
         os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = val
-
-
-# configure logging module to add timestamps and pid, and to silence useless logs
-logging.getLogger('googleapiclient.discovery_cache').setLevel(logging.ERROR) # silence googleapiclient logs
-logging.basicConfig(format='%(asctime)s.%(msecs)03d: %(process)d: %(message)s', datefmt='%F %T')

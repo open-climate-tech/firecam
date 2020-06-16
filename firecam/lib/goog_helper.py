@@ -178,7 +178,7 @@ def getStorageClient():
         try:
             storageClient = storage.Client()
         except Exception as e:
-            logging.warning('Error creating client with default auth.  Retrying anon. %s', str(e))
+            logging.warning('Using anon GCS access')
             storageClient = storage.Client.create_anonymous_client()
 
     getStorageClient.cachedClient = storageClient
