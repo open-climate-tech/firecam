@@ -36,7 +36,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="oct-firecam",
-    version="0.1.0",
+    version="0.1.1",
     author="Open Climate Tech",
     description="Detect wildfires from camera images",
     long_description=long_description,
@@ -54,7 +54,6 @@ setuptools.setup(
         'requests',
         'numpy',
         'pillow',
-        'psycopg2',
         'oauth2client',
         'google-api-python-client',
         'google-cloud-storage',

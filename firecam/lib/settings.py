@@ -49,7 +49,7 @@ def readSettingsFile():
     Returns:
         dict with parsed settings JSON
     """
-    settingsPath = os.environ['OCT_FIRE_SETTINGS']
+    settingsPath = os.environ['OCT_FIRE_SETTINGS'] if 'OCT_FIRE_SETTINGS' in os.environ else None
     if not settingsPath:
         settingsPath = findSettingsFile()
     settingsStr = goog_helper.readFile(settingsPath)

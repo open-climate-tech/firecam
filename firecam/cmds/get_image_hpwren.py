@@ -21,17 +21,21 @@ cameras matching one of following two specs:
 
 """
 
+import logging
+import time, datetime, dateutil.parser
+import math
+import re
+
 import os, sys
 from firecam.lib import settings
 from firecam.lib import collect_args
 from firecam.lib import goog_helper
 from firecam.lib import img_archive
-from firecam.lib import db_manager
-
-import logging
-import time, datetime, dateutil.parser
-import math
-import re
+# Most users don't need DB, so just ignore if DB load fails
+try:
+    from firecam.lib import db_manager
+except Exception as e:
+    pass
 
 
 def getHeading(lat_diff, long_diff):
