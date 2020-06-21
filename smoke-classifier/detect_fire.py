@@ -214,7 +214,7 @@ def genAnnotatedImages(constants, cameraID, timestamp, imgPath, fireSegment):
     (cropY0, cropY1) = stretchBounds(y0, y1, img.size[1])
     cropCoords = (cropX0, cropY0, cropX1, cropY1)
     # get images spanning a few minutes so reviewers can evaluate based on progression
-    startTimeDT = datetime.datetime.fromtimestamp(timestamp - 5*60)
+    startTimeDT = datetime.datetime.fromtimestamp(timestamp - 4*60)
     endTimeDT = datetime.datetime.fromtimestamp(timestamp - 1*60)
 
     with tempfile.TemporaryDirectory() as tmpDirName:
