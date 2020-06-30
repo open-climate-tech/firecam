@@ -22,76 +22,70 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import logging
 import numpy as np
 import tensorflow as tf
+import time
 
-def load_graph(model_file):
-    graph = tf.Graph()
-    graph_def = tf.GraphDef()
+def loadModel(modelPath):
+    """Load from given keras model
 
-    with open(model_file, "rb") as f:
-        graph_def.ParseFromString(f.read())
-    with graph.as_default():
-        tf.import_graph_def(graph_def)
+    Args:
+        modelPath (str): path to model dir
 
-    return graph
+    Returns:
+        Model object
+    """
+    return tf.keras.models.load_model(modelPath)
 
 
-def load_labels(label_file):
-    label = []
-    proto_as_ascii_lines = tf.gfile.GFile(label_file).readlines()
-    for l in proto_as_ascii_lines:
-        label.append(l.rstrip())
-    return label
+def classifySegments(model, cropsNormalized, segments):
+    """Classify even segment with given model.  Segments are specified by two parallel list
+       (one with raw data, other with metadata)
 
-def classifySegments(tfSession, graph, labels, segments):
-    input_height = 299
-    input_width = 299
-    # These commented out values are appropriate for tf_retrain
-    # https://github.com/tensorflow/hub/raw/master/examples/image_retraining/retrain.py
+    Args:
+        model: model object from loadModel call above
+        cropsNormalized (list): list of np arrays containing normalized image data
+        segments (list): parallel list of metadata associated with each cropNormalized array
 
-    # input_mean = 0
-    # input_std = 255
-    # input_layer = "Placeholder"
-    # output_layer = "final_result"
+    Returns:
+        list of results of classification
+    """
+    # assuming crops is alrady normalized (done by cutBoxesArray)
+    results = model.predict(cropsNormalized)
+    # logging.warning('Results: %s', str(results))
+    for i,scores in enumerate(results):
+        segments[i]['score'] = scores[1]
+    return results
 
-    # These values we're using now are appropriate for the fine-tuning and full training models
-    # https://github.com/tensorflow/models/tree/master/research/slim
-    input_mean = 128
-    input_std = 128
-    input_layer = "input"
-    output_layer = "InceptionV3/Predictions/Reshape_1"
 
-    input_name = "import/" + input_layer
-    output_name = "import/" + output_layer
-    input_operation = graph.get_operation_by_name(input_name)
-    output_operation = graph.get_operation_by_name(output_name)
+# "frozen" variant is experimental code
+def _wrap_frozen_graph(graph_def, inputs, outputs):
+    def _imports_graph_def():
+        tf.compat.v1.import_graph_def(graph_def, name="")
+    wrapped_import = tf.compat.v1.wrap_function(_imports_graph_def, [])
+    import_graph = wrapped_import.graph
+    return wrapped_import.prune(
+        tf.nest.map_structure(import_graph.as_graph_element, inputs),
+        tf.nest.map_structure(import_graph.as_graph_element, outputs))
 
-    with tf.Graph().as_default():
-        input_name = "file_reader"
-        output_name = "normalized"
-        file_name_placeholder = tf.placeholder(tf.string, shape=[])
-        file_reader = tf.read_file(file_name_placeholder, input_name)
-        image_reader = tf.image.decode_jpeg(file_reader, channels=3, name="jpeg_reader",dct_method="INTEGER_ACCURATE")
-        float_caster = tf.cast(image_reader, tf.float32)
-        dims_expander = tf.expand_dims(float_caster, 0)
-        resized = tf.image.resize_bilinear(dims_expander, [input_height, input_width])
-        normalized = tf.divide(tf.subtract(resized, [input_mean]), [input_std])
 
-        with tf.Session() as sess:
-            for segmentInfo in segments:
-                imgPath = segmentInfo['imgPath']
-                # print(imgPath)
-                t = sess.run(normalized, {file_name_placeholder: imgPath})
+def loadFrozenModelTf2(model_file):
+    with tf.io.gfile.GFile(model_file, "rb") as f:
+        graph_def = tf.compat.v1.GraphDef()
+        loaded = graph_def.ParseFromString(f.read())
 
-                results = tfSession.run(output_operation.outputs[0], {
-                    input_operation.outputs[0]: t
-                })
-                results = np.squeeze(results)
+    # Wrap frozen graph to ConcreteFunctions
+    frozen_func = _wrap_frozen_graph(graph_def=graph_def,
+                                    inputs=["x:0"],
+                                    outputs=["Identity:0"])
+    return frozen_func
 
-                top_k = results.argsort()[-5:][::-1]
-                # for i in top_k:
-                #     print(labels[i], results[i])
-                smokeIndex = labels.index('smoke')
-                # print(imgPath, results[smokeIndex])
-                segmentInfo['score'] = results[smokeIndex]
+
+def classifyFrozenTf2(model, cropsNormalized, segments):
+    cropsNormalized = tf.convert_to_tensor(cropsNormalized)
+    results = model(x=cropsNormalized)
+    # logging.warning('Results: %s', str(results))
+    for i,scores in enumerate(results[0]):
+        segments[i]['score'] = scores[1].numpy()
+    return results

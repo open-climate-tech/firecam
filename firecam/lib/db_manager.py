@@ -165,6 +165,14 @@ class DbManager(object):
             ('CroppedID', 'TEXT'),
         ]
 
+        # votes regarding alerts
+        votes_schema = [
+            ('CameraName', 'TEXT'),
+            ('Timestamp', 'INT'),
+            ('IsRealFire', 'INT'),
+            ('UserID', 'TEXT'),
+        ]
+
         # who to notify via email and SMS
         notifications_schema = [
             ('Name', 'TEXT'),
@@ -185,6 +193,7 @@ class DbManager(object):
             'scores': scores_schema,
             'detections': detections_schema,
             'alerts': alerts_schema,
+            'votes': votes_schema,
             'notifications': notifications_schema,
         }
 
