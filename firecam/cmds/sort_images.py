@@ -56,8 +56,10 @@ def uploadCoords(coords, newPath, googleServices, notes):
         'maxY': coords[3],
         'notes': notes,
     }
-    response = requests.post(settings.gcfLabelUrl, headers=headers, data=gcfParams)
-    return response.content
+    rawResponse = requests.post(settings.gcfLabelUrl, headers=headers, data=gcfParams)
+    response = rawResponse.content.decode()
+    if response != 'done':
+        raise ValueError('Failed to upload to cloud (%s, %s).  Please retry' % (response, rawResponse))
 
 
 def processFolder(imgDirectory, googleServices, notes):

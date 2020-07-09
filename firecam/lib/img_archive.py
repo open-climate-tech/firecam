@@ -344,8 +344,11 @@ def gcfFfmpeg(gcfUrl, googleServices, hpwrenSource, qNum, folderID):
         'qNum': qNum,
         'uploadDir': folderID
     }
-    response = requests.post(gcfUrl, headers=headers, data=gcfParams)
-    return response.content
+    rawResponse = requests.post(gcfUrl, headers=headers, data=gcfParams)
+    response = rawResponse.content.decode()
+    if response != 'done':
+        raise ValueError('Failed to upload to cloud (%s, %s).  Please retry' % (response, rawResponse))
+    return response
 
 
 def getGCSMp4(googleServices, settings, hpwrenSource, qNum):
