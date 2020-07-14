@@ -86,6 +86,13 @@ class DbManager(object):
             ('counter', 'INT')
         ]
 
+        # useful regions of the image (e.g. to avoid sky high above horizon)
+        usable_regions_schema = [
+            ('CameraName', 'TEXT'),
+            ('StartY', 'INT'),
+            ('EndY', 'INT'),
+        ]
+
         fires_schema = [
             ('Name', 'TEXT'),
             ('Url', 'TEXT'),
@@ -187,6 +194,7 @@ class DbManager(object):
         self.tables = {
             'sources': sources_schema,
             'counters': counters_schema,
+            'usable_regions': usable_regions_schema,
             'fires': fires_schema,
             'cameras': cameras_schema,
             'bbox': bbox_schema,
@@ -325,6 +333,22 @@ class DbManager(object):
             sqlStr += ' where ' + ' and '.join(constraints)
         sqlStr += ' order by randomID, name'
         return self.query(sqlStr)
+
+
+    def get_usable_regions_dict(self):
+        dictRes = {}
+        sqlStr = "SELECT * FROM usable_regions"
+        res = self.query(sqlStr)
+        for entry in res:
+            startY = entry['starty'] if 'starty' in entry else None
+            startY = entry['StartY'] if 'StartY' in entry else startY
+            endY = entry['endy'] if 'endy' in entry else None
+            endY = entry['EndY'] if 'EndY' in entry else endY
+            dictRes[entry['cameraname']] = {
+                'startY': startY,
+                'endY': endY
+            }
+        return dictRes
 
 
     def add_url(self, url, urlname):

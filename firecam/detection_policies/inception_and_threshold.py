@@ -69,7 +69,7 @@ class InceptionV3AndHistoricalThreshold:
             self.model = tf_helper.loadModel(modelLocation)
 
 
-    def _segmentImage(self, imgPath):
+    def _segmentImage(self, imgPath, startY, endY):
         """Segment the given image into sections to for smoke classificaiton
 
         Args:
@@ -79,12 +79,12 @@ class InceptionV3AndHistoricalThreshold:
             List of dictionary containing information on each segment
         """
         img = Image.open(imgPath)
-        crops, segments = rect_to_squares.cutBoxesArray(img)
+        crops, segments = rect_to_squares.cutBoxesArray(img, startY, endY)
         img.close()
         return crops, segments
 
 
-    def _segmentAndClassify(self, imgPath):
+    def _segmentAndClassify(self, imgPath, startY, endY):
         """Segment the given image into squares and classify each square
 
         Args:
@@ -93,7 +93,7 @@ class InceptionV3AndHistoricalThreshold:
         Returns:
             list of segments with scores sorted by decreasing score
         """
-        crops, segments = self._segmentImage(imgPath)
+        crops, segments = self._segmentImage(imgPath, startY, endY)
         if len(crops) == 0:
             return []
         # testMode fakes all scores
@@ -288,7 +288,9 @@ class InceptionV3AndHistoricalThreshold:
         detectionResult = {
             'fireSegment': None
         }
-        segments = self._segmentAndClassify(imgPath)
+        startY = last_image_spec['startY'] if 'startY' in last_image_spec else 0
+        endY = last_image_spec['endY'] if 'endY' in last_image_spec else None
+        segments = self._segmentAndClassify(imgPath, startY, endY)
         detectionResult['segments'] = segments
         detectionResult['timeMid'] = time.time()
         if len(segments) == 0: # happens sometimes when camera is malfunctioning

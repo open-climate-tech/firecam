@@ -111,7 +111,7 @@ def cutBoxesFiles(imgOrig, outputDirectory, imageFileName, callBackFn=None):
     return segments
 
 
-def cutBoxesArray(imgOrig):
+def cutBoxesArray(imgOrig, startY=0, endY=None):
     """Cut the given image into fixed size boxes, normalize data, and return as np arrays
 
     Divide the given image into square segments of 299x299 (segmentSize below)
@@ -127,7 +127,10 @@ def cutBoxesArray(imgOrig):
     """
     segmentSize = 299
     xRanges = getSegmentRanges(imgOrig.size[0], segmentSize)
-    yRanges = getSegmentRanges(imgOrig.size[1], segmentSize)
+    if endY == None:
+        endY = imgOrig.size[1]
+    yRanges = getSegmentRanges(endY - startY, segmentSize)
+    yRanges = list(map(lambda x: (x[0] + startY, x[1] + startY), yRanges))
 
     crops = []
     segments = []

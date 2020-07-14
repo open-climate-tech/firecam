@@ -566,6 +566,7 @@ def main():
                                     psqlHost=settings.psqlHost, psqlDb=settings.psqlDb,
                                     psqlUser=settings.psqlUser, psqlPasswd=settings.psqlPasswd)
     cameras = dbManager.get_sources(activeOnly=True, restrictType=args.restrictType)
+    usableRegions = dbManager.get_usable_regions_dict()
     startTimeDT = dateutil.parser.parse(args.startTime) if args.startTime else None
     endTimeDT = dateutil.parser.parse(args.endTime) if args.endTime else None
     timeRangeSeconds = None
@@ -607,6 +608,12 @@ def main():
         image_spec[-1]['path'] = classifyImgPath
         image_spec[-1]['timestamp'] = timestamp
         image_spec[-1]['cameraID'] = cameraID
+        if cameraID in usableRegions:
+            usableEntry = usableRegions[cameraID]
+            if 'startY' in usableEntry:
+                image_spec[-1]['startY'] = usableEntry['startY']
+            if 'endY' in usableEntry:
+                image_spec[-1]['endY'] = usableEntry['endY']
 
         detectionResult = detectionPolicy.detect(image_spec)
         timeDetect = time.time()
