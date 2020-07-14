@@ -25,8 +25,8 @@ from __future__ import print_function
 import os, sys
 from firecam.lib import settings
 from firecam.lib import collect_args
-from firecam.lib import rect_to_squares
-from firecam.lib import tf_helper
+from firecam.lib import img_archive
+from firecam.detection_policies import policies
 
 import logging
 import pathlib
@@ -124,21 +124,23 @@ def main():
     ]
     args = collect_args.collectArgs(reqArgs, optionalArgs=optArgs)
     model_file = args.model if args.model else settings.model_file
-
+    DetectionPolicyClass = policies.get_policies()[settings.detectionPolicy]
+    detectionPolicy = DetectionPolicyClass(args, None, 0, stateless=True, modelLocation=model_file)
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-    segments = []
 
-    model = tf_helper.loadModel(model_file)
-    imgOrig = Image.open(args.image)
-    crops, segments = rect_to_squares.cutBoxesArray(imgOrig)
-    tf_helper.classifySegments(model, crops, segments)
+    nameParsed = img_archive.parseFilename(args.image)
+    image_spec = [{}]
+    image_spec[-1]['path'] = args.image
+    image_spec[-1]['timestamp'] = nameParsed['unixTime']
+    image_spec[-1]['cameraID'] = nameParsed['cameraID']
+    detectionResult = detectionPolicy.detect(image_spec)
 
-
-    for segmentInfo in segments:
+    for segmentInfo in detectionResult['segments']:
         # print(segmentInfo['imgPath'], segmentInfo['score'])
         print(segmentInfo['MinX'], segmentInfo['MinY'], segmentInfo['score'])
     if args.display:
-        drawBoxesAndScores(imgOrig, segments)
+        imgOrig = Image.open(args.image)
+        drawBoxesAndScores(imgOrig, detectionResult['segments'])
         displayImageWithScores(imgOrig, [])
 
 
