@@ -120,6 +120,7 @@ def main():
     ]
     optArgs = [
         ["m", "model", "model file generated during retraining"],
+        ["s", "startY", "(optional) startY override", int],
         ["d", "display", "(optional) specify any value to display image and boxes"]
     ]
     args = collect_args.collectArgs(reqArgs, optionalArgs=optArgs)
@@ -133,6 +134,8 @@ def main():
     image_spec[-1]['path'] = args.image
     image_spec[-1]['timestamp'] = nameParsed['unixTime']
     image_spec[-1]['cameraID'] = nameParsed['cameraID']
+    if args.startY:
+        image_spec[-1]['startY'] = args.startY
     detectionResult = detectionPolicy.detect(image_spec)
 
     for segmentInfo in detectionResult['segments']:

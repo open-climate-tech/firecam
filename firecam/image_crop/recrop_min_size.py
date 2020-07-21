@@ -199,7 +199,7 @@ def appendIfDifferent(array, newItem):
         array.append(newItem)
 
 
-def getCropCoords(smokeCoords, minDiffX, minDiffY, growRatio, imgSize):
+def getCropCoords(smokeCoords, minDiffX, minDiffY, growRatio, imgSize, centerOnly=False):
     cropCoords = []
     (minX, minY, maxX, maxY) = smokeCoords
     (imgSizeX, imgSizeY) = imgSize
@@ -207,6 +207,8 @@ def getCropCoords(smokeCoords, minDiffX, minDiffY, growRatio, imgSize):
     (newMinX, newMaxX) = expandMinAndMax(minX, maxX, minDiffX, growRatio, 0, imgSizeX)
     (newMinY, newMaxY) = expandMinAndMax(minY, maxY, minDiffY, growRatio, 0, imgSizeY)
     appendIfDifferent(cropCoords, (newMinX, newMinY, newMaxX, newMaxY))
+    if centerOnly:
+        return cropCoords
     #top left box
     (newMinX, newMaxX) = expandMax75(minX, maxX, minDiffX, growRatio, 0, imgSizeX)
     (newMinY, newMaxY) = expandMax75(minY, maxY, minDiffY, growRatio, 0, imgSizeY)
@@ -241,7 +243,7 @@ def main():
         ["t", "throwSize", "(optional) override default throw away size of 598x598"],
         ["g", "growRatio", "(optional) override default grow ratio of 1.2"],
         ["m", "minusMinutes", "(optional) subtract images from given number of minutes ago"],
-        ["r", "review", "(optional) download original crops without augmentation"],
+        ["r", "review", "(optional) review modes: 'raw' or 'center'"],
     ]
     args = collect_args.collectArgs(reqArgs, optionalArgs=optArgs, parentParsers=[goog_helper.getParentParser()])
     startRow = int(args.startRow) if args.startRow else 0
@@ -269,7 +271,7 @@ def main():
             if rowIndex > endRow:
                 print('Reached end row', rowIndex, endRow)
                 break
-            [cropName, minX, minY, maxX, maxY, fileName] = csvRow[:6]
+            [_unused_cropName, minX, minY, maxX, maxY, fileName] = csvRow[:6]
             minX = int(minX)
             minY = int(minY)
             maxX = int(maxX)
@@ -319,12 +321,12 @@ def main():
                 fileNameParts = os.path.splitext(fileName)
                 fileName = str(fileNameParts[0]) + ('_Diff%d' % minusMinutes) + fileNameParts[1]
 
-            if args.review:
+            if args.review == 'raw':
                 cropCoords = [oldCoords]
             else:
                 # crop the full sized image to show just the smoke, but shifted and flipped
                 # shifts and flips increase number of segments for training and also prevent overfitting by perturbing data
-                cropCoords = getCropCoords((minX, minY, maxX, maxY), minDiffX, minDiffY, growRatio, (imgOrig.size[0], imgOrig.size[1]))
+                cropCoords = getCropCoords((minX, minY, maxX, maxY), minDiffX, minDiffY, growRatio, (imgOrig.size[0], imgOrig.size[1]), args.review == 'center')
             for newCoords in cropCoords:
                 # XXXX - save work if old=new?
                 logging.warning('coords old %s, new %s', str(oldCoords), str(newCoords))
