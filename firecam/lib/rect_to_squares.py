@@ -129,6 +129,8 @@ def cutBoxesArray(imgOrig, startY=0, endY=None):
     xRanges = getSegmentRanges(imgOrig.size[0], segmentSize)
     if endY == None:
         endY = imgOrig.size[1]
+    elif endY < 0:
+        endY = imgOrig.size[1] + endY
     yRanges = getSegmentRanges(endY - startY, segmentSize)
     yRanges = list(map(lambda x: (x[0] + startY, x[1] + startY), yRanges))
 

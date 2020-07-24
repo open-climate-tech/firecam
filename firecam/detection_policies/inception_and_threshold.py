@@ -279,7 +279,7 @@ class InceptionV3AndHistoricalThreshold:
         return fileID
 
 
-    def detect(self, image_spec):
+    def detect(self, image_spec, silent=False):
         # This detection policy only uses a single image, so just take the last one
         last_image_spec = image_spec[-1]
         imgPath = last_image_spec['path']
@@ -297,12 +297,16 @@ class InceptionV3AndHistoricalThreshold:
             return detectionResult
         if getattr(self.args, 'collectPositves', None):
             self._collectPositves(imgPath, segments)
-        if not self.stateless:
+        if self.stateless:
+            if segments[0]['score'] > 0.5:
+                detectionResult['fireSegment'] = segments[0]
+        else:
             self._recordScores(cameraID, timestamp, segments)
             fireSegment = self._postFilter(cameraID, timestamp, segments)
             if fireSegment:
                 self._recordDetection(cameraID, timestamp, imgPath, fireSegment)
                 detectionResult['fireSegment'] = fireSegment
-        logging.warning('Highest score for camera %s: %f' % (cameraID, segments[0]['score']))
+        if not silent:
+            logging.warning('Highest score for camera %s: %f' % (cameraID, segments[0]['score']))
 
         return detectionResult
