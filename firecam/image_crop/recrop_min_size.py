@@ -38,6 +38,7 @@ from firecam.lib import goog_helper
 from firecam.lib import img_archive
 from firecam.lib import rect_to_squares
 
+import random
 import datetime
 import logging
 import csv
@@ -92,108 +93,60 @@ def displayImageWithScores(imgOrig, segments):
     rootTk.mainloop()
 
 
-def expandMinAndMax(val0, val1, minimumDiff, growRatio, minLimit, maxLimit):
-    """Expand the image dimension range
+def getRangeFromCenter(center, size, minLimit, maxLimit):
+    """Get linear range from center given constraints
 
-    Inceases the min/max of the range by growRatio while maintaining
-    the same center. Also, ensures the range is at least minimumDiff.
-    Finally, limits the increases to ensure values are still within
-    the entire range of the image (minLimit, maxLimit)
+    Return (min,max) pair with given range within (minLimit, maxLimit)
+    ideally centered at given center
 
     Args:
-        val0 (int): starting (minimum) value of the input range
-        val1 (int): ending (maximum) value of the input range
-        minimumDiff (int): mimimum size of the output range
-        growRatio (float): ratio (expected > 1) to expand the range by
+        cneter (int): desired center
+        size (int): size of the output range
         minLimit (int): absolute minimum value of the output range
         maxLimit (int): absolute maximum value of the output range
 
     Returns:
-        (int, int): start, end of the adjusted range
+        (int, int): start, end of the range
     """
-    val0 = max(val0, minLimit)
-    val1 = min(val1, maxLimit)
-    diff = val1 - val0
-    center = val0 + int(diff/2)
-    minimumDiff = max(minimumDiff, int(diff*growRatio))
-    if diff < minimumDiff:
-        if (center - int(minimumDiff/2)) < minLimit:   # left edge limited
-            val0 = minLimit
-            val1 = min(val0 + minimumDiff, maxLimit)
-        elif (center + int(minimumDiff/2)) > maxLimit: # right edge limited
-            val1 = maxLimit
-            val0 = max(val1 - minimumDiff, minLimit)
-        else:                                          # unlimited
-            val0 = center - int(minimumDiff/2)
-            val1 = min(val0 + minimumDiff, maxLimit)
+    if (center - int(size/2)) <= minLimit:   # left edge limited
+        val0 = minLimit
+        val1 = min(val0 + size, maxLimit)
+        # print('left', val0, val1, center, size)
+    elif (center + int(size/2)) >= maxLimit: # right edge limited
+        val1 = maxLimit
+        val0 = max(val1 - size, minLimit)
+        # print('right', val0, val1, center, size)
+    else:                                   # unlimited
+        val0 = center - int(size/2)
+        val1 = min(val0 + size, maxLimit)
+        # print('center', val0, val1, center, size)
     return (val0, val1)
 
 
-def expandMax(val0, val1, minimumDiff, growRatio, minLimit, maxLimit):
-    val0 = max(val0, minLimit)
-    val1 = min(val1, maxLimit)
-    diff = val1 - val0
-    minimumDiff = max(minimumDiff, int(diff*growRatio))
-    if diff < minimumDiff:
-        if val0 + minimumDiff < maxLimit:
-            minVal = val0
-            maxVal = val0 + minimumDiff
-        else:
-            maxVal = maxLimit
-            minVal = max(maxVal - minimumDiff, minLimit)
-    else:
-        minVal = val0
-        maxVal = val1
-    return (minVal, maxVal)
+def randomInRange(borders, avoidCenter, size):
+    """Return (x,y) random pair in range
 
-
-def expandMax75(val0, val1, minimumDiff, growRatio, minLimit, maxLimit):
-    val0 = max(val0, minLimit)
-    val1 = min(val1, maxLimit)
-    diff = val1 - val0
-    minimumDiff = max(minimumDiff, int(diff*growRatio))
-    if (diff < minimumDiff/2):
-        center = val0 + int(diff/2)
-        minVal = max(center - int(minimumDiff/4), minLimit)
-        maxVal = min(center + int(minimumDiff/4), maxLimit)
-        return expandMax(minVal, maxVal, minimumDiff, growRatio, minLimit, maxLimit)
-    else:
-        return expandMax(val0, val1, minimumDiff, growRatio, minLimit, maxLimit)
-
-
-def expandMin(val0, val1, minimumDiff, growRatio, minLimit, maxLimit):
-    val0 = max(val0, minLimit)
-    val1 = min(val1, maxLimit)
-    diff = val1 - val0
-    minimumDiff = max(minimumDiff, int(diff*growRatio))
-    if diff < minimumDiff:
-        if val1 - minimumDiff >= minLimit:
-            maxVal = val1
-            minVal = maxVal - minimumDiff
-        else:
-            minVal = minLimit
-            maxVal = min(minVal + minimumDiff, maxLimit)
-    else:
-        minVal = val0
-        maxVal = val1
-    return (minVal, maxVal)
-
-
-def expandMin75(val0, val1, minimumDiff, growRatio, minLimit, maxLimit):
-    val0 = max(val0, minLimit)
-    val1 = min(val1, maxLimit)
-    diff = val1 - val0
-    minimumDiff = max(minimumDiff, int(diff*growRatio))
-    if (diff < minimumDiff/2):
-        center = val0 + int(diff/2)
-        minVal = max(center - int(minimumDiff/4), minLimit)
-        maxVal = min(center + int(minimumDiff/4), maxLimit)
-        return expandMin(minVal, maxVal, minimumDiff, growRatio, minLimit, maxLimit)
-    else:
-        return expandMin(val0, val1, minimumDiff, growRatio, minLimit, maxLimit)
+    x,y values are randomly chosen between [0, size/2 - border] such that (x,y) represent
+    a vector from the cneter (sizeX/2, sizeY/2) that still avoids the borders.
+    Second constraint is that if (x,y) randomly fall inside avoidCenter rectangular region,
+    then they set both set to max values (sizeX/2 - borderX, sizeY/2 - borderY)
+    """
+    (borderX, borderY) = borders
+    (avoidCenterX, avoidCenterY) = avoidCenter
+    (sizeX, sizeY) = size
+    randX = int(random.random() * (sizeX/2 - borderX))
+    # print('rx', randX, int(sizeX/2 - borderX))
+    randY = int(random.random() * (sizeY/2 - borderY))
+    # print('ry', randY, int(sizeY/2 - borderY))
+    if (randX < avoidCenterX) and (randY < avoidCenterY):
+        randX = int(sizeX/2 - borderX)
+        randY = int(sizeY/2 - borderY)
+        # print('rxy borders', randX, randY)
+    return (randX, randY)
 
 
 def appendIfDifferent(array, newItem):
+    # print('aid', newItem)
     hasAlready = list(filter(lambda x: x==newItem, array))
     if not hasAlready:
         array.append(newItem)
@@ -203,27 +156,51 @@ def getCropCoords(smokeCoords, minDiffX, minDiffY, growRatio, imgSize, centerOnl
     cropCoords = []
     (minX, minY, maxX, maxY) = smokeCoords
     (imgSizeX, imgSizeY) = imgSize
+    # ensure bounds are within image size (no negatives or greater than image size)
+    minX = max(minX, 0)
+    minY = max(minY, 0)
+    maxX = min(maxX, imgSizeX)
+    maxY = min(maxY, imgSizeY)
+
+    centerX = int((minX + maxX) / 2)
+    centerY = int((minY + maxY) / 2)
+    origSizeX = maxX - minX
+    origSizeY = maxY - minY
+    sizeX = max(minDiffX, int(origSizeX*growRatio))
+    sizeY = max(minDiffY, int(origSizeY*growRatio))
+
     #centered box
-    (newMinX, newMaxX) = expandMinAndMax(minX, maxX, minDiffX, growRatio, 0, imgSizeX)
-    (newMinY, newMaxY) = expandMinAndMax(minY, maxY, minDiffY, growRatio, 0, imgSizeY)
+    (newMinX, newMaxX) = getRangeFromCenter(centerX, sizeX, 0, imgSizeX)
+    (newMinY, newMaxY) = getRangeFromCenter(centerY, sizeY, 0, imgSizeY)
     appendIfDifferent(cropCoords, (newMinX, newMinY, newMaxX, newMaxY))
     if centerOnly:
         return cropCoords
+
+
+    borderX = int(origSizeX / 2)
+    borderY = int(origSizeY / 2)
+    avoidCenterX = int(origSizeX / 4)
+    avoidCenterY = int(origSizeY / 4)
+
     #top left box
-    (newMinX, newMaxX) = expandMax75(minX, maxX, minDiffX, growRatio, 0, imgSizeX)
-    (newMinY, newMaxY) = expandMax75(minY, maxY, minDiffY, growRatio, 0, imgSizeY)
+    (randX, randY) = randomInRange((borderX, borderY), (avoidCenterX, avoidCenterY), (sizeX, sizeY))
+    (newMinX, newMaxX) = getRangeFromCenter(centerX - randX, sizeX, 0, imgSizeX)
+    (newMinY, newMaxY) = getRangeFromCenter(centerY - randY, sizeY, 0, imgSizeY)
     appendIfDifferent(cropCoords, (newMinX, newMinY, newMaxX, newMaxY))
     #top right box
-    (newMinX, newMaxX) = expandMax75(minX, maxX, minDiffX, growRatio, 0, imgSizeX)
-    (newMinY, newMaxY) = expandMin75(minY, maxY, minDiffY, growRatio, 0, imgSizeY)
+    (randX, randY) = randomInRange((borderX, borderY), (avoidCenterX, avoidCenterY), (sizeX, sizeY))
+    (newMinX, newMaxX) = getRangeFromCenter(centerX + randX, sizeX, 0, imgSizeX)
+    (newMinY, newMaxY) = getRangeFromCenter(centerY - randY, sizeY, 0, imgSizeY)
     appendIfDifferent(cropCoords, (newMinX, newMinY, newMaxX, newMaxY))
     #bottom left box
-    (newMinX, newMaxX) = expandMin75(minX, maxX, minDiffX, growRatio, 0, imgSizeX)
-    (newMinY, newMaxY) = expandMax75(minY, maxY, minDiffY, growRatio, 0, imgSizeY)
+    (randX, randY) = randomInRange((borderX, borderY), (avoidCenterX, avoidCenterY), (sizeX, sizeY))
+    (newMinX, newMaxX) = getRangeFromCenter(centerX - randX, sizeX, 0, imgSizeX)
+    (newMinY, newMaxY) = getRangeFromCenter(centerY + randY, sizeY, 0, imgSizeY)
     appendIfDifferent(cropCoords, (newMinX, newMinY, newMaxX, newMaxY))
     #bottom right box
-    (newMinX, newMaxX) = expandMin75(minX, maxX, minDiffX, growRatio, 0, imgSizeX)
-    (newMinY, newMaxY) = expandMin75(minY, maxY, minDiffY, growRatio, 0, imgSizeY)
+    (randX, randY) = randomInRange((borderX, borderY), (avoidCenterX, avoidCenterY), (sizeX, sizeY))
+    (newMinX, newMaxX) = getRangeFromCenter(centerX + randX, sizeX, 0, imgSizeX)
+    (newMinY, newMaxY) = getRangeFromCenter(centerY + randY, sizeY, 0, imgSizeY)
     appendIfDifferent(cropCoords, (newMinX, newMinY, newMaxX, newMaxY))
     return cropCoords
 
@@ -255,6 +232,7 @@ def main():
     minArea = int(args.minArea) if args.minArea else int(299*2.99)
     minusMinutes = int(args.minusMinutes) if args.minusMinutes else 0
 
+    random.seed(0)
     googleServices = goog_helper.getGoogleServices(settings, args)
     camArchives = img_archive.getHpwrenCameraArchives(settings.hpwrenArchives)
     if minusMinutes:

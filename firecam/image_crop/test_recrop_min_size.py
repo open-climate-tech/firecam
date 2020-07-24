@@ -23,47 +23,40 @@ import pytest
 
 
 
-def test_imageDisplay():
-	#(imgOrig, title=''):
-	print( "not implemented")
-def test_buttonClick():
-	#(event):
-	print( "not implemented")
-def test_displayImageWithScores():
-	#(imgOrig, segments):
-	print( "not implemented")
 def test_getCameraDir():
 	#(service, cameraCache, fileName):
 	#need to figure out where it is used
 	print( "not implemented")
-def test_expandMinAndMax():
-	#(val0, val1, minimumDiff, growRatio, minLimit, maxLimit):
-	#expandMinAndMax(val0, val1, minimumDiff, growRatio, minLimit, maxLimit) ==> (val0, val1)
-	assert recrop_min_size.expandMinAndMax(3, 6, 3, 1, 3, 6) == (3, 6)
-	assert recrop_min_size.expandMinAndMax(3, 6, 5, 1, 2, 7) == (2, 7)
-	assert recrop_min_size.expandMinAndMax(3, 6, 2, 2, 1, 20) == (1, 7)
-	assert recrop_min_size.expandMinAndMax(3, 6, 10, 2, 1, 20) == (1, 11)
-def test_expandMax():
-	#(val0, val1, minimumDiff, growRatio, minLimit, maxLimit):
-	assert recrop_min_size.expandMax(1, 10,5 ,1 ,3,7 ) == (3,7 )
-	assert recrop_min_size.expandMax(0, 49,50 ,2 ,0,100 ) == (0,98 )
-	assert recrop_min_size.expandMax(1, 10,2 ,1 ,3,7 ) == (3,7 )
-	assert recrop_min_size.expandMax(6, 8,4 ,2 ,0,10 ) == (6,10 )
-def test_expandMax75():
-	#(val0, val1, minimumDiff, growRatio, minLimit, maxLimit):  
-	assert recrop_min_size.expandMax75(49,51 ,6 ,2 ,0 ,100 ) == (49,55 )
-	assert recrop_min_size.expandMax75(0,2 ,8 ,2 ,0 ,100 ) == (0,8 )
-	assert recrop_min_size.expandMax75(98,100 ,8 ,2 ,0 ,100 ) == (92,100 )
-	assert recrop_min_size.expandMax75(46,53 ,6 ,2 ,0 ,100 ) == (46,60)
-def test_expandMin():
-	#(val0, val1, minimumDiff, growRatio, minLimit, maxLimit):
-	assert recrop_min_size.expandMin(0,100 ,50 ,1 ,0 ,100 ) == (0,100 )
-	assert recrop_min_size.expandMin(0,10 ,12 ,1 ,0 ,100 ) == (0,12 )
-	assert recrop_min_size.expandMin(2,12 ,12 ,1 ,0 ,100 ) == (0,12 )
-def test_expandMin75():
-	#(val0, val1, minimumDiff, growRatio, minLimit, maxLimit):
-	assert recrop_min_size.expandMin75(0,50,30 ,1 ,0 ,100 ) == (0,50 )
-	assert recrop_min_size.expandMin75(0,30,60 ,1 ,0 ,100 ) == (0,60 )
+
+
+def test_getRangeFromCenter():
+	#getRangeFromCenter(center, size, minLimit, maxLimit) ==> (val0, val1)
+	assert recrop_min_size.getRangeFromCenter(10, 6, 0, 20) == (7, 13) #unlimited
+	assert recrop_min_size.getRangeFromCenter(10, 20, 0, 100) == (0, 20) # left limited
+	assert recrop_min_size.getRangeFromCenter(50, 20, 0, 60) == (40, 60) # right limited
+	assert recrop_min_size.getRangeFromCenter(10, 40, 0, 20) == (0, 20) # both limited
+	assert recrop_min_size.getRangeFromCenter(50, 9, 0, 100) == (46, 55) # odd size
+
+
+def test_randomInRange():
+	#randomInRange(borders, avoidCenter, size) ==> (val0, val1)
+	# Check 100 randomized trials to validate range
+	borders = (20,10)
+	avoidCenter = (10,5)
+	size = (100,100)
+	for i in range(100):
+		r = recrop_min_size.randomInRange(borders, avoidCenter, size)
+		print('r', r)
+		assert (((r[0] >= avoidCenter[0]) and (r[0] <= int(size[0]/2 - borders[0]))) or
+			    ((r[1] >= avoidCenter[1]) and (r[1] <= int(size[1]/2 - borders[1]))))
+
+	# Force avoidCenter to be too big such that values must be size/2-border
+	r = recrop_min_size.randomInRange((20,10), (45,45), (100,100))
+	assert r[0] == 30
+	assert r[1] == 40
+	print('r2', r)
+
+
 def test_appendIfDifferent():
 	#(array, newItem):
 	a = [1,2]
@@ -71,6 +64,67 @@ def test_appendIfDifferent():
 	assert	a == [1,2]
 	recrop_min_size.appendIfDifferent(a,3)
 	assert  a == [1,2,3]
+
+
+def test_getCropCoords():
+	smokeCoords = (1200, 1100, 1300, 1200)
+	# Check 100 randomized trials to validate range
+	for i in range(100):
+		cropCoords = recrop_min_size.getCropCoords(smokeCoords, 299, 299, 1.2, (2000,2000))
+		print('cc0', cropCoords)
+		for coords in cropCoords:
+			assert coords[2] == coords[0] + 299
+			assert coords[3] == coords[1] + 299
+			assert coords[0] <= smokeCoords[0]
+			assert coords[1] <= smokeCoords[1]
+			assert coords[2] >= smokeCoords[2]
+			assert coords[3] >= smokeCoords[3]
+
+	# Limited by bottom and right
+	cropCoords = recrop_min_size.getCropCoords(smokeCoords, 299, 299, 1.2, (1300,1200))
+	print('cc1', cropCoords)
+	for coords in cropCoords:
+		assert coords[2] == coords[0] + 299
+		assert coords[3] == coords[1] + 299
+		assert coords[0] <= smokeCoords[0]
+		assert coords[1] <= smokeCoords[1]
+		assert coords[2] == 1300
+		assert coords[3] == 1200
+
+	# Limited by top and left
+	smokeCoords = (0, 0, 150, 100)
+	cropCoords = recrop_min_size.getCropCoords(smokeCoords, 299, 299, 1.2, (2000,2000))
+	print('cc2', cropCoords)
+	for coords in cropCoords:
+		assert coords[2] == coords[0] + 299
+		assert coords[3] == coords[1] + 299
+		assert coords[0] == 0
+		assert coords[1] == 0
+		assert coords[2] >= smokeCoords[2]
+		assert coords[3] >= smokeCoords[3]
+
+	# smokeCoords larger (400) than minDiff (299)
+	size = 400
+	growRatio = 1.2
+	smokeCoords = (1200, 1100, 1200 + size, 1100 + size)
+	cropCoords = recrop_min_size.getCropCoords(smokeCoords, 299, 299, growRatio, (2000,2000))
+	print('ccl', cropCoords)
+	for coords in cropCoords:
+		assert coords[2] == coords[0] + size*growRatio
+		assert coords[3] == coords[1] + size*growRatio
+		assert coords[0] <= smokeCoords[0]
+		assert coords[1] <= smokeCoords[1]
+		assert coords[2] >= smokeCoords[2]
+		assert coords[3] >= smokeCoords[3]
+
+
+def test_getCropCoordsCenter():
+	smokeCoords = (1200, 1100, 1300, 1200)
+	cropCoords = recrop_min_size.getCropCoords(smokeCoords, 299, 299, 1.2, (2000,2000), centerOnly=True)
+	print('ccc', cropCoords)
+	assert len(cropCoords) == 1
+
+
 def test_main():
 	print( "not implemented")
 
