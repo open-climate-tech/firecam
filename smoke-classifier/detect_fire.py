@@ -571,6 +571,13 @@ def main():
     endTimeDT = dateutil.parser.parse(args.endTime) if args.endTime else None
     timeRangeSeconds = None
     useArchivedImages = False
+    if startTimeDT or endTimeDT:
+        assert startTimeDT and endTimeDT
+        timeRangeSeconds = (endTimeDT-startTimeDT).total_seconds()
+        assert timeRangeSeconds > 0
+        assert args.collectPositves
+        useArchivedImages = True
+        random.seed(0) # fixed seed guarantees same randomized ordering.  Should make this optional argument in future
     camArchives = img_archive.getHpwrenCameraArchives(settings.hpwrenArchives)
     DetectionPolicyClass = policies.get_policies()[settings.detectionPolicy]
     detectionPolicy = DetectionPolicyClass(args, dbManager, minusMinutes, stateless=useArchivedImages)
@@ -580,14 +587,6 @@ def main():
         'camArchives': camArchives,
         'dbManager': dbManager,
     }
-
-    if startTimeDT or endTimeDT:
-        assert startTimeDT and endTimeDT
-        timeRangeSeconds = (endTimeDT-startTimeDT).total_seconds()
-        assert timeRangeSeconds > 0
-        assert args.collectPositves
-        useArchivedImages = True
-        random.seed(0) # fixed seed guarantees same randomized ordering.  Should make this optional argument in future
 
     processingTimeTracker = initializeTimeTracker()
     while True:
@@ -617,7 +616,7 @@ def main():
 
         detectionResult = detectionPolicy.detect(image_spec)
         timeDetect = time.time()
-        if detectionResult['fireSegment']:
+        if detectionResult['fireSegment'] and not useArchivedImages:
             if not isDuplicateAlert(dbManager, cameraID, timestamp):
                 alertFire(constants, cameraID, timestamp, imgPath, detectionResult['fireSegment'])
         deleteImageFiles(imgPath, imgPath)
