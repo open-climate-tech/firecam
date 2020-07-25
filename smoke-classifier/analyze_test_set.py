@@ -33,6 +33,7 @@ import random
 import numpy as np
 import logging
 import pathlib
+import gc
 import tensorflow as tf
 from PIL import Image, ImageFile
 ImageFile.LOAD_TRUNCATED_IMAGES = True
@@ -89,6 +90,10 @@ def classifyImages(detectionPolicy, imageList, className, outFile):
         sys.stdout.flush()
         outFile.write('%s file %s classified as %s: %s\n' % (
             className, ppath.name, status, str(scores)))
+
+        detectionResult = None
+        detectionResultOffset = None
+        gc.collect()
     sys.stdout.write('\n')
     sys.stdout.flush()
     return (positives, negatives, mixed)
