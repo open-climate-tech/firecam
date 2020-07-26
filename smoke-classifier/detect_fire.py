@@ -515,6 +515,11 @@ def getArchivedImages(constants, cameras, startTimeDT, timeRangeSeconds, minusMi
 
     cameraID = cameras[int(len(cameras)*random.random())]['name']
     timeDT = startTimeDT + datetime.timedelta(seconds = random.random()*timeRangeSeconds)
+    # ensure time between 8AM and 8PM because currently focusing on daytime only
+    if timeDT.hour < 8:
+        timeDT += datetime.timedelta(hours=8)
+    elif timeDT.hour >= 20:
+        timeDT -= datetime.timedelta(hours=4)
     if minusMinutes:
         prevTimeDT = timeDT + datetime.timedelta(seconds = -60 * minusMinutes)
     else:
@@ -556,6 +561,7 @@ def main():
         ["r", "restrictType", "Only process images from cameras of given type"],
         ["s", "startTime", "(optional) performs search with modifiedTime > startTime"],
         ["e", "endTime", "(optional) performs search with modifiedTime < endTime"],
+        ["z", "randomSeed", "(optional) initial random seed vs. default 0", int],
     ]
     args = collect_args.collectArgs([], optionalArgs=optArgs, parentParsers=[goog_helper.getParentParser()])
     minusMinutes = int(args.minusMinutes) if args.minusMinutes else 0
@@ -577,7 +583,8 @@ def main():
         assert timeRangeSeconds > 0
         assert args.collectPositves
         useArchivedImages = True
-        random.seed(0) # fixed seed guarantees same randomized ordering.  Should make this optional argument in future
+        randomSeed = args.randomSeed if args.randomSeed else 0
+        random.seed(randomSeed)
     camArchives = img_archive.getHpwrenCameraArchives(settings.hpwrenArchives)
     DetectionPolicyClass = policies.get_policies()[settings.detectionPolicy]
     detectionPolicy = DetectionPolicyClass(args, dbManager, minusMinutes, stateless=useArchivedImages)
