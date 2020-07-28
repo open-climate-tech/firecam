@@ -561,7 +561,7 @@ def main():
         ["r", "restrictType", "Only process images from cameras of given type"],
         ["s", "startTime", "(optional) performs search with modifiedTime > startTime"],
         ["e", "endTime", "(optional) performs search with modifiedTime < endTime"],
-        ["z", "randomSeed", "(optional) initial random seed vs. default 0", int],
+        ["z", "randomSeed", "(optional) override random seed"],
     ]
     args = collect_args.collectArgs([], optionalArgs=optArgs, parentParsers=[goog_helper.getParentParser()])
     minusMinutes = int(args.minusMinutes) if args.minusMinutes else 0
@@ -583,8 +583,10 @@ def main():
         assert timeRangeSeconds > 0
         assert args.collectPositves
         useArchivedImages = True
-        randomSeed = args.randomSeed if args.randomSeed else 0
-        random.seed(randomSeed)
+        # if seed not specified, use os.urandom and log value
+        randomSeed = args.randomSeed if args.randomSeed else os.urandom(4).hex()
+        logging.warning('Random seed %s', randomSeed)
+        random.seed(randomSeed, version=2)
     camArchives = img_archive.getHpwrenCameraArchives(settings.hpwrenArchives)
     DetectionPolicyClass = policies.get_policies()[settings.detectionPolicy]
     detectionPolicy = DetectionPolicyClass(args, dbManager, minusMinutes, stateless=useArchivedImages)
