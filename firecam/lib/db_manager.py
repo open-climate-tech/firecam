@@ -75,10 +75,10 @@ class DbManager(object):
         sources_schema = [
             ('name', 'TEXT'),
             ('url', 'TEXT'),
-            ('last_date', 'TEXT'),
             ('randomID', 'REAL'),
             ('dormant', 'INT'),
-            ('type', 'TEXT')
+            ('type', 'TEXT'),
+            ('locationID', 'TEXT')
         ]
 
         counters_schema = [
@@ -118,7 +118,8 @@ class DbManager(object):
             ('Network', 'TEXT'),
             ('Latitude', 'REAL'),
             ('Longitude', 'REAL'),
-            ('cameraIDs', 'TEXT')
+            ('cameraIDs', 'TEXT'),
+            ('locationID', 'TEXT')
         ]
 
         bbox_schema = [
