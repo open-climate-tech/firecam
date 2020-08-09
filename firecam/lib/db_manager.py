@@ -119,7 +119,8 @@ class DbManager(object):
             ('Latitude', 'REAL'),
             ('Longitude', 'REAL'),
             ('cameraIDs', 'TEXT'),
-            ('locationID', 'TEXT')
+            ('locationID', 'TEXT'),
+            ('mapFile', 'TEXT'),
         ]
 
         bbox_schema = [
