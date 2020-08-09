@@ -255,6 +255,132 @@ def genAnnotatedImages(constants, cameraID, timestamp, imgPath, fireSegment):
     return (moviePath, annotatedPath)
 
 
+def drawPieSlice(mapImg, heading, rangeAngle):
+    """Draw a semi-transparent red pie slice on at center of given map pointing towards
+       given heading with given range (angular width)
+
+    Args:
+        mapImg: (Image) base map image
+        heading (int): direction of fire from camera
+        rangeAngle (int): angular range of uncertainty around heading
+
+    Returns:
+        Image object with annotated map
+    """
+    mapImgAlpha = mapImg.convert('RGBA')
+    pie = Image.new('RGBA', mapImgAlpha.size)
+    pieDraw = ImageDraw.Draw(pie)
+    angle = heading + 270
+    minAngle = (angle - rangeAngle/2) % 360
+    maxAngle = (angle + rangeAngle/2) % 360
+    pieDraw.pieslice((0, 0, mapImg.size[0], mapImg.size[1]), minAngle, maxAngle, fill=(255,0,0,64))
+    mapImgAlpha.paste(pie, mask=pie)
+    del pieDraw
+    pie.close()
+    return mapImgAlpha.convert('RGB')
+
+
+def cropPieSlice(mapImg, heading):
+    """Crop the given annotated map image to 1/4 size with center shifted towards given heading
+
+    Args:
+        mapImg: (Image) annotated map image
+        heading (int): direction of fire from camera
+
+    Returns:
+        Image object with cropped annotated map
+    """
+    angle = (90 - heading) % 360
+    offsetX = math.cos(angle*math.pi/180) * mapImg.size[0]/6
+    offsetY = 0 - math.sin(angle*math.pi/180) * mapImg.size[1]/6
+    centerX = int(mapImg.size[0]/2 + offsetX)
+    centerY = int(mapImg.size[1]/2 + offsetY)
+    minX = centerX - mapImg.size[0]/4
+    minY = centerY - mapImg.size[1]/4
+    coords = (minX, minY, minX + mapImg.size[0]/2, minY + mapImg.size[1]/2)
+    return mapImg.crop(coords)
+
+
+def getHeadingRange(cameraID, imgSizeX, minX, maxX):
+    """Return heading (degrees 0 = North) and range of uncertainty of heading
+       for the potential fire direction from given camera
+
+    Args:
+        cameraID (str): camera name
+        imgSizeX (int): camera image width
+        minX (int): fire segment minX
+        maxX (int): fire segment maxX
+
+    Returns:
+        Tuple (int, int): heading and uncertainty of heading
+    """
+    centerX = (minX + maxX) / 2
+    angleFromCenter = centerX / imgSizeX * 90 - 45
+    centralHeading = img_archive.getHeading(cameraID)
+    heading = angleFromCenter + centralHeading
+    range = (maxX - minX) * 2 / imgSizeX * 90
+    return (heading, range)
+
+
+def getCameraMap(dbManager, cameraID):
+    """Return the map surrounding the given camera by check SQL DB
+
+    Args:
+        dbManager (DbManager):
+        cameraID (str): camera name
+
+    Returns:
+        GCS file for map
+    """
+    sqlTemplate = """SELECT mapFile FROM cameras WHERE locationID =
+                     (SELECT locationID FROM sources WHERE name='%s')"""
+    sqlStr = sqlTemplate % (cameraID)
+    dbResult = dbManager.query(sqlStr)
+    # print('dbr', len(dbResult), dbResult)
+    if len(dbResult) == 0:
+        logging.error('Did not find camera map %s', cameraID)
+        return None
+    return dbResult[0]['mapfile']
+
+
+def genAnnotatedMap(dbManager, cameraID, timestamp, imgPath, fireSegment):
+    """Generate annotated map highlighting potential fire area
+
+    Args:
+        dbManager (DbManager):
+        cameraID (str): camera name
+        timestamp (int): time.time() value when image was taken
+        imgPath (str): filepath of the image
+        fireSegment (dict): dict describing segment with fire
+
+    Returns:
+        filepath of annotated map
+    """
+    # download map from GCS to local
+    filePathParts = os.path.splitext(imgPath)
+    mapImgGCS = getCameraMap(dbManager, cameraID)
+    parsedPath = goog_helper.parseGCSPath(mapImgGCS)
+    mapOrig = filePathParts[0] + '_mapOrig.jpg'
+    goog_helper.downloadBucketFile(parsedPath['bucket'], parsedPath['name'], mapOrig)
+
+    # calculate angle of fire on map
+    img = Image.open(imgPath)
+    (heading, range) = getHeadingRange(cameraID, img.size[0], fireSegment['MinX'], fireSegment['MaxX'])
+    img.close()
+
+    # markup map to show pie slice
+    mapImg = Image.open(mapOrig)
+    mapImgMarked = drawPieSlice(mapImg, heading, range)
+    mapImgCropped = cropPieSlice(mapImgMarked, heading)
+    mapCroppedPath = filePathParts[0] + '_map.jpg'
+    mapImgCropped.save(mapCroppedPath)
+    mapImgCropped.close()
+    mapImgMarked.close()
+    mapImg.close()
+    os.remove(mapOrig)
+    return mapCroppedPath
+
+
 def isDuplicateAlert(dbManager, cameraID, timestamp):
     """Check if alert has been recently sent out for given camera
 
@@ -279,14 +405,16 @@ def isDuplicateAlert(dbManager, cameraID, timestamp):
     return False
 
 
-def updateAlertsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, fireSegment):
+def updateAlertsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment):
     """Add new entry to Alerts table
 
     Args:
         dbManager (DbManager):
         cameraID (str): camera name
         timestamp (int): time.time() value when image was taken
+        croppedUrl: Public URL for cropped video
         annotatedUrl: Public URL for annotated iamge
+        mapUrl: Public URL for annotated map
         fireSegment (dictionary): dictionary with information for the segment with fire/smoke
     """
     dbRow = {
@@ -294,12 +422,13 @@ def updateAlertsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, fir
         'Timestamp': timestamp,
         'AdjScore': fireSegment['AdjScore'] if 'AdjScore' in fireSegment else fireSegment['score'],
         'ImageID': annotatedUrl,
-        'CroppedID': croppedUrl
+        'CroppedID': croppedUrl,
+        'MapID': mapUrl,
     }
     dbManager.add_data('alerts', dbRow)
 
 
-def pubsubFireNotification(cameraID, timestamp, croppedUrl, annotatedUrl, fireSegment):
+def pubsubFireNotification(cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment):
     """Send a pubsub notification for a potential new fire
 
     Sends pubsub message with information about the camera and fire score includeing
@@ -308,7 +437,9 @@ def pubsubFireNotification(cameraID, timestamp, croppedUrl, annotatedUrl, fireSe
     Args:
         cameraID (str): camera name
         timestamp (int): time.time() value when image was taken
+        croppedUrl: Public URL for cropped video
         annotatedUrl: Public URL for annotated iamge
+        mapUrl: Public URL for annotated map
         fireSegment (dictionary): dictionary with information for the segment with fire/smoke
     """
     message = {
@@ -318,7 +449,8 @@ def pubsubFireNotification(cameraID, timestamp, croppedUrl, annotatedUrl, fireSe
         "histMax": str(fireSegment['HistMax'] if 'HistMax' in fireSegment else 0),
         "adjScore": str(fireSegment['AdjScore'] if 'AdjScore' in fireSegment else fireSegment['score']),
         'croppedUrl': croppedUrl,
-        'annotatedUrl': annotatedUrl
+        'annotatedUrl': annotatedUrl,
+        'mapUrl': mapUrl
     }
     goog_helper.publish(message)
 
@@ -383,25 +515,29 @@ def alertFire(constants, cameraID, timestamp, imgPath, fireSegment):
         imgPath: filepath of the original image
         fireSegment (dictionary): dictionary with information for the segment with fire/smoke
     """
+    dbManager = constants['dbManager']
     (croppedPath, annotatedPath) = genAnnotatedImages(constants, cameraID, timestamp, imgPath, fireSegment)
+    mapPath = genAnnotatedMap(dbManager, cameraID, timestamp, imgPath, fireSegment)
 
     # copy annotated image to publicly accessible settings.noticationsDir
     alertsDateDir = goog_helper.dateSubDir(settings.noticationsDir)
     croppedID = goog_helper.copyFile(croppedPath, alertsDateDir)
     annotatedID = goog_helper.copyFile(annotatedPath, alertsDateDir)
+    mapID = goog_helper.copyFile(mapPath, alertsDateDir)
     # convert fileIDs into URLs usable by web UI
     croppedUrl = croppedID.replace('gs://', 'https://storage.googleapis.com/')
     annotatedUrl = annotatedID.replace('gs://', 'https://storage.googleapis.com/')
+    mapUrl = mapID.replace('gs://', 'https://storage.googleapis.com/')
 
-    dbManager = constants['dbManager']
-    updateAlertsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, fireSegment)
-    pubsubFireNotification(cameraID, timestamp, croppedUrl, annotatedUrl, fireSegment)
+    updateAlertsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment)
+    pubsubFireNotification(cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment)
     emailFireNotification(constants, cameraID, timestamp, imgPath, annotatedPath, fireSegment)
     smsFireNotification(dbManager, cameraID)
 
-    # remove both temporary files
+    # remove temporary files
     os.remove(croppedPath)
     os.remove(annotatedPath)
+    os.remove(mapPath)
 
 
 def deleteImageFiles(imgPath, origImgPath):

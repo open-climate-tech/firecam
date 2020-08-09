@@ -137,6 +137,34 @@ def parseFilename(fileName):
     return parsed
 
 
+def getHeading(cameraID):
+    """Return the heading (direction in degrees where 0 = North) of the given camera
+
+    Args:
+        cameraID: (string) camera ID (e.g. bh-w-mobo-c)
+
+    Returns:
+        Numerical heading or None
+    """
+    cardinalHeadings = {
+        'n': 0,
+        'e': 90,
+        's': 180,
+        'w': 270,
+        'ne': 45,
+        'se': 135,
+        'sw': 225,
+        'nw': 315,
+    }
+    regexDirMobo = '-([ns]?[ew]?)-mobo-c'
+    matches = re.findall(regexDirMobo, cameraID)
+    if len(matches) == 1:
+        camDir = matches[0]
+        if camDir in cardinalHeadings:
+            return cardinalHeadings[camDir]
+    return None
+
+
 class HpwrenHTMLParser(HTMLParser):
     """Dervied class from HTMLParser to pull out file information from HTML directory listing pages
         Allows caller to specify fileType (extension) the caller cares about

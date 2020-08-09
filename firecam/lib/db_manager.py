@@ -172,6 +172,7 @@ class DbManager(object):
             ('AdjScore', 'REAL'),
             ('ImageID', 'TEXT'),
             ('CroppedID', 'TEXT'),
+            ('MapID', 'TEXT'),
         ]
 
         # votes regarding alerts

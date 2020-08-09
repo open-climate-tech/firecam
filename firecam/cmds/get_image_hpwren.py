@@ -55,31 +55,21 @@ def getHeading(lat_diff, long_diff):
     return heading
 
 
-def headingMathcesDirection(heading, direction):
+def headingMathcesDirection(heading, cameraID):
     """Check if given heading falls within ~100degree field of view from given
        cardinal direction
 
     Args:
         heading: (float) direction of interest
-        direction: (string) cardinal diretions (e.g. 'n', 'e')
+        cameraID: (string) camera ID (e.g. bh-w-mobo-c)
 
     Returns:
         True if heading is within field of view
     """
-    cardinalHeadings = {
-        'n': 0,
-        'e': 90,
-        's': 180,
-        'w': 270,
-        'ne': 45,
-        'se': 135,
-        'sw': 225,
-        'nw': 315,
-    }
-    if not direction in cardinalHeadings:
-        logging.error('Unexpected angle %s', direction)
+    centralHeading = img_archive.getHeading(cameraID)
+    if centralHeading == None:
+        logging.error('Unexpected camera %s', cameraID)
         return False
-    centralHeading = cardinalHeadings[direction]
     minHeading = (centralHeading - 55) % 360
     maxHeading = (centralHeading + 55) % 360
     if minHeading < maxHeading:
@@ -121,11 +111,10 @@ def getNearbyCameras(dbManager, latitude, longitude, distanceMilesLimit):
         distanceMiles = distanceDegrees/360*24900
         cameras = row['cameraids'].split(',')
         for camera in cameras:
-            regexMobo = '-([ns]?[ew]?)-mobo-c'
+            regexMobo = '-mobo-c'
             matches = re.findall(regexMobo, camera)
             if len(matches) == 1:
-                camDir = matches[0]
-                if headingMathcesDirection(heading, camDir):
+                if headingMathcesDirection(heading, camera):
                     logging.warning('Mobo camera %s matches heading %d: %d miles', camera, heading, round(distanceMiles))
                     nearbyCameras.append(camera)
             elif '-axis' in camera:
