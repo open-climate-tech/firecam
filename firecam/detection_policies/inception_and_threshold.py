@@ -69,7 +69,7 @@ class InceptionV3AndHistoricalThreshold:
             self.model = tf_helper.loadModel(modelLocation)
 
 
-    def _segmentImage(self, imgPath, startY, endY):
+    def _segmentImage(self, imgPath, startX, endX, startY, endY):
         """Segment the given image into sections to for smoke classificaiton
 
         Args:
@@ -79,12 +79,12 @@ class InceptionV3AndHistoricalThreshold:
             List of dictionary containing information on each segment
         """
         img = Image.open(imgPath)
-        crops, segments = rect_to_squares.cutBoxesArray(img, startY, endY)
+        crops, segments = rect_to_squares.cutBoxesArray(img, startX, endX, startY, endY)
         img.close()
         return crops, segments
 
 
-    def _segmentAndClassify(self, imgPath, startY, endY):
+    def _segmentAndClassify(self, imgPath, startX, endX, startY, endY):
         """Segment the given image into squares and classify each square
 
         Args:
@@ -93,7 +93,7 @@ class InceptionV3AndHistoricalThreshold:
         Returns:
             list of segments with scores sorted by decreasing score
         """
-        crops, segments = self._segmentImage(imgPath, startY, endY)
+        crops, segments = self._segmentImage(imgPath, startX, endX, startY, endY)
         if len(crops) == 0:
             return []
         # testMode fakes all scores
@@ -279,7 +279,7 @@ class InceptionV3AndHistoricalThreshold:
         return fileID
 
 
-    def detect(self, image_spec, silent=False):
+    def detect(self, image_spec, checkShifts=False, silent=False):
         # This detection policy only uses a single image, so just take the last one
         last_image_spec = image_spec[-1]
         imgPath = last_image_spec['path']
@@ -290,7 +290,9 @@ class InceptionV3AndHistoricalThreshold:
         }
         startY = last_image_spec['startY'] if 'startY' in last_image_spec else 0
         endY = last_image_spec['endY'] if 'endY' in last_image_spec else None
-        segments = self._segmentAndClassify(imgPath, startY, endY)
+        startX = last_image_spec['startX'] if 'startX' in last_image_spec else 0
+        endX = last_image_spec['endX'] if 'endX' in last_image_spec else None
+        segments = self._segmentAndClassify(imgPath, startX, endX, startY, endY)
         detectionResult['segments'] = segments
         detectionResult['timeMid'] = time.time()
         if len(segments) == 0: # happens sometimes when camera is malfunctioning

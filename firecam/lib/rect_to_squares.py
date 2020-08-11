@@ -39,8 +39,10 @@ def getSegmentRanges(fullSize, segmentSize):
         (list): list of tuples (start, end) marking each segment's range
     """
     overlapRatio = 1.1
-    if fullSize <= segmentSize:
+    if fullSize < segmentSize:
         return []  # all segments must be exactly segmentSize
+    elif fullSize == segmentSize:
+        return [(0,segmentSize)]
     firstCenter = int(segmentSize/2)
     lastCenter = fullSize - int(segmentSize/2)
     assert lastCenter > firstCenter
@@ -111,7 +113,7 @@ def cutBoxesFiles(imgOrig, outputDirectory, imageFileName, callBackFn=None):
     return segments
 
 
-def cutBoxesArray(imgOrig, startY=0, endY=None):
+def cutBoxesArray(imgOrig, startX=0, endX=None, startY=0, endY=None):
     """Cut the given image into fixed size boxes, normalize data, and return as np arrays
 
     Divide the given image into square segments of 299x299 (segmentSize below)
@@ -126,7 +128,14 @@ def cutBoxesArray(imgOrig, startY=0, endY=None):
         (list, list): pair of lists (cropped numpy arrays) and (metadata on boundaries)
     """
     segmentSize = 299
-    xRanges = getSegmentRanges(imgOrig.size[0], segmentSize)
+
+    if endX == None:
+        endX = imgOrig.size[0]
+    elif endX < 0:
+        endX = imgOrig.size[0] + endY
+    xRanges = getSegmentRanges(endX - startX, segmentSize)
+    xRanges = list(map(lambda x: (x[0] + startX, x[1] + startX), xRanges))
+
     if endY == None:
         endY = imgOrig.size[1]
     elif endY < 0:

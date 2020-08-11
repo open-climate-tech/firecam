@@ -120,8 +120,10 @@ def main():
     ]
     optArgs = [
         ["m", "model", "model file generated during retraining"],
-        ["s", "startY", "(optional) startY override", int],
-        ["e", "endY", "(optional) endY override", int],
+        ["y", "startY", "(optional) startY override", int],
+        ["z", "endY", "(optional) endY override", int],
+        ["x", "startX", "(optional) startY override", int],
+        ["e", "endX", "(optional) endY override", int],
         ["d", "display", "(optional) specify any value to display image and boxes"]
     ]
     args = collect_args.collectArgs(reqArgs, optionalArgs=optArgs)
@@ -139,6 +141,10 @@ def main():
         image_spec[-1]['startY'] = args.startY
     if args.endY:
         image_spec[-1]['endY'] = args.endY
+    if args.startX:
+        image_spec[-1]['startX'] = args.startX
+    if args.endX:
+        image_spec[-1]['endX'] = args.endX
     detectionResult = detectionPolicy.detect(image_spec)
 
     for segmentInfo in detectionResult['segments']:
