@@ -145,7 +145,7 @@ def main():
         image_spec[-1]['startX'] = args.startX
     if args.endX:
         image_spec[-1]['endX'] = args.endX
-    detectionResult = detectionPolicy.detect(image_spec)
+    detectionResult = detectionPolicy.detect(image_spec, checkShifts=True)
 
     for segmentInfo in detectionResult['segments']:
         # print(segmentInfo['imgPath'], segmentInfo['score'])

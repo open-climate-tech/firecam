@@ -288,10 +288,10 @@ class InceptionV3AndHistoricalThreshold:
         detectionResult = {
             'fireSegment': None
         }
-        startY = last_image_spec['startY'] if 'startY' in last_image_spec else 0
-        endY = last_image_spec['endY'] if 'endY' in last_image_spec else None
         startX = last_image_spec['startX'] if 'startX' in last_image_spec else 0
         endX = last_image_spec['endX'] if 'endX' in last_image_spec else None
+        startY = last_image_spec['startY'] if 'startY' in last_image_spec else 0
+        endY = last_image_spec['endY'] if 'endY' in last_image_spec else None
         segments = self._segmentAndClassify(imgPath, startX, endX, startY, endY)
         detectionResult['segments'] = segments
         detectionResult['timeMid'] = time.time()
@@ -299,15 +299,39 @@ class InceptionV3AndHistoricalThreshold:
             return detectionResult
         if getattr(self.args, 'collectPositves', None):
             self._collectPositves(imgPath, segments)
+        fireSegment = None
         if self.stateless:
             if segments[0]['score'] > 0.5:
-                detectionResult['fireSegment'] = segments[0]
+                fireSegment = segments[0]
         else:
             self._recordScores(cameraID, timestamp, segments)
             fireSegment = self._postFilter(cameraID, timestamp, segments)
-            if fireSegment:
-                self._recordDetection(cameraID, timestamp, imgPath, fireSegment)
-                detectionResult['fireSegment'] = fireSegment
+        if fireSegment and checkShifts:
+            fireSegment = fireSegment.copy() # copy so segments array won't be affected
+            # check shifted images
+            sizeX = fireSegment['MaxX'] - fireSegment['MinX']
+            sizeY = fireSegment['MaxY'] - fireSegment['MinY']
+            # note it's OK if start[XY] goes negative or end[XY] go beyond image size
+            # because they are validated against limits later
+            startX = fireSegment['MinX'] - int(sizeX / 3)
+            endX = fireSegment['MaxX'] + int(sizeX / 3)
+            startY = fireSegment['MinY'] - int(sizeY / 3)
+            endY = fireSegment['MaxY'] + int(sizeY / 3)
+            newSegments = self._segmentAndClassify(imgPath, startX, endX, startY, endY)
+            segments += newSegments
+            # intersect fireSegment
+            if newSegments[0]['score'] > 0.5:
+                for segment in newSegments:
+                    if segment['score'] > 0.5:
+                        fireSegment['MinX'] = max(fireSegment['MinX'], segment['MinX'])
+                        fireSegment['MinY'] = max(fireSegment['MinY'], segment['MinY'])
+                        fireSegment['MaxX'] = min(fireSegment['MaxX'], segment['MaxX'])
+                        fireSegment['MaxY'] = min(fireSegment['MaxY'], segment['MaxY'])
+            else:
+                fireSegment = None # don't report fire
+        if fireSegment and not self.stateless:
+            self._recordDetection(cameraID, timestamp, imgPath, fireSegment)
+        detectionResult['fireSegment'] = fireSegment
         if not silent:
             logging.warning('Highest score for camera %s: %f' % (cameraID, segments[0]['score']))
 

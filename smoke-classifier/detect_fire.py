@@ -100,32 +100,6 @@ getNextImage.tmpDir = None
 # getNextImage.tmpDir = Tdir('c:/tmp/dftest')
 
 
-def stretchBounds(minOrig, maxOrig, limit):
-    """Stretch the given range to triple size by extending on both sides
-
-    Args:
-        minOrig (int): minimum value of range
-        maxOrig (int): maximum value of range
-        limit (int): limit that cannot be crossed during stretching
-
-    Returns:
-        Tuple (min, max) of stretched range
-    """
-    size = maxOrig - minOrig
-    finalSize = 3*size
-    finalSize = math.ceil(finalSize/2)*2 # make even
-    if (minOrig - size < 0):
-        minNew = 0
-        maxNew = min(minNew + finalSize, limit)
-    elif (maxOrig + size >= limit - 1):  # (limit - 1 to workaround rounding up to even)
-        maxNew = limit
-        minNew = max(maxNew - finalSize, 0)
-    else:
-        minNew = minOrig - size
-        maxNew = min(minNew + finalSize, limit)
-    return (minNew, maxNew)
-
-
 def drawRect(imgDraw, x0, y0, x1, y1, width, color):
     for i in range(width):
         imgDraw.rectangle((x0 + i, y0 + i, x1 - i, y1 -i), outline=color)
@@ -210,8 +184,8 @@ def genAnnotatedImages(constants, cameraID, timestamp, imgPath, fireSegment):
     x1 = fireSegment['MaxX'] if 'MaxX' in fireSegment else img.size[0]
     y1 = fireSegment['MaxY'] if 'MaxY' in fireSegment else img.size[0]
 
-    (cropX0, cropX1) = stretchBounds(x0, x1, img.size[0])
-    (cropY0, cropY1) = stretchBounds(y0, y1, img.size[1])
+    (cropX0, cropX1) = rect_to_squares.getRangeFromCenter((x0 + x1)/2, 800, 0, img.size[0])
+    (cropY0, cropY1) = rect_to_squares.getRangeFromCenter((y0 + y1)/2, 600, 0, img.size[1])
     cropCoords = (cropX0, cropY0, cropX1, cropY1)
     # get images spanning a few minutes so reviewers can evaluate based on progression
     startTimeDT = datetime.datetime.fromtimestamp(timestamp - 4*60)
@@ -759,7 +733,7 @@ def main():
             if 'endY' in usableEntry:
                 image_spec[-1]['endY'] = usableEntry['endY']
 
-        detectionResult = detectionPolicy.detect(image_spec)
+        detectionResult = detectionPolicy.detect(image_spec, checkShifts=True)
         timeDetect = time.time()
         if detectionResult['fireSegment'] and not useArchivedImages:
             if not isDuplicateAlert(dbManager, cameraID, timestamp):

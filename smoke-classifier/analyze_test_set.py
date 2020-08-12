@@ -67,10 +67,10 @@ def classifyImages(detectionPolicy, imageList, className, outFile):
         image_spec[-1]['timestamp'] = nameParsed['unixTime']
         image_spec[-1]['cameraID'] = nameParsed['cameraID']
 
-        detectionResult = detectionPolicy.detect(image_spec, silent=True)
+        detectionResult = detectionPolicy.detect(image_spec, checkShifts=True, silent=True)
         image_spec[-1]['startY'] = 140
         image_spec[-1]['endY'] = -140
-        detectionResultOffset = detectionPolicy.detect(image_spec, silent=True)
+        detectionResultOffset = detectionPolicy.detect(image_spec, checkShifts=True, silent=True)
         scores = [detectionResult['segments'][0]['score'], detectionResultOffset['segments'][0]['score']]
         if detectionResult['fireSegment'] and detectionResultOffset['fireSegment']:
             status = 'smoke'
