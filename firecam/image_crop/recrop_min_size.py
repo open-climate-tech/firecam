@@ -93,36 +93,6 @@ def displayImageWithScores(imgOrig, segments):
     rootTk.mainloop()
 
 
-def getRangeFromCenter(center, size, minLimit, maxLimit):
-    """Get linear range from center given constraints
-
-    Return (min,max) pair with given range within (minLimit, maxLimit)
-    ideally centered at given center
-
-    Args:
-        cneter (int): desired center
-        size (int): size of the output range
-        minLimit (int): absolute minimum value of the output range
-        maxLimit (int): absolute maximum value of the output range
-
-    Returns:
-        (int, int): start, end of the range
-    """
-    if (center - int(size/2)) <= minLimit:   # left edge limited
-        val0 = minLimit
-        val1 = min(val0 + size, maxLimit)
-        # print('left', val0, val1, center, size)
-    elif (center + int(size/2)) >= maxLimit: # right edge limited
-        val1 = maxLimit
-        val0 = max(val1 - size, minLimit)
-        # print('right', val0, val1, center, size)
-    else:                                   # unlimited
-        val0 = center - int(size/2)
-        val1 = min(val0 + size, maxLimit)
-        # print('center', val0, val1, center, size)
-    return (val0, val1)
-
-
 def randomInRange(borders, avoidCenter, size):
     """Return (x,y) random pair in range
 
@@ -170,8 +140,8 @@ def getCropCoords(smokeCoords, minDiffX, minDiffY, growRatio, imgSize, centerOnl
     sizeY = max(minDiffY, int(origSizeY*growRatio))
 
     #centered box
-    (newMinX, newMaxX) = getRangeFromCenter(centerX, sizeX, 0, imgSizeX)
-    (newMinY, newMaxY) = getRangeFromCenter(centerY, sizeY, 0, imgSizeY)
+    (newMinX, newMaxX) = rect_to_squares.getRangeFromCenter(centerX, sizeX, 0, imgSizeX)
+    (newMinY, newMaxY) = rect_to_squares.getRangeFromCenter(centerY, sizeY, 0, imgSizeY)
     appendIfDifferent(cropCoords, (newMinX, newMinY, newMaxX, newMaxY))
     if centerOnly:
         return cropCoords
@@ -184,23 +154,23 @@ def getCropCoords(smokeCoords, minDiffX, minDiffY, growRatio, imgSize, centerOnl
 
     #top left box
     (randX, randY) = randomInRange((borderX, borderY), (avoidCenterX, avoidCenterY), (sizeX, sizeY))
-    (newMinX, newMaxX) = getRangeFromCenter(centerX - randX, sizeX, 0, imgSizeX)
-    (newMinY, newMaxY) = getRangeFromCenter(centerY - randY, sizeY, 0, imgSizeY)
+    (newMinX, newMaxX) = rect_to_squares.getRangeFromCenter(centerX - randX, sizeX, 0, imgSizeX)
+    (newMinY, newMaxY) = rect_to_squares.getRangeFromCenter(centerY - randY, sizeY, 0, imgSizeY)
     appendIfDifferent(cropCoords, (newMinX, newMinY, newMaxX, newMaxY))
     #top right box
     (randX, randY) = randomInRange((borderX, borderY), (avoidCenterX, avoidCenterY), (sizeX, sizeY))
-    (newMinX, newMaxX) = getRangeFromCenter(centerX + randX, sizeX, 0, imgSizeX)
-    (newMinY, newMaxY) = getRangeFromCenter(centerY - randY, sizeY, 0, imgSizeY)
+    (newMinX, newMaxX) = rect_to_squares.getRangeFromCenter(centerX + randX, sizeX, 0, imgSizeX)
+    (newMinY, newMaxY) = rect_to_squares.getRangeFromCenter(centerY - randY, sizeY, 0, imgSizeY)
     appendIfDifferent(cropCoords, (newMinX, newMinY, newMaxX, newMaxY))
     #bottom left box
     (randX, randY) = randomInRange((borderX, borderY), (avoidCenterX, avoidCenterY), (sizeX, sizeY))
-    (newMinX, newMaxX) = getRangeFromCenter(centerX - randX, sizeX, 0, imgSizeX)
-    (newMinY, newMaxY) = getRangeFromCenter(centerY + randY, sizeY, 0, imgSizeY)
+    (newMinX, newMaxX) = rect_to_squares.getRangeFromCenter(centerX - randX, sizeX, 0, imgSizeX)
+    (newMinY, newMaxY) = rect_to_squares.getRangeFromCenter(centerY + randY, sizeY, 0, imgSizeY)
     appendIfDifferent(cropCoords, (newMinX, newMinY, newMaxX, newMaxY))
     #bottom right box
     (randX, randY) = randomInRange((borderX, borderY), (avoidCenterX, avoidCenterY), (sizeX, sizeY))
-    (newMinX, newMaxX) = getRangeFromCenter(centerX + randX, sizeX, 0, imgSizeX)
-    (newMinY, newMaxY) = getRangeFromCenter(centerY + randY, sizeY, 0, imgSizeY)
+    (newMinX, newMaxX) = rect_to_squares.getRangeFromCenter(centerX + randX, sizeX, 0, imgSizeX)
+    (newMinY, newMaxY) = rect_to_squares.getRangeFromCenter(centerY + randY, sizeY, 0, imgSizeY)
     appendIfDifferent(cropCoords, (newMinX, newMinY, newMaxX, newMaxY))
     return cropCoords
 

@@ -66,6 +66,36 @@ def getSegmentRanges(fullSize, segmentSize):
     return ranges
 
 
+def getRangeFromCenter(center, size, minLimit, maxLimit):
+    """Get linear range from center given constraints
+
+    Return (min,max) pair with given range within (minLimit, maxLimit)
+    ideally centered at given center
+
+    Args:
+        cneter (int): desired center
+        size (int): size of the output range
+        minLimit (int): absolute minimum value of the output range
+        maxLimit (int): absolute maximum value of the output range
+
+    Returns:
+        (int, int): start, end of the range
+    """
+    if (center - int(size/2)) <= minLimit:   # left edge limited
+        val0 = minLimit
+        val1 = min(val0 + size, maxLimit)
+        # print('left', val0, val1, center, size)
+    elif (center + int(size/2)) >= maxLimit: # right edge limited
+        val1 = maxLimit
+        val0 = max(val1 - size, minLimit)
+        # print('right', val0, val1, center, size)
+    else:                                   # unlimited
+        val0 = center - int(size/2)
+        val1 = min(val0 + size, maxLimit)
+        # print('center', val0, val1, center, size)
+    return (val0, val1)
+
+
 def cutBoxesFiles(imgOrig, outputDirectory, imageFileName, callBackFn=None):
     """Cut the given image into fixed size boxes and store to files
 
@@ -132,7 +162,9 @@ def cutBoxesArray(imgOrig, startX=0, endX=None, startY=0, endY=None):
     if endX == None:
         endX = imgOrig.size[0]
     elif endX < 0:
-        endX = imgOrig.size[0] + endY
+        endX = imgOrig.size[0] + endX
+    startX = max(0, startX)
+    endX = min(endX, imgOrig.size[0])
     xRanges = getSegmentRanges(endX - startX, segmentSize)
     xRanges = list(map(lambda x: (x[0] + startX, x[1] + startX), xRanges))
 
@@ -140,6 +172,8 @@ def cutBoxesArray(imgOrig, startX=0, endX=None, startY=0, endY=None):
         endY = imgOrig.size[1]
     elif endY < 0:
         endY = imgOrig.size[1] + endY
+    startY = max(0, startY)
+    endY = min(endY, imgOrig.size[1])
     yRanges = getSegmentRanges(endY - startY, segmentSize)
     yRanges = list(map(lambda x: (x[0] + startY, x[1] + startY), yRanges))
 
