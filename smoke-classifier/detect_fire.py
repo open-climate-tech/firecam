@@ -122,7 +122,7 @@ def drawFireBox(img, destPath, fireSegment, x0, y0, x1, y1, timestamp=None, writ
     lineWidth=3
     drawRect(imgDraw, x0, y0, x1, y1, lineWidth, color)
 
-    fontPath = os.path.join(str(pathlib.Path(__file__).parent.parent), 'firecam/data/Roboto-Regular.ttf')
+    fontPath = os.path.join(str(pathlib.Path(os.path.realpath(__file__)).parent.parent), 'firecam/data/Roboto-Regular.ttf')
     if writeScores:
         # Write ML score above towards left of the fire box
         color = "red"

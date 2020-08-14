@@ -104,7 +104,7 @@ def drawBoxesAndScores(imgOrig, segments):
         centerX = (x0 + x1)/2
         centerY = (y0 + y1)/2
         fontSize=60
-        fontPath = os.path.join(str(pathlib.Path(__file__).parent.parent), 'firecam/data/Roboto-Regular.ttf')
+        fontPath = os.path.join(str(pathlib.Path(os.path.realpath(__file__)).parent.parent), 'firecam/data/Roboto-Regular.ttf')
         font = ImageFont.truetype(fontPath, size=fontSize)
         scoreStr = '%.2f' % segmentInfo['score']
         textSize = imgDraw.textsize(scoreStr, font=font)
@@ -116,7 +116,6 @@ def drawBoxesAndScores(imgOrig, segments):
 def main():
     reqArgs = [
         ["i", "image", "filename of the image"],
-        ["o", "output", "output directory name"],
     ]
     optArgs = [
         ["m", "model", "model file generated during retraining"],
