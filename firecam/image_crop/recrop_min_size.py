@@ -186,7 +186,7 @@ def main():
         ["d", "display", "(optional) specify any value to display image and boxes"],
         ["x", "minDiffX", "(optional) override default minDiffX of 299"],
         ["y", "minDiffY", "(optional) override default minDiffY of 299"],
-        ["a", "minArea", "(optional) override default throw away areas < 1/100 of 299x299"],
+        ["a", "minArea", "(optional) override default 0 for minimum area"],
         ["t", "throwSize", "(optional) override default throw away size of 598x598"],
         ["g", "growRatio", "(optional) override default grow ratio of 1.2"],
         ["m", "minusMinutes", "(optional) subtract images from given number of minutes ago"],
@@ -199,7 +199,7 @@ def main():
     minDiffY = int(args.minDiffY) if args.minDiffY else 299
     throwSize = int(args.throwSize) if args.throwSize else 299*2
     growRatio = float(args.growRatio) if args.growRatio else 1.2
-    minArea = int(args.minArea) if args.minArea else int(299*2.99)
+    minArea = int(args.minArea) if args.minArea else 0
     minusMinutes = int(args.minusMinutes) if args.minusMinutes else 0
 
     random.seed(0)
