@@ -562,14 +562,18 @@ def genDiffImage(imgPath, earlierImgPath, minusMinutes):
     """
     imgA = Image.open(imgPath)
     imgB = Image.open(earlierImgPath)
-    imgDiff = img_archive.diffImages(imgA, imgB)
+    diffImg = img_archive.diffImages(imgA, imgB)
+    extremas = diffImg.getextrema()
+    if extremas[0][0] == 128 or extremas[0][1] == 128 or extremas[1][0] == 128 or extremas[1][1] == 128 or extremas[2][0] == 128 or extremas[2][1] == 128:
+        logging.warning('Skipping no diffs %s', str(extremas))
+        return None
     parsedName = img_archive.parseFilename(imgPath)
     parsedName['diffMinutes'] = minusMinutes
-    imgDiffName = img_archive.repackFileName(parsedName)
+    diffImgName = img_archive.repackFileName(parsedName)
     ppath = pathlib.PurePath(imgPath)
-    imgDiffPath = os.path.join(str(ppath.parent), imgDiffName)
-    imgDiff.save(imgDiffPath, format='JPEG')
-    return imgDiffPath
+    diffImgPath = os.path.join(str(ppath.parent), diffImgName)
+    diffImg.save(diffImgPath, format='JPEG')
+    return diffImgPath
 
 
 def updateTimeTracker(timeTracker, processingTime):
@@ -641,12 +645,20 @@ def getArchivedImages(constants, cameras, startTimeDT, timeRangeSeconds, minusMi
         return (None, None, None, None)
     if minusMinutes:
         if len(files) > 1:
-            if files[0] >= files[1]: # files[0] is supposed to be earlier than files[1]
-                logging.warning('unexpected file order %s', str(files))
+            diffFail = False
+            imgDiffPath = None
+            if files[0] < files[1]: # files[0] is supposed to be earlier than files[1]
+                imgDiffPath = genDiffImage(files[1], files[0], minusMinutes)
+            else:
+                diffFail = True
+            if diffFail or not imgDiffPath:
+                logging.warning('diff fail %s', str(files))
+                prevFile = None
                 for file in files:
-                    os.remove(file)
+                    if file != prevFile:
+                        os.remove(file)
+                    prevFile = file
                 return (None, None, None, None)
-            imgDiffPath = genDiffImage(files[1], files[0], minusMinutes)
             os.remove(files[0]) # no longer needed
             parsedName = img_archive.parseFilename(files[1])
             return (cameraID, parsedName['unixTime'], files[1], imgDiffPath)
@@ -738,7 +750,7 @@ def main():
         if detectionResult['fireSegment'] and not useArchivedImages:
             if not isDuplicateAlert(dbManager, cameraID, timestamp):
                 alertFire(constants, cameraID, timestamp, imgPath, detectionResult['fireSegment'])
-        deleteImageFiles(imgPath, imgPath)
+        deleteImageFiles(classifyImgPath, imgPath)
         if (args.heartbeat):
             heartBeat(args.heartbeat)
 
