@@ -43,11 +43,13 @@ def main():
     optArgs = [
         ["s", "startRow", "starting row"],
         ["e", "endRow", "ending row"],
+        ["f", "fullImages", "(optional) process full images vs cropped"],
     ]
     args = collect_args.collectArgs(reqArgs, optionalArgs=optArgs, parentParsers=[goog_helper.getParentParser()])
     minusMinutes = int(args.minusMinutes)
     startRow = int(args.startRow) if args.startRow else 0
     endRow = int(args.endRow) if args.endRow else 1e9
+    fullImages = True if args.fullImages else False
 
     googleServices = goog_helper.getGoogleServices(settings, args)
     camArchives = img_archive.getHpwrenCameraArchives(settings.hpwrenArchives)
@@ -70,7 +72,7 @@ def main():
         logging.warning('Processing row %d, file: %s', rowIndex, fileName)
         parsedName = img_archive.parseFilename(fileName)
 
-        if (not parsedName) or parsedName['diffMinutes'] or ('minX' not in parsedName):
+        if (not parsedName) or parsedName['diffMinutes'] or (('minX' not in parsedName) and not fullImages):
             logging.warning('Skipping file with unexpected parsed data: %s, %s', fileName, str(parsedName))
             skippedBadParse.append((rowIndex, fileName, parsedName))
             continue # skip files without crop info or with diff
@@ -88,11 +90,13 @@ def main():
                 skippedArchive.append((rowIndex, fileName, dt))
                 continue
         logging.warning('Subtracting old image %s', earlierImgPath)
-        earlierImg = Image.open(earlierImgPath)
-        croppedEarlyImg = earlierImg.crop((parsedName['minX'], parsedName['minY'], parsedName['maxX'], parsedName['maxY']))
-
         imgOrig = Image.open(os.path.join(args.inputDir, fileName))
-        diffImg = img_archive.diffImages(imgOrig, croppedEarlyImg)
+        earlierImg = Image.open(earlierImgPath)
+        if fullImages:
+            diffImg = img_archive.diffImages(imgOrig, earlierImg)
+        else:
+            croppedEarlyImg = earlierImg.crop((parsedName['minX'], parsedName['minY'], parsedName['maxX'], parsedName['maxY']))
+            diffImg = img_archive.diffImages(imgOrig, croppedEarlyImg)
         extremas = diffImg.getextrema()
         if extremas[0][0] == 128 or extremas[0][1] == 128 or extremas[1][0] == 128 or extremas[1][1] == 128 or extremas[2][0] == 128 or extremas[2][1] == 128:
             logging.warning('Skipping no diffs %s, name=%s', str(extremas), fileName)
