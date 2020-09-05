@@ -679,14 +679,16 @@ def main():
         ["b", "heartbeat", "filename used for heartbeating check"],
         ["c", "collectPositves", "collect positive segments for training data"],
         ["t", "time", "Time breakdown for processing images"],
-        ["m", "minusMinutes", "(optional) subtract images from given number of minutes ago"],
+        ["m", "minusMinutes", "(optional) subtract images from given number of minutes ago", int],
         ["r", "restrictType", "Only process images from cameras of given type"],
         ["s", "startTime", "(optional) performs search with modifiedTime > startTime"],
         ["e", "endTime", "(optional) performs search with modifiedTime < endTime"],
         ["z", "randomSeed", "(optional) override random seed"],
+        ["l", "limitImages", "(optional) stop after processing given number of images", int],
     ]
     args = collect_args.collectArgs([], optionalArgs=optArgs, parentParsers=[goog_helper.getParentParser()])
-    minusMinutes = int(args.minusMinutes) if args.minusMinutes else 0
+    minusMinutes = args.minusMinutes if args.minusMinutes else 0
+    limitImages = args.limitImages if args.limitImages else 1e9
     # TODO: Fix googleServices auth to resurrect email alerts
     # googleServices = goog_helper.getGoogleServices(settings, args)
     googleServices = None
@@ -719,6 +721,9 @@ def main():
         'dbManager': dbManager,
     }
 
+    numImages = 0
+    numDetections = 0
+    numAlerts = 0
     processingTimeTracker = initializeTimeTracker()
     while True:
         classifyImgPath = None
@@ -747,9 +752,13 @@ def main():
 
         detectionResult = detectionPolicy.detect(image_spec, checkShifts=True)
         timeDetect = time.time()
+        numImages += 1
+        if detectionResult['fireSegment']:
+            numDetections += 1
         if detectionResult['fireSegment'] and not useArchivedImages:
             if not isDuplicateAlert(dbManager, cameraID, timestamp):
                 alertFire(constants, cameraID, timestamp, imgPath, detectionResult['fireSegment'])
+                numAlerts += 1
         deleteImageFiles(classifyImgPath, imgPath)
         if (args.heartbeat):
             heartBeat(args.heartbeat)
@@ -761,6 +770,11 @@ def main():
                 detectionResult['timeMid'] = timeDetect
             logging.warning('Timings: fetch=%.2f, detect0=%.2f, detect1=%.2f post=%.2f',
                 timeFetch-timeStart, detectionResult['timeMid']-timeFetch, timeDetect-detectionResult['timeMid'], timePost-timeDetect)
+        if (numImages % 10) == 0:
+            logging.warning('Stats: alerts=%d, detects=%d, images=%d', numAlerts, numDetections, numImages)
+            if numImages >= limitImages:
+                logging.warning('Reached limit on images')
+                return
         # free all memory for current iteration and trigger GC to prevent memory growth
         detectionResult = None
         gc.collect()
