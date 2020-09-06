@@ -122,7 +122,7 @@ def appendIfDifferent(array, newItem):
         array.append(newItem)
 
 
-def getCropCoords(smokeCoords, minDiffX, minDiffY, growRatio, imgSize, centerOnly=False):
+def getCropCoords(smokeCoords, minSizeX, minSizeY, growRatio, imgSize, recropType):
     cropCoords = []
     (minX, minY, maxX, maxY) = smokeCoords
     (imgSizeX, imgSizeY) = imgSize
@@ -136,14 +136,21 @@ def getCropCoords(smokeCoords, minDiffX, minDiffY, growRatio, imgSize, centerOnl
     centerY = int((minY + maxY) / 2)
     origSizeX = maxX - minX
     origSizeY = maxY - minY
-    sizeX = max(minDiffX, int(origSizeX*growRatio))
-    sizeY = max(minDiffY, int(origSizeY*growRatio))
+    if recropType == 'shift':
+        offsetX = int(random.random()*100) - 50
+        offsetY = int(random.random()*100) - 50
+        (newMinX, newMaxX) = rect_to_squares.getRangeFromCenter(centerX + offsetX, origSizeX, 0, imgSizeX)
+        (newMinY, newMaxY) = rect_to_squares.getRangeFromCenter(centerY + offsetY, origSizeY, 0, imgSizeY)
+        appendIfDifferent(cropCoords, (newMinX, newMinY, newMaxX, newMaxY))
+        return cropCoords
 
+    sizeX = max(minSizeX, int(origSizeX*growRatio))
+    sizeY = max(minSizeY, int(origSizeY*growRatio))
     #centered box
     (newMinX, newMaxX) = rect_to_squares.getRangeFromCenter(centerX, sizeX, 0, imgSizeX)
     (newMinY, newMaxY) = rect_to_squares.getRangeFromCenter(centerY, sizeY, 0, imgSizeY)
     appendIfDifferent(cropCoords, (newMinX, newMinY, newMaxX, newMaxY))
-    if centerOnly:
+    if recropType == 'center':
         return cropCoords
 
 
@@ -184,23 +191,24 @@ def main():
         ["s", "startRow", "starting row"],
         ["e", "endRow", "ending row"],
         ["d", "display", "(optional) specify any value to display image and boxes"],
-        ["x", "minDiffX", "(optional) override default minDiffX of 299"],
-        ["y", "minDiffY", "(optional) override default minDiffY of 299"],
+        ["x", "minSizeX", "(optional) override default minSizeX of 299"],
+        ["y", "minSizeY", "(optional) override default minSizeY of 299"],
         ["a", "minArea", "(optional) override default 0 for minimum area"],
         ["t", "throwSize", "(optional) override default throw away size of 598x598"],
         ["g", "growRatio", "(optional) override default grow ratio of 1.2"],
         ["m", "minusMinutes", "(optional) subtract images from given number of minutes ago"],
-        ["r", "review", "(optional) review modes: 'raw' or 'center'"],
+        ["r", "recropType", "recrop type: 'raw', 'center', 'shift', 'augment' (default)"],
     ]
     args = collect_args.collectArgs(reqArgs, optionalArgs=optArgs, parentParsers=[goog_helper.getParentParser()])
     startRow = int(args.startRow) if args.startRow else 0
     endRow = int(args.endRow) if args.endRow else 1e9
-    minDiffX = int(args.minDiffX) if args.minDiffX else 299
-    minDiffY = int(args.minDiffY) if args.minDiffY else 299
+    minSizeX = int(args.minSizeX) if args.minSizeX else 299
+    minSizeY = int(args.minSizeY) if args.minSizeY else 299
     throwSize = int(args.throwSize) if args.throwSize else 299*2
     growRatio = float(args.growRatio) if args.growRatio else 1.2
     minArea = int(args.minArea) if args.minArea else 0
     minusMinutes = int(args.minusMinutes) if args.minusMinutes else 0
+    recropType = args.recropType if args.recropType else 'augment'
 
     random.seed(0)
     googleServices = goog_helper.getGoogleServices(settings, args)
@@ -269,12 +277,12 @@ def main():
                 fileNameParts = os.path.splitext(fileName)
                 fileName = str(fileNameParts[0]) + ('_Diff%d' % minusMinutes) + fileNameParts[1]
 
-            if args.review == 'raw':
+            if args.recropType == 'raw':
                 cropCoords = [oldCoords]
             else:
                 # crop the full sized image to show just the smoke, but shifted and flipped
                 # shifts and flips increase number of segments for training and also prevent overfitting by perturbing data
-                cropCoords = getCropCoords((minX, minY, maxX, maxY), minDiffX, minDiffY, growRatio, (imgOrig.size[0], imgOrig.size[1]), args.review == 'center')
+                cropCoords = getCropCoords((minX, minY, maxX, maxY), minSizeX, minSizeY, growRatio, (imgOrig.size[0], imgOrig.size[1]), args.recropType)
             for newCoords in cropCoords:
                 # XXXX - save work if old=new?
                 logging.warning('coords old %s, new %s', str(oldCoords), str(newCoords))
@@ -283,7 +291,7 @@ def main():
                 cropImgPath = os.path.join(args.outputDir, cropImgName)
                 cropped_img = imgOrig.crop(newCoords)
                 cropped_img.save(cropImgPath, format='JPEG')
-                if not args.review:
+                if args.recropType == 'augment':
                     flipped_img = cropped_img.transpose(Image.FLIP_LEFT_RIGHT)
                     flipImgName = imgNameNoExt + '_Crop_' + 'x'.join(list(map(lambda x: str(x), newCoords))) + '_Flip.jpg'
                     flipImgPath = os.path.join(args.outputDir, flipImgName)

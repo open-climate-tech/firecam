@@ -39,6 +39,8 @@ def parseToCsv(intput, output, startRow, endRow):
 
             # print("raw", line)
             parsed = img_archive.parseFilename(line)
+            if not parsed:
+                continue
             # print("parsed", parsed)
             outArray = [
                 line.rstrip(),
