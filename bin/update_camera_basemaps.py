@@ -50,12 +50,15 @@ def main():
     reqArgs = [
     ]
     optArgs = [
+        ["l", "locationID", "camera locationID"],
     ]
     args = collect_args.collectArgs(reqArgs, optionalArgs=optArgs)
     dbManager = db_manager.DbManager(sqliteFile=settings.db_file,
                                     psqlHost=settings.psqlHost, psqlDb=settings.psqlDb,
                                     psqlUser=settings.psqlUser, psqlPasswd=settings.psqlPasswd)
     locations = getCameraLocations(dbManager)
+    if args.locationID:
+        locations = list(filter(lambda x: x['locationid'] == args.locationID, locations))
     for location in locations:
         logging.warning('loc %s', location)
         params = {

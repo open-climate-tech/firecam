@@ -55,6 +55,8 @@ def main():
     optArgs = [
         ["c", "cameraID", "ID of the camera (e.g., mg-n-mobo-c)"],
         ["u", "url", "url to get images from camera"],
+        ["t", "type", "camera type"],
+        ["l", "locationID", "camera locationID"],
     ]
     args = collect_args.collectArgs(reqArgs, optionalArgs=optArgs)
     dbManager = db_manager.DbManager(sqliteFile=settings.db_file,
@@ -78,7 +80,8 @@ def main():
             'url': args.url,
             'dormant': 0,
             'randomID': random.random(),
-            'last_date': datetime.datetime.now().isoformat()
+            'type': args.type,
+            'locationID': args.locationID,
         }
         dbManager.add_data('sources', dbRow)
         logging.warning('Successfully added camera %s', args.cameraID)
