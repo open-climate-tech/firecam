@@ -183,6 +183,15 @@ class DbManager(object):
             ('UserID', 'TEXT'),
         ]
 
+        # user preferences (e.g., region of interest)
+        user_preferences_schema = [
+            ('userid', 'TEXT'),
+            ('toplat', 'REAL'),
+            ('leftlong', 'REAL'),
+            ('bottomlat', 'REAL'),
+            ('rightlong', 'REAL'),
+        ]
+
         # who to notify via email and SMS
         notifications_schema = [
             ('Name', 'TEXT'),
@@ -205,6 +214,7 @@ class DbManager(object):
             'detections': detections_schema,
             'alerts': alerts_schema,
             'votes': votes_schema,
+            'user_preferences': user_preferences_schema,
             'notifications': notifications_schema,
         }
 
