@@ -173,6 +173,7 @@ class DbManager(object):
             ('ImageID', 'TEXT'),
             ('CroppedID', 'TEXT'),
             ('MapID', 'TEXT'),
+            ('polygon', 'TEXT'),
         ]
 
         # votes regarding alerts

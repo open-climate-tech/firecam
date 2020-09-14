@@ -275,28 +275,39 @@ def cropPieSlice(mapImg, heading):
     return mapImg.crop(coords)
 
 
-def getHeadingRange(cameraID, imgSizeX, minX, maxX):
+def getHeadingRange(cameraID, imgPath, minX, maxX):
     """Return heading (degrees 0 = North) and range of uncertainty of heading
        for the potential fire direction from given camera
 
     Args:
         cameraID (str): camera name
-        imgSizeX (int): camera image width
+        imgPath: filepath of the original image
         minX (int): fire segment minX
         maxX (int): fire segment maxX
 
     Returns:
         Tuple (int, int): heading and uncertainty of heading
     """
+    degreesInView = 100 # camera horizontal field of view ranges from 90 to 110
+    degreesAlignmentError = 10 # cameras are not exactly aligned to cardnial headings
+
+    # get horizontal pixel width
+    img = Image.open(imgPath)
+    imgSizeX = img.size[0]
+    img.close()
+
+    # calculate heading
     centerX = (minX + maxX) / 2
-    angleFromCenter = centerX / imgSizeX * 90 - 45
+    angleFromCenter = centerX / imgSizeX * degreesInView - degreesInView/2
     centralHeading = img_archive.getHeading(cameraID)
     heading = angleFromCenter + centralHeading
-    range = (maxX - minX) * 2 / imgSizeX * 90
+
+    # calculate rangeAngle
+    range = (maxX - minX) / imgSizeX * degreesInView + degreesAlignmentError
     return (heading, range)
 
 
-def getCameraMap(dbManager, cameraID):
+def getCameraMapLocation(dbManager, cameraID):
     """Return the map surrounding the given camera by check SQL DB
 
     Args:
@@ -306,7 +317,7 @@ def getCameraMap(dbManager, cameraID):
     Returns:
         GCS file for map
     """
-    sqlTemplate = """SELECT mapFile FROM cameras WHERE locationID =
+    sqlTemplate = """SELECT mapFile,latitude,longitude FROM cameras WHERE locationID =
                      (SELECT locationID FROM sources WHERE name='%s')"""
     sqlStr = sqlTemplate % (cameraID)
     dbResult = dbManager.query(sqlStr)
@@ -314,37 +325,30 @@ def getCameraMap(dbManager, cameraID):
     if len(dbResult) == 0:
         logging.error('Did not find camera map %s', cameraID)
         return None
-    return dbResult[0]['mapfile']
+    return (dbResult[0]['mapfile'], dbResult[0]['latitude'], dbResult[0]['longitude'])
 
 
-def genAnnotatedMap(dbManager, cameraID, timestamp, imgPath, fireSegment):
+def genAnnotatedMap(mapImgGCS, imgPath, heading, rangeAngle):
     """Generate annotated map highlighting potential fire area
 
     Args:
-        dbManager (DbManager):
-        cameraID (str): camera name
-        timestamp (int): time.time() value when image was taken
+        mapImgGCS (str): GCS path to map around camera
         imgPath (str): filepath of the image
-        fireSegment (dict): dict describing segment with fire
+        heading (int): direction of fire from camera
+        rangeAngle (int): angular range of uncertainty around heading
 
     Returns:
         filepath of annotated map
     """
     # download map from GCS to local
     filePathParts = os.path.splitext(imgPath)
-    mapImgGCS = getCameraMap(dbManager, cameraID)
     parsedPath = goog_helper.parseGCSPath(mapImgGCS)
     mapOrig = filePathParts[0] + '_mapOrig.jpg'
     goog_helper.downloadBucketFile(parsedPath['bucket'], parsedPath['name'], mapOrig)
 
-    # calculate angle of fire on map
-    img = Image.open(imgPath)
-    (heading, range) = getHeadingRange(cameraID, img.size[0], fireSegment['MinX'], fireSegment['MaxX'])
-    img.close()
-
     # markup map to show pie slice
     mapImg = Image.open(mapOrig)
-    mapImgMarked = drawPieSlice(mapImg, heading, range)
+    mapImgMarked = drawPieSlice(mapImg, heading, rangeAngle)
     mapImgCropped = cropPieSlice(mapImgMarked, heading)
     mapCroppedPath = filePathParts[0] + '_map.jpg'
     mapImgCropped.save(mapCroppedPath)
@@ -353,6 +357,36 @@ def genAnnotatedMap(dbManager, cameraID, timestamp, imgPath, fireSegment):
     mapImg.close()
     os.remove(mapOrig)
     return mapCroppedPath
+
+
+def getTriangleVertices(latitude, longitude, heading, rangeAngle):
+    """Return list of vertices of the isocelees triangle given lat/long as one vertex
+       and heading/rangeAngle specifying the angle to the other vertices.
+
+    Args:
+        latitude (float): latitude of central vertex
+        longitude (float): longitude of central vertex
+        heading (int): direction of the central angle
+        rangeAngle (int): degrees (size) of the central angle
+
+    Returns:
+        List of all vertices in [lat,long] format
+    """
+    distanceDegrees = 0.5 # approx 35 miles
+
+    vertices = [[latitude, longitude]]
+    angle = 90 - heading
+    minAngle = (angle - rangeAngle/2) % 360
+    maxAngle = (angle + rangeAngle/2) % 360
+
+    p0Lat = latitude + math.sin(minAngle*math.pi/180)*distanceDegrees
+    p0Long = longitude + math.cos(minAngle*math.pi/180)*distanceDegrees
+    vertices.append([p0Lat, p0Long])
+
+    p1Lat = latitude + math.sin(maxAngle*math.pi/180)*distanceDegrees
+    p1Long = longitude + math.cos(maxAngle*math.pi/180)*distanceDegrees
+    vertices.append([p1Lat, p1Long])
+    return vertices
 
 
 def isDuplicateAlert(dbManager, cameraID, timestamp):
@@ -379,7 +413,7 @@ def isDuplicateAlert(dbManager, cameraID, timestamp):
     return False
 
 
-def updateAlertsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment):
+def updateAlertsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon):
     """Add new entry to Alerts table
 
     Args:
@@ -390,6 +424,7 @@ def updateAlertsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, map
         annotatedUrl: Public URL for annotated iamge
         mapUrl: Public URL for annotated map
         fireSegment (dictionary): dictionary with information for the segment with fire/smoke
+        polygon (list): list of vertices of polygon of potential fire location
     """
     dbRow = {
         'CameraName': cameraID,
@@ -398,11 +433,12 @@ def updateAlertsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, map
         'ImageID': annotatedUrl,
         'CroppedID': croppedUrl,
         'MapID': mapUrl,
+        'polygon': str(polygon),
     }
     dbManager.add_data('alerts', dbRow)
 
 
-def pubsubFireNotification(cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment):
+def pubsubFireNotification(cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon):
     """Send a pubsub notification for a potential new fire
 
     Sends pubsub message with information about the camera and fire score includeing
@@ -415,6 +451,7 @@ def pubsubFireNotification(cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl
         annotatedUrl: Public URL for annotated iamge
         mapUrl: Public URL for annotated map
         fireSegment (dictionary): dictionary with information for the segment with fire/smoke
+        polygon (list): list of vertices of polygon of potential fire location
     """
     message = {
         'timestamp': timestamp,
@@ -424,7 +461,8 @@ def pubsubFireNotification(cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl
         "adjScore": str(fireSegment['AdjScore'] if 'AdjScore' in fireSegment else fireSegment['score']),
         'croppedUrl': croppedUrl,
         'annotatedUrl': annotatedUrl,
-        'mapUrl': mapUrl
+        'mapUrl': mapUrl,
+        'polygon': str(polygon)
     }
     goog_helper.publish(message)
 
@@ -490,8 +528,12 @@ def alertFire(constants, cameraID, timestamp, imgPath, fireSegment):
         fireSegment (dictionary): dictionary with information for the segment with fire/smoke
     """
     dbManager = constants['dbManager']
+
+    (mapImgGCS, latitude, longitude) = getCameraMapLocation(dbManager, cameraID)
+    (heading, rangeAngle) = getHeadingRange(cameraID, imgPath, fireSegment['MinX'], fireSegment['MaxX'])
     (croppedPath, annotatedPath) = genAnnotatedImages(constants, cameraID, timestamp, imgPath, fireSegment)
-    mapPath = genAnnotatedMap(dbManager, cameraID, timestamp, imgPath, fireSegment)
+    mapPath = genAnnotatedMap(mapImgGCS, imgPath, heading, rangeAngle)
+    polygon = getTriangleVertices(latitude, longitude, heading, rangeAngle)
 
     # copy annotated image to publicly accessible settings.noticationsDir
     alertsDateDir = goog_helper.dateSubDir(settings.noticationsDir)
@@ -503,8 +545,8 @@ def alertFire(constants, cameraID, timestamp, imgPath, fireSegment):
     annotatedUrl = annotatedID.replace('gs://', 'https://storage.googleapis.com/')
     mapUrl = mapID.replace('gs://', 'https://storage.googleapis.com/')
 
-    updateAlertsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment)
-    pubsubFireNotification(cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment)
+    updateAlertsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon)
+    pubsubFireNotification(cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon)
     emailFireNotification(constants, cameraID, timestamp, imgPath, annotatedPath, fireSegment)
     smsFireNotification(dbManager, cameraID)
 
