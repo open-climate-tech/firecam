@@ -191,6 +191,7 @@ class DbManager(object):
             ('leftlong', 'REAL'),
             ('bottomlat', 'REAL'),
             ('rightlong', 'REAL'),
+            ('islabeler', 'INT'),
         ]
 
         # who to notify via email and SMS
