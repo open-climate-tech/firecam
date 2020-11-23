@@ -137,8 +137,9 @@ def getCropCoords(smokeCoords, minSizeX, minSizeY, growRatio, imgSize, recropTyp
     origSizeX = maxX - minX
     origSizeY = maxY - minY
     if recropType == 'shift':
-        offsetX = int(random.random()*100) - 50
-        offsetY = int(random.random()*100) - 50
+        maxShift = 100
+        offsetX = int(random.random()*maxShift) - maxShift/2
+        offsetY = int(random.random()*maxShift) - maxShift/2
         (newMinX, newMaxX) = rect_to_squares.getRangeFromCenter(centerX + offsetX, origSizeX, 0, imgSizeX)
         (newMinY, newMaxY) = rect_to_squares.getRangeFromCenter(centerY + offsetY, origSizeY, 0, imgSizeY)
         appendIfDifferent(cropCoords, (newMinX, newMinY, newMaxX, newMaxY))
@@ -277,12 +278,12 @@ def main():
                 fileNameParts = os.path.splitext(fileName)
                 fileName = str(fileNameParts[0]) + ('_Diff%d' % minusMinutes) + fileNameParts[1]
 
-            if args.recropType == 'raw':
+            if recropType == 'raw':
                 cropCoords = [oldCoords]
             else:
                 # crop the full sized image to show just the smoke, but shifted and flipped
                 # shifts and flips increase number of segments for training and also prevent overfitting by perturbing data
-                cropCoords = getCropCoords((minX, minY, maxX, maxY), minSizeX, minSizeY, growRatio, (imgOrig.size[0], imgOrig.size[1]), args.recropType)
+                cropCoords = getCropCoords((minX, minY, maxX, maxY), minSizeX, minSizeY, growRatio, (imgOrig.size[0], imgOrig.size[1]), recropType)
             for newCoords in cropCoords:
                 # XXXX - save work if old=new?
                 logging.warning('coords old %s, new %s', str(oldCoords), str(newCoords))
@@ -291,7 +292,7 @@ def main():
                 cropImgPath = os.path.join(args.outputDir, cropImgName)
                 cropped_img = imgOrig.crop(newCoords)
                 cropped_img.save(cropImgPath, format='JPEG')
-                if args.recropType == 'augment':
+                if recropType == 'augment':
                     flipped_img = cropped_img.transpose(Image.FLIP_LEFT_RIGHT)
                     flipImgName = imgNameNoExt + '_Crop_' + 'x'.join(list(map(lambda x: str(x), newCoords))) + '_Flip.jpg'
                     flipImgPath = os.path.join(args.outputDir, flipImgName)
