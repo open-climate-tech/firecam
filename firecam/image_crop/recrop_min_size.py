@@ -183,6 +183,15 @@ def getCropCoords(smokeCoords, minSizeX, minSizeY, growRatio, imgSize, recropTyp
     return cropCoords
 
 
+def isImageValid(img):
+    try:
+        img.load()
+        return True
+    except Exception as e:
+        logging.warning('Error partial image. %s', str(e))
+    return False
+
+
 def main():
     reqArgs = [
         ["o", "outputDir", "local directory to save images segments"],
@@ -191,7 +200,6 @@ def main():
     optArgs = [
         ["s", "startRow", "starting row"],
         ["e", "endRow", "ending row"],
-        ["d", "display", "(optional) specify any value to display image and boxes"],
         ["x", "minSizeX", "(optional) override default minSizeX of 299"],
         ["y", "minSizeY", "(optional) override default minSizeY of 299"],
         ["a", "minArea", "(optional) override default 0 for minimum area"],
@@ -250,6 +258,27 @@ def main():
                 files = img_archive.getHpwrenImages(googleServices, settings, settings.downloadDir, camArchives, nameParsed['cameraID'], imgDT, imgDT, 1)
                 localFilePath = files[0]
             imgOrig = Image.open(localFilePath)
+            if not isImageValid(imgOrig):  # retry download if image invalid
+                os.remove(localFilePath)
+                files = img_archive.getHpwrenImages(googleServices, settings, settings.downloadDir, camArchives, nameParsed['cameraID'], imgDT, imgDT, 1)
+                localFilePath = files[0]
+                imgOrig = Image.open(localFilePath)
+
+            # find coordinates for cropping
+            if recropType == 'raw':
+                cropCoords = [oldCoords]
+            else:
+                # crop the full sized image to show just the smoke, but shifted and flipped
+                # shifts and flips increase number of segments for training and also prevent overfitting by perturbing data
+                cropCoords = getCropCoords((minX, minY, maxX, maxY), minSizeX, minSizeY, growRatio, (imgOrig.size[0], imgOrig.size[1]), recropType)
+            # find extrema (min/max) crop coordinates to crop the original image to speed up processing
+            extremaCoords = list(cropCoords[0])
+            for coords in cropCoords:
+                extremaCoords[0] = min(extremaCoords[0], coords[0])
+                extremaCoords[1] = min(extremaCoords[1], coords[1])
+                extremaCoords[2] = max(extremaCoords[2], coords[2])
+                extremaCoords[3] = max(extremaCoords[3], coords[3])
+            imgOrig = imgOrig.crop(extremaCoords)
 
             # if in subracted images mode, download an earlier image and subtract
             if minusMinutes:
@@ -267,7 +296,8 @@ def main():
                         continue
                 logging.warning('Subtracting old image %s', earlierImgPath)
                 earlierImg = Image.open(earlierImgPath)
-                diffImg = img_archive.diffImages(imgOrig, earlierImg)
+                earlierImg = earlierImg.crop(extremaCoords)
+                diffImg = img_archive.diffSmoothImages(imgOrig, earlierImg)
                 extremas = diffImg.getextrema()
                 if extremas[0][0] == 128 or extremas[0][1] == 128 or extremas[1][0] == 128 or extremas[1][1] == 128 or extremas[2][0] == 128 or extremas[2][1] == 128:
                     logging.warning('Skipping no diffs %s, name=%s', str(extremas), fileName)
@@ -278,19 +308,14 @@ def main():
                 fileNameParts = os.path.splitext(fileName)
                 fileName = str(fileNameParts[0]) + ('_Diff%d' % minusMinutes) + fileNameParts[1]
 
-            if recropType == 'raw':
-                cropCoords = [oldCoords]
-            else:
-                # crop the full sized image to show just the smoke, but shifted and flipped
-                # shifts and flips increase number of segments for training and also prevent overfitting by perturbing data
-                cropCoords = getCropCoords((minX, minY, maxX, maxY), minSizeX, minSizeY, growRatio, (imgOrig.size[0], imgOrig.size[1]), recropType)
             for newCoords in cropCoords:
                 # XXXX - save work if old=new?
                 logging.warning('coords old %s, new %s', str(oldCoords), str(newCoords))
                 imgNameNoExt = str(os.path.splitext(fileName)[0])
                 cropImgName = imgNameNoExt + '_Crop_' + 'x'.join(list(map(lambda x: str(x), newCoords))) + '.jpg'
                 cropImgPath = os.path.join(args.outputDir, cropImgName)
-                cropped_img = imgOrig.crop(newCoords)
+                cropped_img = imgOrig.crop((newCoords[0] - extremaCoords[0], newCoords[1] - extremaCoords[1],
+                                            newCoords[2] - extremaCoords[0], newCoords[3] - extremaCoords[1]))
                 cropped_img.save(cropImgPath, format='JPEG')
                 if recropType == 'augment':
                     flipped_img = cropped_img.transpose(Image.FLIP_LEFT_RIGHT)
@@ -298,10 +323,6 @@ def main():
                     flipImgPath = os.path.join(args.outputDir, flipImgName)
                     flipped_img.save(flipImgPath, format='JPEG')
             logging.warning('Processed row: %d, file: %s', rowIndex, fileName)
-            if args.display:
-                displayCoords = [oldCoords] + cropCoords
-                displayImageWithScores(imgOrig, displayCoords)
-                imageDisplay(imgOrig)
     logging.warning('Skipped tiny images %d, %s', len(skippedTiny), str(skippedTiny))
     logging.warning('Skipped huge images %d, %s', len(skippedHuge), str(skippedHuge))
     logging.warning('Skipped images without archives %d, %s', len(skippedArchive), str(skippedArchive))

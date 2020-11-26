@@ -27,7 +27,10 @@ import time, datetime, dateutil.parser
 from html.parser import HTMLParser
 import requests
 import re
+import pathlib
 from PIL import Image, ImageMath
+import numpy as np
+import cv2
 
 
 def getImgPath(outputDir, cameraID, timestamp, cropCoords=None, diffMinutes=0):
@@ -361,8 +364,6 @@ def gcfFfmpeg(gcfUrl, googleServices, hpwrenSource, qNum, folderID):
     Returns:
         Cloud function result
     """
-    token = goog_helper.getIdToken(googleServices, gcfUrl)
-    headers = {'Authorization': 'bearer {}'.format(token)}
     gcfParams = {
         'hostName': hpwrenSource['server'],
         'cameraID': hpwrenSource['cameraID'],
@@ -372,10 +373,18 @@ def gcfFfmpeg(gcfUrl, googleServices, hpwrenSource, qNum, folderID):
         'qNum': qNum,
         'uploadDir': folderID
     }
-    rawResponse = requests.post(gcfUrl, headers=headers, data=gcfParams)
-    response = rawResponse.content.decode()
-    if response != 'done':
-        raise ValueError('Failed to upload to cloud (%s, %s).  Please retry' % (response, rawResponse))
+    maxRetries = 3
+    retriesLeft = maxRetries
+    while retriesLeft > 0:
+        token = goog_helper.getIdToken(googleServices, gcfUrl, retriesLeft != maxRetries)
+        headers = {'Authorization': 'bearer {}'.format(token)}
+        rawResponse = requests.post(gcfUrl, headers=headers, data=gcfParams)
+        response = rawResponse.content.decode()
+        if response == 'done':
+            return response
+        retriesLeft -= 1
+        logging.error('Error calling GCF. %d retries left.  resp=%s  raw=%s', retriesLeft, str(response), str(rawResponse))
+        time.sleep(5) # wait 5 seconds before retrying
     return response
 
 
@@ -644,4 +653,60 @@ def diffImages(imgA, imgB):
         bandsImgOut.append(out)
 
     return Image.merge('RGB', bandsImgOut)
+
+
+def smoothAndCache(imgPath, outputDir):
+    ppath = pathlib.PurePath(imgPath)
+    # add 's_' prefix to denote smoothed images
+    smoothImgPath = os.path.join(outputDir, 's_' + str(ppath.name))
+    if os.path.isfile(smoothImgPath): # smooth image already generated
+        return smoothImgPath
+
+    img = cv2.imread(imgPath)
+    smoothImg = cv2.fastNlMeansDenoisingColored(img, None, 10,10,7,21)
+    cv2.imwrite(smoothImgPath, smoothImg)
+    return smoothImgPath
+
+
+def diffSmoothImageFiles(imgAFile, imgBFile, cachedSmoothDir='.'):
+    smoothImgAPath = smoothAndCache(imgAFile, cachedSmoothDir)
+    smoothImgAPillow = Image.open(smoothImgAPath)
+
+    smoothImgBPath = smoothAndCache(imgBFile, cachedSmoothDir)
+    smoothImgBPillow = Image.open(smoothImgBPath)
+
+    return diffImages(smoothImgAPillow, smoothImgBPillow)
+
+
+def smoothImage(img):
+    """Smooth the given image
+
+    Args:
+        img: Pillow image object
+
+    Returns:
+        Pillow image object after smoothing
+    """
+    # Pillow uses RGB and cv2 uses GBR, so have to convert before and after smoothing
+    imgBGR = cv2.cvtColor(np.asarray(img), cv2.COLOR_BGR2RGB)
+    smoothImgBGR = cv2.fastNlMeansDenoisingColored(imgBGR, None, 10,10,7,21)
+    smoothImgRGB = cv2.cvtColor(smoothImgBGR, cv2.COLOR_BGR2RGB)
+    return Image.fromarray(smoothImgRGB)
+
+
+def diffSmoothImages(imgA, imgB):
+    """Subtract two images (r-r, g-g, b-b) after smoothing them first.
+
+    Args:
+        imgA: Pillow image object to subtract from
+        imgB: Pillow image object to subtract
+
+    Returns:
+        Pillow image object containing the results of the subtraction with 128 mean
+    """
+
+    smoothImgA = smoothImage(imgA)
+    smoothImgB = smoothImage(imgB)
+
+    return diffImages(smoothImgA, smoothImgB)
 

@@ -86,7 +86,8 @@ def getGoogleServices(settings, args):
         creds = None
     return {
         # 'mail': build('gmail', 'v1', http=creds.authorize(Http())),
-        'creds': creds
+        'creds': creds,
+        'time': time.time()
     }
 
 
@@ -106,7 +107,7 @@ def getServiceIdToken(audience):
 getServiceIdToken.cached = {}
 
 
-def getIdToken(googleServices, url):
+def getIdToken(googleServices, url, forceRefresh=False):
     """Get an ID token usable for GCF calls
 
     Args:
@@ -116,9 +117,14 @@ def getIdToken(googleServices, url):
         ID token string
     """
     if googleServices['creds']:
-        token = googleServices['creds'].id_token_jwt
+        creds = googleServices['creds']
+        if forceRefresh or ((time.time() - googleServices['time']) > 30*60):  # refresh access token if older than half hour
+            logging.warning('Refreshing access token')
+            creds.get_access_token()
+            googleServices['time'] = time.time()
+        token = creds.id_token_jwt
     else:
-        token = goog_helper.getServiceIdToken(gcfUrl)
+        token = getServiceIdToken(url)
     return token
 
 
