@@ -93,7 +93,7 @@ def main():
         imgOrig = Image.open(os.path.join(args.inputDir, fileName))
         earlierImg = Image.open(earlierImgPath)
         if fullImages:
-            diffImg = img_archive.diffImages(imgOrig, earlierImg)
+            diffImg = img_archive.diffSmoothImages(imgOrig, earlierImg)
         else:
             croppedEarlyImg = earlierImg.crop((parsedName['minX'], parsedName['minY'], parsedName['maxX'], parsedName['maxY']))
             diffImg = img_archive.diffImages(imgOrig, croppedEarlyImg)

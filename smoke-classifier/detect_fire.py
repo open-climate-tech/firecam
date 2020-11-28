@@ -604,7 +604,7 @@ def genDiffImage(imgPath, earlierImgPath, minusMinutes):
     """
     imgA = Image.open(imgPath)
     imgB = Image.open(earlierImgPath)
-    diffImg = img_archive.diffImages(imgA, imgB)
+    diffImg = img_archive.diffSmoothImages(imgA, imgB)
     extremas = diffImg.getextrema()
     if extremas[0][0] == 128 or extremas[0][1] == 128 or extremas[1][0] == 128 or extremas[1][1] == 128 or extremas[2][0] == 128 or extremas[2][1] == 128:
         logging.warning('Skipping no diffs %s', str(extremas))

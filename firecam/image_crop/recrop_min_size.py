@@ -296,6 +296,12 @@ def main():
                         continue
                 logging.warning('Subtracting old image %s', earlierImgPath)
                 earlierImg = Image.open(earlierImgPath)
+                if not isImageValid(earlierImg):  # retry download if image invalid
+                    os.remove(earlierImgPath)
+                    files = img_archive.getHpwrenImages(googleServices, settings, settings.downloadDir, camArchives, nameParsed['cameraID'], dt, dt, 1)
+                    earlierImgPath = files[0]
+                    earlierImg = Image.open(earlierImgPath)
+
                 earlierImg = earlierImg.crop(extremaCoords)
                 diffImg = img_archive.diffSmoothImages(imgOrig, earlierImg)
                 extremas = diffImg.getextrema()
