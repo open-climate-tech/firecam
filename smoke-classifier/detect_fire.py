@@ -288,7 +288,7 @@ def getHeadingRange(cameraID, imgPath, minX, maxX):
     Returns:
         Tuple (int, int): heading and uncertainty of heading
     """
-    degreesInView = 100 # camera horizontal field of view ranges from 90 to 110
+    degreesInView = 110 # camera horizontal field of view is 110 for most Mobotix cameras
     degreesAlignmentError = 10 # cameras are not exactly aligned to cardnial headings
 
     # get horizontal pixel width
