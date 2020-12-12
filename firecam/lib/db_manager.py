@@ -174,6 +174,7 @@ class DbManager(object):
             ('CroppedID', 'TEXT'),
             ('MapID', 'TEXT'),
             ('polygon', 'TEXT'),
+            ('sourcePolygons', 'TEXT'),
         ]
 
         # votes regarding alerts

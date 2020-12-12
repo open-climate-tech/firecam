@@ -44,6 +44,7 @@ import time, datetime, dateutil.parser
 import random
 import math
 import re
+import json
 import hashlib
 import gc
 from urllib.request import urlretrieve
@@ -51,6 +52,7 @@ import tensorflow as tf
 from PIL import Image, ImageFile, ImageDraw, ImageFont
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 import ffmpeg
+from shapely.geometry import Polygon
 
 
 def getNextImage(dbManager, cameras, cameraID=None):
@@ -229,52 +231,6 @@ def genAnnotatedImages(constants, cameraID, timestamp, imgPath, fireSegment):
     return (moviePath, annotatedPath)
 
 
-def drawPieSlice(mapImg, heading, rangeAngle):
-    """Draw a semi-transparent red pie slice on at center of given map pointing towards
-       given heading with given range (angular width)
-
-    Args:
-        mapImg: (Image) base map image
-        heading (int): direction of fire from camera
-        rangeAngle (int): angular range of uncertainty around heading
-
-    Returns:
-        Image object with annotated map
-    """
-    mapImgAlpha = mapImg.convert('RGBA')
-    pie = Image.new('RGBA', mapImgAlpha.size)
-    pieDraw = ImageDraw.Draw(pie)
-    angle = heading + 270
-    minAngle = (angle - rangeAngle/2) % 360
-    maxAngle = (angle + rangeAngle/2) % 360
-    pieDraw.pieslice((0, 0, mapImg.size[0], mapImg.size[1]), minAngle, maxAngle, fill=(255,0,0,64))
-    mapImgAlpha.paste(pie, mask=pie)
-    del pieDraw
-    pie.close()
-    return mapImgAlpha.convert('RGB')
-
-
-def cropPieSlice(mapImg, heading):
-    """Crop the given annotated map image to 1/4 size with center shifted towards given heading
-
-    Args:
-        mapImg: (Image) annotated map image
-        heading (int): direction of fire from camera
-
-    Returns:
-        Image object with cropped annotated map
-    """
-    angle = (90 - heading) % 360
-    offsetX = math.cos(angle*math.pi/180) * mapImg.size[0]/6
-    offsetY = 0 - math.sin(angle*math.pi/180) * mapImg.size[1]/6
-    centerX = int(mapImg.size[0]/2 + offsetX)
-    centerY = int(mapImg.size[1]/2 + offsetY)
-    minX = centerX - mapImg.size[0]/4
-    minY = centerY - mapImg.size[1]/4
-    coords = (minX, minY, minX + mapImg.size[0]/2, minY + mapImg.size[1]/2)
-    return mapImg.crop(coords)
-
-
 def getHeadingRange(cameraID, imgPath, minX, maxX):
     """Return heading (degrees 0 = North) and range of uncertainty of heading
        for the potential fire direction from given camera
@@ -328,14 +284,104 @@ def getCameraMapLocation(dbManager, cameraID):
     return (dbResult[0]['mapfile'], dbResult[0]['latitude'], dbResult[0]['longitude'])
 
 
-def genAnnotatedMap(mapImgGCS, imgPath, heading, rangeAngle):
+def drawPolyPixels(mapImg, coordsPixels, fillColor):
+    """Draw translucent polygon on given map image with given pixel coordinates and fill color
+
+    Args:
+        mapImg (Image): existing image
+        coordsPixels (list): list of vertices of polygon
+        fillColor (list): RGBA values of fill color
+
+    Returns:
+        Image object
+    """
+    mapImgAlpha = mapImg.convert('RGBA')
+    polyImg = Image.new('RGBA', mapImgAlpha.size)
+    polyDraw = ImageDraw.Draw(polyImg)
+    polyDraw.polygon(coordsPixels, fill=fillColor)
+    mapImgAlpha.paste(polyImg, mask=polyImg)
+    del polyDraw
+    polyImg.close()
+    return mapImgAlpha.convert('RGB')
+
+
+def convertLatLongToPixels(mapImg, leftLongitude, rightLongitude, topLatitude, bottomLatitude, latLong):
+    """Convert given lat/long coordinates into pixel X/Y coordinates given map and its borders
+
+    Args:
+        mapImg (Image): map image
+        left/right/top/bottom: borders of map
+        latlong (list): (lat, long)
+
+    Returns:
+        (x, y) pixel values of cooressponding pixel in image
+    """
+    assert latLong[0] > bottomLatitude
+    assert latLong[0] < topLatitude
+    assert latLong[1] > leftLongitude
+    assert latLong[1] < rightLongitude
+
+    diffLat = topLatitude - bottomLatitude
+    diffLong = rightLongitude - leftLongitude
+
+    pixelX = (latLong[1] - leftLongitude)/diffLong*mapImg.size[0]
+    pixelX = max(min(pixelX, mapImg.size[0] - 1), 0)
+    pixelY = mapImg.size[1] - (latLong[0] - bottomLatitude)/diffLat*mapImg.size[1]
+    pixelY = max(min(pixelY, mapImg.size[1] - 1), 0)
+    return (pixelX, pixelY)
+
+
+def drawPolyLatLong(mapImg, leftLongitude, rightLongitude, topLatitude, bottomLatitude, coords, fillColor):
+    """Draw translucent polygon on given map image with given lat/long coordinates and fill color
+
+    Args:
+        mapImg (Image): existing image
+        left/right/top/bottom: borders of map
+        coords (list): list of vertices of polygon in lat/long format
+        fillColor (list): RGBA values of fill color
+
+    Returns:
+        Image object
+    """
+    coordsPixels = []
+    # logging.warning('coords latLong %s', str(coords))
+    for point in coords:
+        pixels = convertLatLongToPixels(mapImg, leftLongitude, rightLongitude, topLatitude, bottomLatitude, point)
+        coordsPixels.append(pixels)
+    # logging.warning('coords pixels %s', str(coordsPixels))
+    return drawPolyPixels(mapImg, coordsPixels, fillColor)
+
+
+def cropCentered(mapImg, leftLongitude, rightLongitude, topLatitude, bottomLatitude, polygonCoords):
+    """Crop given image to 1/4 size centered at the centroid of given polygon
+
+    Args:
+        mapImg (Image): existing image
+        left/right/top/bottom: borders of map
+        polygonCoords (list): list of vertices of polygon in lat/long format
+
+    Returns:
+        Cropped Image object
+    """
+    poly = Polygon(polygonCoords)
+    centerLatLong = list(zip(*poly.centroid.xy))[0]
+    centerXY = convertLatLongToPixels(mapImg, leftLongitude, rightLongitude, topLatitude, bottomLatitude, centerLatLong)
+    centerX = min(max(centerXY[0], mapImg.size[0]/4), mapImg.size[0]*3/4)
+    centerY = min(max(centerXY[1], mapImg.size[1]/4), mapImg.size[1]*3/4)
+    coords = (centerX - mapImg.size[0]/4, centerY - mapImg.size[1]/4, centerX + mapImg.size[0]/4, centerY + mapImg.size[1]/4)
+    return mapImg.crop(coords)
+
+
+def genAnnotatedMap(mapImgGCS, camLatitude, camLongitude, imgPath, polygon, sourcePolygons):
     """Generate annotated map highlighting potential fire area
 
     Args:
         mapImgGCS (str): GCS path to map around camera
+        camLatitude (float): latitude of camera
+        camLongitude (float): longitude of camera
         imgPath (str): filepath of the image
-        heading (int): direction of fire from camera
-        rangeAngle (int): angular range of uncertainty around heading
+        polygon (list): list of vertices of polygon of potential fire location
+        sourcePolygons (list): list of polygons from individual cameras contributing to the polygon
 
     Returns:
         filepath of annotated map
@@ -346,14 +392,28 @@ def genAnnotatedMap(mapImgGCS, imgPath, heading, rangeAngle):
     mapOrig = filePathParts[0] + '_mapOrig.jpg'
     goog_helper.downloadBucketFile(parsedPath['bucket'], parsedPath['name'], mapOrig)
 
-    # markup map to show pie slice
+    mapWidthLong = 1.757 # all maps have span this many longitidues
+    mapHeightLat = 1.466 # all maps have span this many latitudes
+    leftLongitude = camLongitude - mapWidthLong/2
+    rightLongitude = camLongitude + mapWidthLong/2
+    bottomLatitude = camLatitude - mapHeightLat/2
+    topLatitude = camLatitude + mapHeightLat/2
+
+    # markup map to show fire area
     mapImg = Image.open(mapOrig)
-    mapImgMarked = drawPieSlice(mapImg, heading, rangeAngle)
-    mapImgCropped = cropPieSlice(mapImgMarked, heading)
+    # first draw all source polygons (in light red) that contributed to this fire area
+    for sourcePolygon in sourcePolygons:
+        lightRed = (255,0,0, 50)
+        mapImg = drawPolyLatLong(mapImg, leftLongitude, rightLongitude, topLatitude, bottomLatitude, sourcePolygon, lightRed)
+    # if there were multiple source polygons, highlight the fire area in light blue
+    if len(sourcePolygons) > 1:
+        lightBlue = (0,0,255, 75)
+        mapImg = drawPolyLatLong(mapImg, leftLongitude, rightLongitude, topLatitude, bottomLatitude, polygon, lightBlue)
+    # crop to smaller map centered around fire area
+    mapImgCropped = cropCentered(mapImg, leftLongitude, rightLongitude, topLatitude, bottomLatitude, polygon)
     mapCroppedPath = filePathParts[0] + '_map.jpg'
     mapImgCropped.save(mapCroppedPath)
     mapImgCropped.close()
-    mapImgMarked.close()
     mapImg.close()
     os.remove(mapOrig)
     return mapCroppedPath
@@ -413,7 +473,67 @@ def isDuplicateAlert(dbManager, cameraID, timestamp):
     return False
 
 
-def updateAlertsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon):
+def getRecentAlerts(dbManager, timestamp):
+    """Return all recent (last 10 minutes) alerts
+
+    Args:
+        dbManager (DbManager):
+        timestamp (int): time.time() value when image was taken
+
+    Returns:
+        List of alerts
+    """
+    sqlTemplate = """SELECT * FROM alerts where timestamp > %s order by timestamp desc"""
+    sqlStr = sqlTemplate % (timestamp - 10*60)
+
+    dbResult = dbManager.query(sqlStr)
+    return dbResult
+
+
+def getPolygonIntersection(coords1, coords2):
+    """Find the area intersection of the two given polygons
+
+    Args:
+        coords1 (list): vertices of polygon 1
+        coords2 (list): vertices of polygon 2
+
+    Returns:
+        List of vertices of intersection area or None
+    """
+    poly1 = Polygon(coords1)
+    poly2 = Polygon(coords2)
+    if not poly1.intersects(poly2):
+        return None
+    intPoly = poly1.intersection(poly2)
+    if intPoly.area == 0: # point intersections treated as not intersecting
+        return None
+    # logging.warning('intpoly: %s', str(intPoly))
+    intersection = []
+    for i in range(len(intPoly.exterior.coords.xy[0])):
+        intersection.append([intPoly.exterior.coords.xy[0][i], intPoly.exterior.coords.xy[1][i]])
+    return intersection
+
+
+def intersectRecentAlerts(dbManager, timestamp, triangle):
+    """Check for area intersection of given triangle with polygons of recent alerts
+
+    Args:
+        dbManager (DbManager):
+        timestamp (int): time.time() value when image was taken
+        triangle (list): vertices of triangle
+
+    Returns:
+        Intersection area and all source polygons of recent alert
+    """
+    recentAlerts = getRecentAlerts(dbManager, timestamp)
+    for alert in recentAlerts:
+        alertCoords = json.loads(alert['polygon'])
+        intersection = getPolygonIntersection(triangle, alertCoords)
+        if intersection:
+            return (intersection, json.loads(alert['sourcepolygons']))
+
+
+def updateAlertsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon, sourcePolygons):
     """Add new entry to Alerts table
 
     Args:
@@ -425,6 +545,7 @@ def updateAlertsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, map
         mapUrl: Public URL for annotated map
         fireSegment (dictionary): dictionary with information for the segment with fire/smoke
         polygon (list): list of vertices of polygon of potential fire location
+        sourcePolygons (list): list of polygons from individual cameras contributing to the polygon
     """
     dbRow = {
         'CameraName': cameraID,
@@ -434,6 +555,7 @@ def updateAlertsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, map
         'CroppedID': croppedUrl,
         'MapID': mapUrl,
         'polygon': str(polygon),
+        'sourcePolygons': str(sourcePolygons),
     }
     dbManager.add_data('alerts', dbRow)
 
@@ -529,11 +651,18 @@ def alertFire(constants, cameraID, timestamp, imgPath, fireSegment):
     """
     dbManager = constants['dbManager']
 
-    (mapImgGCS, latitude, longitude) = getCameraMapLocation(dbManager, cameraID)
+    (mapImgGCS, camLatitude, camLongitude) = getCameraMapLocation(dbManager, cameraID)
     (heading, rangeAngle) = getHeadingRange(cameraID, imgPath, fireSegment['MinX'], fireSegment['MaxX'])
     (croppedPath, annotatedPath) = genAnnotatedImages(constants, cameraID, timestamp, imgPath, fireSegment)
-    mapPath = genAnnotatedMap(mapImgGCS, imgPath, heading, rangeAngle)
-    polygon = getTriangleVertices(latitude, longitude, heading, rangeAngle)
+    triangle = getTriangleVertices(camLatitude, camLongitude, heading, rangeAngle)
+    intersectionInfo = intersectRecentAlerts(dbManager, timestamp, triangle)
+    if intersectionInfo:
+        polygon = intersectionInfo[0]
+        sourcePolygons = intersectionInfo[1] + [triangle]
+    else:
+        polygon = triangle
+        sourcePolygons = [triangle]
+    mapPath = genAnnotatedMap(mapImgGCS, camLatitude, camLongitude, imgPath, polygon, sourcePolygons)
 
     # copy annotated image to publicly accessible settings.noticationsDir
     alertsDateDir = goog_helper.dateSubDir(settings.noticationsDir)
@@ -545,7 +674,7 @@ def alertFire(constants, cameraID, timestamp, imgPath, fireSegment):
     annotatedUrl = annotatedID.replace('gs://', 'https://storage.googleapis.com/')
     mapUrl = mapID.replace('gs://', 'https://storage.googleapis.com/')
 
-    updateAlertsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon)
+    updateAlertsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon, sourcePolygons)
     pubsubFireNotification(cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon)
     emailFireNotification(constants, cameraID, timestamp, imgPath, annotatedPath, fireSegment)
     smsFireNotification(dbManager, cameraID)
@@ -570,14 +699,6 @@ def deleteImageFiles(imgPath, origImgPath):
     # leftoverFiles = os.listdir(str(ppath.parent))
     # if len(leftoverFiles) > 0:
     #     logging.warning('leftover files %s', str(leftoverFiles))
-
-
-def getLastScoreCamera(dbManager):
-    sqlStr = "SELECT CameraName from scores order by Timestamp desc limit 1;"
-    dbResult = dbManager.query(sqlStr)
-    if len(dbResult) > 0:
-        return dbResult[0]['CameraName']
-    return None
 
 
 def heartBeat(filename):
