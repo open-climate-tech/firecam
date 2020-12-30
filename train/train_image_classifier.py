@@ -82,6 +82,7 @@ def main():
         ["a", "algorithm", "adam, nadam, or rmsprop"],
     ]
     optArgs = [
+        ["m", "maxEpochs", "(optional) max number of epochs (default 1000)", int],
         ["r", "resumeModel", "resume training from given saved model"],
         ["s", "startEpoch", "epoch to resume from (epoch from resumeModel)"],
         ["t", "stepsPerEpoch", "(optional) number of steps per epoch", int],
@@ -91,7 +92,7 @@ def main():
     args = collect_args.collectArgs(reqArgs, optionalArgs=optArgs, parentParsers=[goog_helper.getParentParser()])
 
     batch_size = 64
-    max_epochs = 1000
+    max_epochs = args.maxEpochs if args.maxEpochs else 1000
     steps_per_epoch = args.stepsPerEpoch if args.stepsPerEpoch else 2000
     overshoot_epochs = 30 #number of epochs over which validation loss hasnt decreased to stop training at
     val_steps = args.valStepsPerEpoch if args.valStepsPerEpoch else 200

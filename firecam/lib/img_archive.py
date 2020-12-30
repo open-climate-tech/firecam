@@ -648,7 +648,6 @@ def diffImages(imgA, imgB):
     bandsImgOut = []
 
     for bandNum in range(len(bandsImgA)):
-        # out = ImageMath.eval("convert((128+a/2)-b/2,'L')", a=bandsImgA[bandNum], b=bandsImgB[bandNum])
         out = ImageMath.eval("convert(128+a-b,'L')", a=bandsImgA[bandNum], b=bandsImgB[bandNum])
         bandsImgOut.append(out)
 
@@ -689,7 +688,8 @@ def smoothImage(img):
     """
     # Pillow uses RGB and cv2 uses GBR, so have to convert before and after smoothing
     imgBGR = cv2.cvtColor(np.asarray(img), cv2.COLOR_BGR2RGB)
-    smoothImgBGR = cv2.fastNlMeansDenoisingColored(imgBGR, None, 10,10,7,21)
+    # smoothImgBGR = cv2.fastNlMeansDenoisingColored(imgBGR, None, 10,10,7,21)
+    smoothImgBGR = cv2.bilateralFilter(imgBGR, 9, 75, 75)
     smoothImgRGB = cv2.cvtColor(smoothImgBGR, cv2.COLOR_BGR2RGB)
     return Image.fromarray(smoothImgRGB)
 

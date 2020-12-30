@@ -297,6 +297,7 @@ def main():
                 logging.warning('Subtracting old image %s', earlierImgPath)
                 earlierImg = Image.open(earlierImgPath)
                 if not isImageValid(earlierImg):  # retry download if image invalid
+                    earlierImg.close()
                     os.remove(earlierImgPath)
                     files = img_archive.getHpwrenImages(googleServices, settings, settings.downloadDir, camArchives, nameParsed['cameraID'], dt, dt, 1)
                     earlierImgPath = files[0]
@@ -305,7 +306,7 @@ def main():
                 earlierImg = earlierImg.crop(extremaCoords)
                 diffImg = img_archive.diffSmoothImages(imgOrig, earlierImg)
                 extremas = diffImg.getextrema()
-                if extremas[0][0] == 128 or extremas[0][1] == 128 or extremas[1][0] == 128 or extremas[1][1] == 128 or extremas[2][0] == 128 or extremas[2][1] == 128:
+                if (extremas[0][0] == 128 and extremas[0][1] == 128) or (extremas[1][0] == 128 and extremas[1][1] == 128) or (extremas[2][0] == 128 and extremas[2][1] == 128):
                     logging.warning('Skipping no diffs %s, name=%s', str(extremas), fileName)
                     skippedTiny.append((rowIndex, fileName, extremas))
                     continue
