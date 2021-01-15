@@ -295,17 +295,15 @@ def convertLatLongToPixels(mapImg, leftLongitude, rightLongitude, topLatitude, b
     Returns:
         (x, y) pixel values of cooressponding pixel in image
     """
-    assert latLong[0] > bottomLatitude
-    assert latLong[0] < topLatitude
-    assert latLong[1] > leftLongitude
-    assert latLong[1] < rightLongitude
+    latitude = min(max(latLong[0], bottomLatitude), topLatitude)
+    longitude = min(max(latLong[1], leftLongitude), rightLongitude)
 
     diffLat = topLatitude - bottomLatitude
     diffLong = rightLongitude - leftLongitude
 
-    pixelX = (latLong[1] - leftLongitude)/diffLong*mapImg.size[0]
+    pixelX = (longitude - leftLongitude)/diffLong*mapImg.size[0]
     pixelX = max(min(pixelX, mapImg.size[0] - 1), 0)
-    pixelY = mapImg.size[1] - (latLong[0] - bottomLatitude)/diffLat*mapImg.size[1]
+    pixelY = mapImg.size[1] - (latitude - bottomLatitude)/diffLat*mapImg.size[1]
     pixelY = max(min(pixelY, mapImg.size[1] - 1), 0)
     return (pixelX, pixelY)
 
