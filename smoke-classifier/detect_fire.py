@@ -263,27 +263,6 @@ def getHeadingRange(cameraID, imgPath, minX, maxX):
     return (heading, range)
 
 
-def getCameraMapLocation(dbManager, cameraID):
-    """Return the map surrounding the given camera by check SQL DB
-
-    Args:
-        dbManager (DbManager):
-        cameraID (str): camera name
-
-    Returns:
-        GCS file for map
-    """
-    sqlTemplate = """SELECT mapFile,latitude,longitude FROM cameras WHERE locationID =
-                     (SELECT locationID FROM sources WHERE name='%s')"""
-    sqlStr = sqlTemplate % (cameraID)
-    dbResult = dbManager.query(sqlStr)
-    # print('dbr', len(dbResult), dbResult)
-    if len(dbResult) == 0:
-        logging.error('Did not find camera map %s', cameraID)
-        return None
-    return (dbResult[0]['mapfile'], dbResult[0]['latitude'], dbResult[0]['longitude'])
-
-
 def drawPolyPixels(mapImg, coordsPixels, fillColor):
     """Draw translucent polygon on given map image with given pixel coordinates and fill color
 
@@ -651,7 +630,7 @@ def alertFire(constants, cameraID, timestamp, imgPath, fireSegment):
     """
     dbManager = constants['dbManager']
 
-    (mapImgGCS, camLatitude, camLongitude) = getCameraMapLocation(dbManager, cameraID)
+    (mapImgGCS, camLatitude, camLongitude) = dbManager.getCameraMapLocation(cameraID)
     (heading, rangeAngle) = getHeadingRange(cameraID, imgPath, fireSegment['MinX'], fireSegment['MaxX'])
     (croppedPath, annotatedPath) = genAnnotatedImages(constants, cameraID, timestamp, imgPath, fireSegment)
     triangle = getTriangleVertices(camLatitude, camLongitude, heading, rangeAngle)

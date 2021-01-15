@@ -461,3 +461,21 @@ class DbManager(object):
         sqlStr = sqlTemplate
         dbResult = self.query(sqlStr)
         return dbResult
+
+    def getCameraMapLocation(self, cameraID):
+        """Return the lat, long, and map surrounding the given camera by check SQL DB
+
+        Args:
+            cameraID (str): camera name
+
+        Returns:
+            lat, long, GCS file for map
+        """
+        sqlTemplate = """SELECT mapFile,latitude,longitude FROM cameras WHERE locationID =
+                        (SELECT locationID FROM sources WHERE name='%s')"""
+        sqlStr = sqlTemplate % (cameraID)
+        dbResult = self.query(sqlStr)
+        if len(dbResult) == 0:
+            logging.error('Did not find camera map %s', cameraID)
+            return None
+        return (dbResult[0]['mapfile'], dbResult[0]['latitude'], dbResult[0]['longitude'])
