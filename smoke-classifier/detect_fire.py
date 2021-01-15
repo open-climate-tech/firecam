@@ -411,7 +411,7 @@ def getTriangleVertices(latitude, longitude, heading, rangeAngle):
     Returns:
         List of all vertices in [lat,long] format
     """
-    distanceDegrees = 0.5 # approx 35 miles
+    distanceDegrees = 0.6 # approx 40 miles
 
     vertices = [[latitude, longitude]]
     angle = 90 - heading
@@ -453,7 +453,7 @@ def isDuplicateAlert(dbManager, cameraID, timestamp):
 
 
 def getRecentAlerts(dbManager, timestamp):
-    """Return all recent (last 10 minutes) alerts
+    """Return all recent (last 15 minutes) alerts
 
     Args:
         dbManager (DbManager):
@@ -463,7 +463,7 @@ def getRecentAlerts(dbManager, timestamp):
         List of alerts
     """
     sqlTemplate = """SELECT * FROM alerts where timestamp > %s order by timestamp desc"""
-    sqlStr = sqlTemplate % (timestamp - 10*60)
+    sqlStr = sqlTemplate % (timestamp - 15*60)
 
     dbResult = dbManager.query(sqlStr)
     return dbResult
