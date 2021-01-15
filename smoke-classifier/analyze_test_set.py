@@ -52,7 +52,7 @@ def segmentImage(imgPath):
     return rect_to_squares.cutBoxesArray(img)
 
     
-def classifyImages(detectionPolicy, imageList, className, outFile):
+def classifyImages(detectionPolicy, checkShifts, imageList, className, outFile):
     count = 0
     positives = []
     negatives = []
@@ -67,10 +67,13 @@ def classifyImages(detectionPolicy, imageList, className, outFile):
         image_spec[-1]['timestamp'] = nameParsed['unixTime']
         image_spec[-1]['cameraID'] = nameParsed['cameraID']
 
-        detectionResult = detectionPolicy.detect(image_spec, checkShifts=True, silent=True)
+        detectionResult = detectionPolicy.detect(image_spec, checkShifts=checkShifts, silent=True)
+        # logging.warning('dr %s', str(detectionResult))
         image_spec[-1]['startY'] = 140
         image_spec[-1]['endY'] = -140
-        detectionResultOffset = detectionPolicy.detect(image_spec, checkShifts=True, silent=True)
+        detectionResultOffset = detectionPolicy.detect(image_spec, checkShifts=checkShifts, silent=True)
+        if len(detectionResultOffset['segments']) == 0: # happens with tiny images
+            detectionResultOffset = detectionResult
         scores = [detectionResult['segments'][0]['score'], detectionResultOffset['segments'][0]['score']]
         if detectionResult['fireSegment'] and detectionResultOffset['fireSegment']:
             status = 'smoke'
@@ -120,10 +123,12 @@ def main():
     optArgs = [
         ["l", "labels", "labels file generated during retraining"],
         ["m", "model", "model file generated during retraining"],
+        ["c", "checkShifts", "(optional) override default value 1 for checkShifts"],
     ]
     args = collect_args.collectArgs(reqArgs, optionalArgs=optArgs)
     model_file = args.model if args.model else settings.model_file
     labels_file = args.labels if args.labels else settings.labels_file
+    checkShifts = bool(int(args.checkShifts)) if args.checkShifts else True
     DetectionPolicyClass = policies.get_policies()[settings.detectionPolicy]
     detectionPolicy = DetectionPolicyClass(args, None, 0, stateless=True, modelLocation=model_file)
 
@@ -137,7 +142,7 @@ def main():
     outFile = open(args.outputFile, 'w')
     doubleOut(outFile, 'Checking model %s' % model_file)
 
-    (positives, negatives, mixed) = classifyImages(detectionPolicy, smoke_image_list, 'smoke', outFile)
+    (positives, negatives, mixed) = classifyImages(detectionPolicy, checkShifts, smoke_image_list, 'smoke', outFile)
     logging.warning('Done with smoke images')
     doubleOut(outFile, 'Smoke counts (pos,neg,mixed): %d, %d, %d' % (len(positives), len(negatives), len(mixed)))
     truePositive = len(positives)
@@ -148,7 +153,7 @@ def main():
     outFile.write('False Negative: ' + ', '.join(negatives) + '\n')
     outFile.write('Mixed smoke: ' + ', '.join(mixed) + '\n')
 
-    (positives, negatives, mixed) = classifyImages(detectionPolicy, other_image_list, 'other', outFile)
+    (positives, negatives, mixed) = classifyImages(detectionPolicy, checkShifts, other_image_list, 'other', outFile)
     logging.warning('Done with nonSmoke images')
     doubleOut(outFile, 'nonSmoke counts (pos,neg,mixed): %d, %d, %d' % (len(positives), len(negatives), len(mixed)))
     falsePositive = len(positives) + len(mixed)
