@@ -136,7 +136,7 @@ def parseFilename(fileName):
         parsed['maxX'] = int(cropInfo[2])
         parsed['maxY'] = int(cropInfo[3])
     parsed['isoStr'] = isoStr
-    parsed['unixTime'] = unixTime
+    parsed['unixTime'] = int(unixTime)
     return parsed
 
 
@@ -606,7 +606,7 @@ def getHpwrenImages(googleServices, settings, outputDir, camArchives, cameraID, 
     Args:
         googleServices (): Google services and credentials
         settings (): settings module
-        outputDir (str): Output directory path
+        outputDir (str): Output directory path or cache object
         camArchives (list): Result of getHpwrenCameraArchives() above
         cameraID (str): ID of camera to fetch images from
         startTimeDT (datetime): starting time of time range
@@ -616,7 +616,32 @@ def getHpwrenImages(googleServices, settings, outputDir, camArchives, cameraID, 
     Returns:
         List of local filesystem paths to downloaded images
     """
+    # If outputDir is a cache object, fetch the real outputDir and set 'cache' variable
+    cache = None
+    if (not isinstance(outputDir, str)) and ('cacheDir' in outputDir):
+        cache = outputDir
+        outputDir = cache['cacheDir']
+
+    # In cache mode, check local cache for existing files before checking remote archive
+    if cache:
+        curTimeDT = startTimeDT
+        timeGapDelta = datetime.timedelta(seconds = 60*gapMinutes)
+        downloaded_files = []
+        while curTimeDT <= endTimeDT:
+            filePath = cacheFindEntry(cache, cameraID, time.mktime(curTimeDT.timetuple()))
+            if filePath:
+                downloaded_files.append(filePath)
+            else:
+                downloaded_files = []
+                break
+            curTimeDT += timeGapDelta
+        if len(downloaded_files) > 0:
+            # all files are in cache, return results
+            logging.warning('already downloaded: %s', downloaded_files)
+            return downloaded_files
+
     matchingDirs = findCameraInArchive(camArchives, cameraID)
+    found = None
     for matchingDir in matchingDirs:
         hpwrenSource = {
             'cameraID': cameraID,
@@ -627,8 +652,73 @@ def getHpwrenImages(googleServices, settings, outputDir, camArchives, cameraID, 
         logging.warning('Searching for files in dir %s', hpwrenSource['dirName'])
         found = downloadFilesHpwren(googleServices, settings, outputDir, hpwrenSource, gapMinutes, False)
         if found:
-            return found
-    return None
+            break
+    # If new files were added to cache directory, update cache object
+    if cache and found:
+        for filePath in found:
+            cacheInsert(cache, filePath)
+    return found
+
+
+def cacheInsert(cache, fileName):
+    """Insert given file into given cache object
+
+    Args:
+        cache (dict): Cache object created by cacheDir()
+        fileName (str): name or path of file to insert
+    """
+    nameParsed = parseFilename(fileName)
+    if nameParsed and nameParsed['cameraID']:
+        cameraID = nameParsed['cameraID']
+        unixTime = nameParsed['unixTime']
+        if not cameraID in cache:
+            cache[cameraID] = []
+        cameraTimes = cache[cameraID]
+        ppath = pathlib.PurePath(fileName)
+        cameraTimes.append({'time': unixTime, 'fileName': str(ppath.name)})
+
+
+def cacheFindEntry(cache, cameraID, desiredTime):
+    """Search given cache for image from given camera at given timestamp (within 30 seconds)
+
+    Args:
+        cache (dict): Cache object created by cacheDir()
+        cameraID (str): ID of camera to fetch images from
+        desiredTime (int): unix time of desired image
+
+    Returns:
+        File path of image or None
+    """
+    if not cameraID in cache:
+        return None
+    cameraTimes = cache[cameraID]
+    closestEntry = min(cameraTimes, key=lambda x: abs(x['time'] - desiredTime))
+    if abs(closestEntry['time'] - desiredTime) < 30:
+        # logging.warning('close: %s', str(closestEntry))
+        return os.path.join(cache['cacheDir'], closestEntry['fileName'])
+    else:
+        # logging.warning('far: %s, %s', str(desiredTime), str(closestEntry))
+        return None
+
+
+def cacheDir(dirPath):
+    """Create a cache of iamges in given directory and return the cache object
+
+    Args:
+        dirPath (str): path to directory containing images
+
+    Returns:
+        Cache object
+    """
+    imageFileNames = sorted(os.listdir(dirPath))
+    cache = {
+        'cacheDir': dirPath
+    }
+    for fileName in imageFileNames:
+        if fileName[-4:] != '.jpg':
+            continue
+        cacheInsert(cache, fileName)
+    return cache
 
 
 def diffImages(imgA, imgB):

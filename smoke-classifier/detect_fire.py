@@ -767,6 +767,15 @@ def getArchivedImages(constants, cameras, startTimeDT, timeRangeSeconds, minusMi
         getArchivedImages.tmpDir = tempfile.TemporaryDirectory()
         logging.warning('TempDir %s', getArchivedImages.tmpDir.name)
 
+    # setup caching of the archive files locally
+    if (getArchivedImages.cache == None) and settings.downloadDir:
+        getArchivedImages.cache = img_archive.cacheDir(settings.downloadDir)
+
+    if getArchivedImages.cache:
+        downloadDirOrCache = getArchivedImages.cache
+    else:
+        downloadDirOrCache = getArchivedImages.tmpDir.name
+
     cameraID = cameras[int(len(cameras)*random.random())]['name']
     timeDT = startTimeDT + datetime.timedelta(seconds = random.random()*timeRangeSeconds)
     # ensure time between 8AM and 8PM because currently focusing on daytime only
@@ -778,11 +787,22 @@ def getArchivedImages(constants, cameras, startTimeDT, timeRangeSeconds, minusMi
         prevTimeDT = timeDT + datetime.timedelta(seconds = -60 * minusMinutes)
     else:
         prevTimeDT = timeDT
-    files = img_archive.getHpwrenImages(constants['googleServices'], settings, getArchivedImages.tmpDir.name,
+    files = img_archive.getHpwrenImages(constants['googleServices'], settings, downloadDirOrCache,
                                         constants['camArchives'], cameraID, prevTimeDT, timeDT, minusMinutes or 1)
     # logging.warning('files %s', str(files))
     if not files:
         return (None, None, None, None)
+
+    # if in cache mode, copy files to temporary directory because they will be deleted later by main loop
+    if getArchivedImages.cache:
+        tmpFiles = []
+        for srcFilePath in files:
+            srcFilePP = pathlib.PurePath(srcFilePath)
+            destPath = os.path.join(getArchivedImages.tmpDir.name, str(srcFilePP.name))
+            shutil.copy(srcFilePath, destPath)
+            tmpFiles.append(destPath)
+        files = tmpFiles
+
     if minusMinutes:
         if len(files) > 1:
             diffFail = False
@@ -812,6 +832,7 @@ def getArchivedImages(constants, cameras, startTimeDT, timeRangeSeconds, minusMi
         return (cameraID, parsedName['unixTime'], files[0], files[0])
     return (None, None, None, None)
 getArchivedImages.tmpDir = None
+getArchivedImages.cache = None
 
 
 def main():
