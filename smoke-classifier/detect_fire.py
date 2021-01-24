@@ -845,6 +845,7 @@ def main():
         ["s", "startTime", "(optional) performs search with modifiedTime > startTime"],
         ["e", "endTime", "(optional) performs search with modifiedTime < endTime"],
         ["z", "randomSeed", "(optional) override random seed"],
+        ["o", "randomOffset", "(optional) random offset - skip given number of random images", int],
         ["l", "limitImages", "(optional) stop after processing given number of images", int],
     ]
     args = collect_args.collectArgs([], optionalArgs=optArgs, parentParsers=[goog_helper.getParentParser()])
@@ -872,6 +873,11 @@ def main():
         randomSeed = args.randomSeed if args.randomSeed else os.urandom(4).hex()
         logging.warning('Random seed %s', randomSeed)
         random.seed(randomSeed, version=2)
+        if args.randomOffset:
+            for x in range(args.randomOffset):
+                # use two random()s each iteration to match getArchivedImages
+                random.random()
+                random.random()
     camArchives = img_archive.getHpwrenCameraArchives(settings.hpwrenArchives)
     DetectionPolicyClass = policies.get_policies()[settings.detectionPolicy]
     detectionPolicy = DetectionPolicyClass(args, dbManager, minusMinutes, stateless=useArchivedImages)
