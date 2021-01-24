@@ -185,6 +185,13 @@ class DbManager(object):
             ('UserID', 'TEXT'),
         ]
 
+        # named_fires regarding alerts
+        named_fires_schema = [
+            ('CameraName', 'TEXT'),
+            ('Timestamp', 'INT'),
+            ('FireName', 'TEXT'),
+        ]
+
         # user preferences (e.g., region of interest)
         user_preferences_schema = [
             ('userid', 'TEXT'),
@@ -217,6 +224,7 @@ class DbManager(object):
             'detections': detections_schema,
             'alerts': alerts_schema,
             'votes': votes_schema,
+            'named_fires': named_fires_schema,
             'user_preferences': user_preferences_schema,
             'notifications': notifications_schema,
         }
