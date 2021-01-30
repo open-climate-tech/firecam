@@ -618,9 +618,9 @@ def getHpwrenImages(googleServices, settings, outputDir, camArchives, cameraID, 
     """
     # If outputDir is a cache object, fetch the real outputDir and set 'cache' variable
     cache = None
-    if (not isinstance(outputDir, str)) and ('cacheDir' in outputDir):
+    if (not isinstance(outputDir, str)) and ('writeDir' in outputDir):
         cache = outputDir
-        outputDir = cache['cacheDir']
+        outputDir = cache['writeDir']
 
     # In cache mode, check local cache for existing files before checking remote archive
     if cache:
@@ -654,7 +654,7 @@ def getHpwrenImages(googleServices, settings, outputDir, camArchives, cameraID, 
         if found:
             break
     # If new files were added to cache directory, update cache object
-    if cache and found:
+    if cache and found and (cache['readDir'] == cache['writeDir']):
         for filePath in found:
             cacheInsert(cache, filePath)
     return found
@@ -695,24 +695,25 @@ def cacheFindEntry(cache, cameraID, desiredTime):
     closestEntry = min(cameraTimes, key=lambda x: abs(x['time'] - desiredTime))
     if abs(closestEntry['time'] - desiredTime) < 30:
         # logging.warning('close: %s', str(closestEntry))
-        return os.path.join(cache['cacheDir'], closestEntry['fileName'])
+        return os.path.join(cache['readDir'], closestEntry['fileName'])
     else:
         # logging.warning('far: %s, %s', str(desiredTime), str(closestEntry))
         return None
 
 
-def cacheDir(dirPath):
+def cacheDir(readDirPath, writeDirPath=None):
     """Create a cache of iamges in given directory and return the cache object
 
     Args:
-        dirPath (str): path to directory containing images
+        readDirPath (str): path to directory containing images
 
     Returns:
         Cache object
     """
-    imageFileNames = sorted(os.listdir(dirPath))
+    imageFileNames = sorted(os.listdir(readDirPath))
     cache = {
-        'cacheDir': dirPath
+        'readDir': readDirPath,
+        'writeDir': writeDirPath or readDirPath
     }
     for fileName in imageFileNames:
         if fileName[-4:] != '.jpg':

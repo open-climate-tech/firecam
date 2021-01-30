@@ -769,7 +769,12 @@ def getArchivedImages(constants, cameras, startTimeDT, timeRangeSeconds, minusMi
 
     # setup caching of the archive files locally
     if (getArchivedImages.cache == None) and settings.downloadDir:
-        getArchivedImages.cache = img_archive.cacheDir(settings.downloadDir)
+        writable = os.access(settings.downloadDir, os.W_OK|os.X_OK)
+        writeDirPath = settings.downloadDir
+        if not writable:
+            getArchivedImages.writeDir = tempfile.TemporaryDirectory()
+            writeDirPath = getArchivedImages.writeDir.name
+        getArchivedImages.cache = img_archive.cacheDir(settings.downloadDir, writeDirPath)
 
     if getArchivedImages.cache:
         downloadDirOrCache = getArchivedImages.cache
