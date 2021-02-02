@@ -426,6 +426,43 @@ def getTriangleVertices(latitude, longitude, heading, rangeAngle):
     return vertices
 
 
+def recordDetection(dbManager, camera, timestamp, imgPath, fireSegment, modelId):
+    """Record that a smoke/fire has been detected
+
+    Record the detection with useful metrics in 'detections' table in SQL DB.
+    Also, upload image file to google cloud
+
+    Args:
+        dbManager (DbManager):
+        camera (str): camera name
+        timestamp (int):
+        imgPath: filepath of the image
+        fireSegment (dictionary): dictionary with information for the segment with fire/smoke
+
+    Returns:
+        File IDs for the uploaded image file
+    """
+    logging.warning('Fire detected by camera %s, image %s, segment %s', camera, imgPath, str(fireSegment))
+    # copy/upload file to detection dir
+    detectionsDateDir = goog_helper.dateSubDir(settings.detectionsDir)
+    fileID = goog_helper.copyFile(imgPath, detectionsDateDir)
+    logging.warning('Uploaded to detections folder %s', fileID)
+
+    dbRow = {
+        'CameraName': camera,
+        'Timestamp': timestamp,
+        'MinX': fireSegment['MinX'],
+        'MinY': fireSegment['MinY'],
+        'MaxX': fireSegment['MaxX'],
+        'MaxY': fireSegment['MaxY'],
+        'Score': fireSegment['score'],
+        'ImageID': fileID,
+        'ModelId': modelId
+    }
+    dbManager.add_data('detections', dbRow)
+    return fileID
+
+
 def isDuplicateAlert(dbManager, cameraID, timestamp):
     """Check if alert has been recently sent out for given camera
 
@@ -555,11 +592,9 @@ def pubsubFireNotification(cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl
     message = {
         'timestamp': timestamp,
         'cameraID': cameraID,
-        "mlScore": str(fireSegment['score']),
-        "histMax": str(fireSegment['HistMax'] if 'HistMax' in fireSegment else 0),
         "adjScore": str(fireSegment['AdjScore'] if 'AdjScore' in fireSegment else fireSegment['score']),
-        'croppedUrl': croppedUrl,
         'annotatedUrl': annotatedUrl,
+        'croppedUrl': croppedUrl,
         'mapUrl': mapUrl,
         'polygon': str(polygon)
     }
@@ -925,11 +960,13 @@ def main():
         detectionResult = detectionPolicy.detect(image_spec, checkShifts=True)
         timeDetect = time.time()
         numImages += 1
-        if detectionResult['fireSegment']:
+        fireSegment = detectionResult['fireSegment']
+        if fireSegment:
             numDetections += 1
-        if detectionResult['fireSegment'] and not useArchivedImages:
+        if fireSegment and not useArchivedImages:
+            recordDetection(dbManager, cameraID, timestamp, imgPath, fireSegment, detectionPolicy.modelId)
             if not isDuplicateAlert(dbManager, cameraID, timestamp):
-                alertFire(constants, cameraID, timestamp, imgPath, detectionResult['fireSegment'])
+                alertFire(constants, cameraID, timestamp, imgPath, fireSegment)
                 numAlerts += 1
         deleteImageFiles(classifyImgPath, imgPath)
         if (args.heartbeat):

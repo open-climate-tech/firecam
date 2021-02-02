@@ -93,6 +93,7 @@ class InceptionV3AndHistoricalThreshold:
         Returns:
             list of segments with scores sorted by decreasing score
         """
+        # logging.warning('SAC %s: %s, %s, %s, %s, %s', self.modelId, startX, startY, endX, endY, imgPath)
         crops, segments = self._segmentImage(imgPath, startX, endX, startY, endY)
         if len(crops) == 0:
             return []
@@ -106,6 +107,7 @@ class InceptionV3AndHistoricalThreshold:
             tf_helper.classifySegments(self.model, crops, segments)
 
         segments.sort(key=lambda x: -x['score'])
+        # logging.warning('SAC top: %s', segments[0])
         return segments
 
 
@@ -195,9 +197,6 @@ class InceptionV3AndHistoricalThreshold:
         # testMode fakes a detection to test alerting functionality
         if testMode:
             maxFireSegment = segments[0]
-            maxFireSegment['HistAvg'] = 0.1
-            maxFireSegment['HistMax'] = 0.2
-            maxFireSegment['HistNumSamples'] = 10
             maxFireSegment['AdjScore'] = 0.3
             return maxFireSegment
 
@@ -238,45 +237,6 @@ class InceptionV3AndHistoricalThreshold:
                         maxFireSegment['AdjScore'] = (segmentInfo['score'] - threshold) / (1 - threshold)
 
         return maxFireSegment
-
-
-    def _recordDetection(self, camera, timestamp, imgPath, fireSegment):
-        """Record that a smoke/fire has been detected
-
-        Record the detection with useful metrics in 'detections' table in SQL DB.
-        Also, upload image file to google cloud
-
-        Args:
-            camera (str): camera name
-            timestamp (int):
-            imgPath: filepath of the image
-            fireSegment (dictionary): dictionary with information for the segment with fire/smoke
-
-        Returns:
-            File IDs for the uploaded image file
-        """
-        logging.warning('Fire detected by camera %s, image %s, segment %s', camera, imgPath, str(fireSegment))
-        # copy/upload file to detection dir
-        detectionsDateDir = goog_helper.dateSubDir(settings.detectionsDir)
-        fileID = goog_helper.copyFile(imgPath, detectionsDateDir)
-        logging.warning('Uploaded to detections folder %s', fileID)
-
-        dbRow = {
-            'CameraName': camera,
-            'Timestamp': timestamp,
-            'MinX': fireSegment['MinX'],
-            'MinY': fireSegment['MinY'],
-            'MaxX': fireSegment['MaxX'],
-            'MaxY': fireSegment['MaxY'],
-            'Score': fireSegment['score'],
-            'HistAvg': fireSegment['HistAvg'],
-            'HistMax': fireSegment['HistMax'],
-            'HistNumSamples': fireSegment['HistNumSamples'],
-            'ImageID': fileID,
-            'ModelId': self.modelId
-        }
-        self.dbManager.add_data('detections', dbRow)
-        return fileID
 
 
     def detect(self, image_spec, checkShifts=False, silent=False):
@@ -329,8 +289,6 @@ class InceptionV3AndHistoricalThreshold:
                         fireSegment['MaxY'] = min(fireSegment['MaxY'], segment['MaxY'])
             else:
                 fireSegment = None # don't report fire
-        if fireSegment and not self.stateless:
-            self._recordDetection(cameraID, timestamp, imgPath, fireSegment)
         detectionResult['fireSegment'] = fireSegment
         if not silent:
             logging.warning('Highest score for camera %s: %f' % (cameraID, segments[0]['score']))

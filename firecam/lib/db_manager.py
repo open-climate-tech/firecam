@@ -158,9 +158,6 @@ class DbManager(object):
             ('MaxX', 'INT'),
             ('MaxY', 'INT'),
             ('Score', 'REAL'),
-            ('HistAvg', 'REAL'),
-            ('HistMax', 'REAL'),
-            ('HistNumSamples', 'INT'),
             ('ImageID', 'TEXT'),
             ('ModelId', 'TEXT'),
         ]
