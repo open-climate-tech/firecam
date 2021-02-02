@@ -23,10 +23,12 @@ import os, sys
 from . import inception_and_threshold
 from . import detect_always
 from . import detect_never
+from . import detect_multi
 
 def get_policies():
     return {
         'inception_and_threshold': inception_and_threshold.InceptionV3AndHistoricalThreshold,
+        'multi': detect_multi.DetectMulti,
         'always': detect_always.DetectAlways,
         'never': detect_never.DetectNever,
     }
