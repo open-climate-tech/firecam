@@ -147,6 +147,7 @@ class DbManager(object):
             ('SecondsInDay', 'INT'),
             ('MinusMinutes', 'INT'),
             ('ModelId', 'TEXT'),
+            ('Heading', 'REAL'),
         ]
 
         # detections above halfway between historical max and 1.0
@@ -160,6 +161,7 @@ class DbManager(object):
             ('Score', 'REAL'),
             ('ImageID', 'TEXT'),
             ('ModelId', 'TEXT'),
+            ('Heading', 'REAL'),
         ]
 
         # alerts sent out via various means

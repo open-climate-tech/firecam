@@ -68,7 +68,7 @@ def getNextImage(dbManager, cameras, cameraID=None):
         cameraID (str): optional specific camera to get image from
 
     Returns:
-        Tuple containing camera name, current timestamp, and filepath of the image
+        Tuple containing camera name, current heading, current timestamp, and filepath of the image
     """
     if getNextImage.tmpDir == None:
         getNextImage.tmpDir = tempfile.TemporaryDirectory()
@@ -84,6 +84,7 @@ def getNextImage(dbManager, cameras, cameraID=None):
     # logging.warning('urlr %s %s', camera['url'], imgPath)
     try:
         urlretrieve(camera['url'], imgPath)
+        heading = img_archive.getHeading(camera['name'])
     except Exception as e:
         logging.error('Error fetching image from %s %s', camera['name'], str(e))
         return getNextImage(dbManager, cameras)
@@ -93,7 +94,7 @@ def getNextImage(dbManager, cameras, cameraID=None):
         # skip to next camera
         return getNextImage(dbManager, cameras)
     camera['md5'] = md5
-    return (camera['name'], timestamp, imgPath, md5)
+    return (camera['name'], heading, timestamp, imgPath)
 getNextImage.tmpDir = None
 
 # XXXXX Use a fixed stable directory for testing
@@ -231,12 +232,13 @@ def genAnnotatedImages(constants, cameraID, timestamp, imgPath, fireSegment):
     return (moviePath, annotatedPath)
 
 
-def getHeadingRange(cameraID, imgPath, minX, maxX):
+def getHeadingRange(cameraID, centralHeading, imgPath, minX, maxX):
     """Return heading (degrees 0 = North) and range of uncertainty of heading
        for the potential fire direction from given camera
 
     Args:
         cameraID (str): camera name
+        centralHeading (int): direction camera is facing
         imgPath: filepath of the original image
         minX (int): fire segment minX
         maxX (int): fire segment maxX
@@ -255,7 +257,6 @@ def getHeadingRange(cameraID, imgPath, minX, maxX):
     # calculate heading
     centerX = (minX + maxX) / 2
     angleFromCenter = centerX / imgSizeX * degreesInView - degreesInView/2
-    centralHeading = img_archive.getHeading(cameraID)
     heading = angleFromCenter + centralHeading
 
     # calculate rangeAngle
@@ -426,7 +427,7 @@ def getTriangleVertices(latitude, longitude, heading, rangeAngle):
     return vertices
 
 
-def recordDetection(dbManager, camera, timestamp, imgPath, fireSegment, modelId):
+def recordDetection(dbManager, cameraID, heading, timestamp, imgPath, fireSegment, modelId):
     """Record that a smoke/fire has been detected
 
     Record the detection with useful metrics in 'detections' table in SQL DB.
@@ -434,7 +435,8 @@ def recordDetection(dbManager, camera, timestamp, imgPath, fireSegment, modelId)
 
     Args:
         dbManager (DbManager):
-        camera (str): camera name
+        cameraID (str): camera ID
+        heading (int): direction camera is facing
         timestamp (int):
         imgPath: filepath of the image
         fireSegment (dictionary): dictionary with information for the segment with fire/smoke
@@ -442,14 +444,15 @@ def recordDetection(dbManager, camera, timestamp, imgPath, fireSegment, modelId)
     Returns:
         File IDs for the uploaded image file
     """
-    logging.warning('Fire detected by camera %s, image %s, segment %s', camera, imgPath, str(fireSegment))
+    logging.warning('Fire detected by camera %s, image %s, segment %s', cameraID, imgPath, str(fireSegment))
     # copy/upload file to detection dir
     detectionsDateDir = goog_helper.dateSubDir(settings.detectionsDir)
     fileID = goog_helper.copyFile(imgPath, detectionsDateDir)
     logging.warning('Uploaded to detections folder %s', fileID)
 
     dbRow = {
-        'CameraName': camera,
+        'CameraName': cameraID,
+        'Heading': heading,
         'Timestamp': timestamp,
         'MinX': fireSegment['MinX'],
         'MinY': fireSegment['MinY'],
@@ -463,12 +466,13 @@ def recordDetection(dbManager, camera, timestamp, imgPath, fireSegment, modelId)
     return fileID
 
 
-def isDuplicateAlert(dbManager, cameraID, timestamp):
+def isDuplicateAlert(dbManager, cameraID, heading, timestamp):
     """Check if alert has been recently sent out for given camera
 
     Args:
         dbManager (DbManager):
-        cameraID (str): camera name
+        cameraID (str): camera ID
+        heading (int): direction camera is facing
         timestamp (int): time.time() value when image was taken
 
     Returns:
@@ -651,12 +655,13 @@ def smsFireNotification(dbManager, cameraID):
             sms_helper.sendSms(settings, phone, message)
 
 
-def alertFire(constants, cameraID, timestamp, imgPath, fireSegment):
+def alertFire(constants, cameraID, heading, timestamp, imgPath, fireSegment):
     """Update Alerts DB and send alerts about given fire through all channels (pubsub, email, and sms)
 
     Args:
         constants (dict): "global" contants
         cameraID (str): camera name
+        heading (int): direction camera is facing
         timestamp (int): time.time() value when image was taken
         imgPath: filepath of the original image
         fireSegment (dictionary): dictionary with information for the segment with fire/smoke
@@ -664,7 +669,7 @@ def alertFire(constants, cameraID, timestamp, imgPath, fireSegment):
     dbManager = constants['dbManager']
 
     (mapImgGCS, camLatitude, camLongitude) = dbManager.getCameraMapLocation(cameraID)
-    (heading, rangeAngle) = getHeadingRange(cameraID, imgPath, fireSegment['MinX'], fireSegment['MaxX'])
+    (heading, rangeAngle) = getHeadingRange(cameraID, heading, imgPath, fireSegment['MinX'], fireSegment['MaxX'])
     (croppedPath, annotatedPath) = genAnnotatedImages(constants, cameraID, timestamp, imgPath, fireSegment)
     triangle = getTriangleVertices(camLatitude, camLongitude, heading, rangeAngle)
     intersectionInfo = intersectRecentAlerts(dbManager, timestamp, triangle)
@@ -938,9 +943,10 @@ def main():
         if useArchivedImages:
             (cameraID, timestamp, imgPath, classifyImgPath) = \
                 getArchivedImages(constants, cameras, startTimeDT, timeRangeSeconds, minusMinutes)
+            heading = img_archive.getHeading(cameraID)
         # elif minusMinutes: to be resurrected using archive functionality
         else: # regular (non diff mode), grab image and process
-            (cameraID, timestamp, imgPath, md5) = getNextImage(dbManager, cameras)
+            (cameraID, heading, timestamp, imgPath) = getNextImage(dbManager, cameras)
             classifyImgPath = imgPath
         if not cameraID:
             continue # skip to next camera
@@ -950,6 +956,7 @@ def main():
         image_spec[-1]['path'] = classifyImgPath
         image_spec[-1]['timestamp'] = timestamp
         image_spec[-1]['cameraID'] = cameraID
+        image_spec[-1]['heading'] = heading
         if cameraID in usableRegions:
             usableEntry = usableRegions[cameraID]
             if 'startY' in usableEntry:
@@ -964,9 +971,9 @@ def main():
         if fireSegment:
             numDetections += 1
         if fireSegment and not useArchivedImages:
-            recordDetection(dbManager, cameraID, timestamp, imgPath, fireSegment, detectionPolicy.modelId)
-            if not isDuplicateAlert(dbManager, cameraID, timestamp):
-                alertFire(constants, cameraID, timestamp, imgPath, fireSegment)
+            recordDetection(dbManager, cameraID, heading, timestamp, imgPath, fireSegment, detectionPolicy.modelId)
+            if not isDuplicateAlert(dbManager, cameraID, heading, timestamp):
+                alertFire(constants, cameraID, heading, timestamp, imgPath, fireSegment)
                 numAlerts += 1
         deleteImageFiles(classifyImgPath, imgPath)
         if (args.heartbeat):

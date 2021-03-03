@@ -147,11 +147,12 @@ class InceptionV3AndHistoricalThreshold:
             imgObj.close()
 
 
-    def _recordScores(self, camera, timestamp, segments):
+    def _recordScores(self, cameraID, heading, timestamp, segments):
         """Record the smoke scores for each segment into SQL DB
 
         Args:
-            camera (str): camera name
+            cameraID (str): camera ID
+            heading (int): direction camera is facing
             timestamp (int):
             segments (list): List of dictionary containing information on each segment
         """
@@ -161,7 +162,8 @@ class InceptionV3AndHistoricalThreshold:
         dbRows = []
         for segmentInfo in segments:
             dbRow = {
-                'CameraName': camera,
+                'CameraName': cameraID,
+                'Heading': heading,
                 'Timestamp': timestamp,
                 'MinX': segmentInfo['MinX'],
                 'MinY': segmentInfo['MinY'],
@@ -176,7 +178,7 @@ class InceptionV3AndHistoricalThreshold:
         self.dbManager.add_data('scores', dbRows)
 
 
-    def _postFilter(self, camera, timestamp, segments):
+    def _postFilter(self, cameraID, heading, timestamp, segments):
         """Post classification filter to reduce false positives
 
         Many times smoke classification scores segments with haze and glare
@@ -186,7 +188,8 @@ class InceptionV3AndHistoricalThreshold:
         Score must be > halfway between max value and 1.  Also, minimum .1 above max.
 
         Args:
-            camera (str): camera name
+            cameraID (str): camera ID
+            heading (int): direction camera is facing
             timestamp (int):
             segments (list): Sorted List of dictionary containing information on each segment
 
@@ -210,7 +213,7 @@ class InceptionV3AndHistoricalThreshold:
 
         dt = datetime.datetime.fromtimestamp(timestamp)
         secondsInDay = (dt.hour * 60 + dt.minute) * 60 + dt.second
-        sqlStr = sqlTemplate % (camera, timestamp - 60*60*int(24*3.5), timestamp - 60*60*12, secondsInDay - 60*60, secondsInDay + 60*60)
+        sqlStr = sqlTemplate % (cameraID, timestamp - 60*60*int(24*3.5), timestamp - 60*60*12, secondsInDay - 60*60, secondsInDay + 60*60)
         # print('sql', sqlStr, timestamp)
         dbResult = self.dbManager.query(sqlStr)
         # if len(dbResult) > 0:
@@ -245,6 +248,7 @@ class InceptionV3AndHistoricalThreshold:
         imgPath = last_image_spec['path']
         timestamp = last_image_spec['timestamp']
         cameraID = last_image_spec['cameraID']
+        heading = last_image_spec['heading']
         detectionResult = {
             'fireSegment': None
         }
@@ -264,8 +268,8 @@ class InceptionV3AndHistoricalThreshold:
             if segments[0]['score'] > 0.5:
                 fireSegment = segments[0]
         else:
-            self._recordScores(cameraID, timestamp, segments)
-            fireSegment = self._postFilter(cameraID, timestamp, segments)
+            self._recordScores(cameraID, heading, timestamp, segments)
+            fireSegment = self._postFilter(cameraID, heading, timestamp, segments)
         if fireSegment and checkShifts:
             fireSegment = fireSegment.copy() # copy so segments array won't be affected
             # check shifted images
