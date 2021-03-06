@@ -85,6 +85,9 @@ def getNextImage(dbManager, cameras, cameraID=None):
     try:
         urlretrieve(camera['url'], imgPath)
         heading = img_archive.getHeading(camera['name'])
+        if not heading:
+            logging.error('Camera heading unavailable %s', camera['name'])
+            return getNextImage(dbManager, cameras)
     except Exception as e:
         logging.error('Error fetching image from %s %s', camera['name'], str(e))
         return getNextImage(dbManager, cameras)
@@ -108,7 +111,7 @@ def drawRect(imgDraw, x0, y0, x1, y1, width, color):
         imgDraw.rectangle((x0 + i, y0 + i, x1 - i, y1 -i), outline=color)
 
 
-def drawFireBox(img, destPath, fireSegment, x0, y0, x1, y1, timestamp=None, writeScores=False, color='red'):
+def drawFireBox(img, destPath, fireBoxCoords, timestamp=None, fireSegment=None, color='red'):
     """Draw bounding box with fire detection and optionally write scores
 
     Also watermarks the image and stores the resulting annotated image as new file
@@ -116,17 +119,17 @@ def drawFireBox(img, destPath, fireSegment, x0, y0, x1, y1, timestamp=None, writ
     Args:
         img (Image): Image object to draw on
         destPath (str): filepath where to write the output image
-        fireSegment (dict): dict describing segment with fire
-        x0, y0, x1, y1 (int): coordinates of fire segment
-        writeScores (bool): if set to True, the scores are written on the image as well
+        fireBoxCoords (list): coordinates of fire box (x0, y0, x1, y1)
+        fireSegment (dict): [optional] if present, write scores on the image
     """
     imgDraw = ImageDraw.Draw(img)
 
+    (x0, y0, x1, y1) = fireBoxCoords
     lineWidth=3
     drawRect(imgDraw, x0, y0, x1, y1, lineWidth, color)
 
     fontPath = os.path.join(str(pathlib.Path(os.path.realpath(__file__)).parent.parent), 'firecam/data/Roboto-Regular.ttf')
-    if writeScores:
+    if fireSegment:
         # Write ML score above towards left of the fire box
         color = "red"
         fontSize=70
@@ -167,6 +170,59 @@ def drawFireBox(img, destPath, fireSegment, x0, y0, x1, y1, timestamp=None, writ
     del imgDraw
 
 
+def genMovie(constants, cameraID, timestamp, imgPath, cropCoords, fireBoxCoords):
+    """Generate cropped movie by fetching old images from archive
+
+    Args:
+        constants (dict): "global" contants
+        cameraID (str): camera name
+        timestamp (int): time.time() value when image was taken
+        imgPath (str): filepath of the image
+        fireSegment (dict): dict describing segment with fire
+        cropCoords (list): coordinates for cropping full image
+        fileBoxCoords (list): coordinates for highlighting fire box withing cropped region
+
+    Returns:
+        Filepath of cropped movie
+    """
+    filePathParts = os.path.splitext(imgPath)
+    # get images spanning a few minutes so reviewers can evaluate based on progression
+    startTimeDT = datetime.datetime.fromtimestamp(timestamp - 4*60)
+    endTimeDT = datetime.datetime.fromtimestamp(timestamp - 1*60)
+
+    with tempfile.TemporaryDirectory() as tmpDirName:
+        oldImages = img_archive.getHpwrenImages(constants['googleServices'], settings, tmpDirName,
+                                                constants['camArchives'], cameraID, startTimeDT, endTimeDT, 1)
+        imgSequence = oldImages or []
+        imgSequence.append(imgPath)
+        mspecPath = os.path.join(tmpDirName, 'mspec.txt')
+        mspecFile = open(mspecPath, 'w')
+        for (i, imgFile) in enumerate(imgSequence):
+            finalImg = (i == len(imgSequence) - 1)
+            imgParsed = img_archive.parseFilename(imgFile)
+            cropName = 'img' + ("%03d" % i) + filePathParts[1]
+            croppedPath = os.path.join(tmpDirName, cropName)
+            imgSeq = Image.open(imgFile)
+            croppedImg = imgSeq.crop(cropCoords)
+            color = 'red' if finalImg else 'yellow'
+            drawFireBox(croppedImg, croppedPath, fireBoxCoords, timestamp=imgParsed['unixTime'], color=color)
+            imgSeq.close()
+            croppedImg.close()
+            mspecFile.write("file '" + croppedPath + "'\n")
+            mspecFile.write('duration 1\n')
+            if finalImg:
+                mspecFile.write("file '" + croppedPath + "'\n")
+        mspecFile.close()
+        # now make movie from this sequence of cropped images
+        moviePath = filePathParts[0] + '_AnnCrop_' + 'x'.join(list(map(lambda x: str(x), cropCoords))) + '.mp4'
+        (
+            ffmpeg.input(mspecPath, format='concat', safe=0)
+                .filter('fps', fps=25, round='up')
+                .output(moviePath, pix_fmt='yuv420p').run()
+        )
+        return moviePath
+
+
 def genAnnotatedImages(constants, cameraID, timestamp, imgPath, fireSegment):
     """Generate annotated images (one cropped video, and other full size image)
 
@@ -190,43 +246,11 @@ def genAnnotatedImages(constants, cameraID, timestamp, imgPath, fireSegment):
     (cropX0, cropX1) = rect_to_squares.getRangeFromCenter((x0 + x1)/2, 800, 0, img.size[0])
     (cropY0, cropY1) = rect_to_squares.getRangeFromCenter((y0 + y1)/2, 600, 0, img.size[1])
     cropCoords = (cropX0, cropY0, cropX1, cropY1)
-    # get images spanning a few minutes so reviewers can evaluate based on progression
-    startTimeDT = datetime.datetime.fromtimestamp(timestamp - 4*60)
-    endTimeDT = datetime.datetime.fromtimestamp(timestamp - 1*60)
-
-    with tempfile.TemporaryDirectory() as tmpDirName:
-        oldImages = img_archive.getHpwrenImages(constants['googleServices'], settings, tmpDirName,
-                                                constants['camArchives'], cameraID, startTimeDT, endTimeDT, 1)
-        imgSequence = oldImages or []
-        imgSequence.append(imgPath)
-        mspecPath = os.path.join(tmpDirName, 'mspec.txt')
-        mspecFile = open(mspecPath, 'w')
-        for (i, imgFile) in enumerate(imgSequence):
-            finalImg = (i == len(imgSequence) - 1)
-            imgParsed = img_archive.parseFilename(imgFile)
-            cropName = 'img' + ("%03d" % i) + filePathParts[1]
-            croppedPath = os.path.join(tmpDirName, cropName)
-            imgSeq = Image.open(imgFile)
-            croppedImg = imgSeq.crop(cropCoords)
-            color = 'red' if finalImg else 'yellow'
-            drawFireBox(croppedImg, croppedPath, fireSegment, x0 - cropX0, y0 - cropY0, x1 - cropX0, y1 - cropY0, timestamp=imgParsed['unixTime'], color=color)
-            imgSeq.close()
-            croppedImg.close()
-            mspecFile.write("file '" + croppedPath + "'\n")
-            mspecFile.write('duration 1\n')
-            if finalImg:
-                mspecFile.write("file '" + croppedPath + "'\n")
-        mspecFile.close()
-        # now make movie from this sequence of cropped images
-        moviePath = filePathParts[0] + '_AnnCrop_' + 'x'.join(list(map(lambda x: str(x), cropCoords))) + '.mp4'
-        (
-            ffmpeg.input(mspecPath, format='concat', safe=0)
-                .filter('fps', fps=25, round='up')
-                .output(moviePath, pix_fmt='yuv420p').run()
-        )
+    fireBoxCoords = (x0 - cropX0, y0 - cropY0, x1 - cropX0, y1 - cropY0)
+    moviePath = genMovie(constants, cameraID, timestamp, imgPath, cropCoords, fireBoxCoords)
 
     annotatedPath = filePathParts[0] + '_Ann' + filePathParts[1]
-    drawFireBox(img, annotatedPath, fireSegment, x0, y0, x1, y1)
+    drawFireBox(img, annotatedPath, (x0, y0, x1, y1))
     img.close()
 
     return (moviePath, annotatedPath)
@@ -481,8 +505,8 @@ def isDuplicateAlert(dbManager, cameraID, heading, timestamp):
     # Only alert if there has not been a detection in the last hour.  This prevents spam
     # from long lasting fires.
     sqlTemplate = """SELECT * FROM detections
-    where CameraName='%s' and timestamp > %s and timestamp < %s"""
-    sqlStr = sqlTemplate % (cameraID, timestamp - 60*60, timestamp)
+    where CameraName='%s' and Heading=%s and timestamp > %s and timestamp < %s"""
+    sqlStr = sqlTemplate % (cameraID, heading, timestamp - 60*60, timestamp)
 
     dbResult = dbManager.query(sqlStr)
     if len(dbResult) > 0:

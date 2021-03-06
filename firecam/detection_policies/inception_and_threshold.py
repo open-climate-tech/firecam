@@ -208,12 +208,12 @@ class InceptionV3AndHistoricalThreshold:
             return None
 
         sqlTemplate = """SELECT MinX,MinY,MaxX,MaxY,count(*) as cnt, avg(score) as avgs, max(score) as maxs FROM scores
-        WHERE CameraName='%s' and Timestamp > %s and Timestamp < %s and SecondsInDay > %s and SecondsInDay < %s
+        WHERE CameraName='%s' and Heading=%s and Timestamp > %s and Timestamp < %s and SecondsInDay > %s and SecondsInDay < %s
         GROUP BY MinX,MinY,MaxX,MaxY"""
 
         dt = datetime.datetime.fromtimestamp(timestamp)
         secondsInDay = (dt.hour * 60 + dt.minute) * 60 + dt.second
-        sqlStr = sqlTemplate % (cameraID, timestamp - 60*60*int(24*3.5), timestamp - 60*60*12, secondsInDay - 60*60, secondsInDay + 60*60)
+        sqlStr = sqlTemplate % (cameraID, heading, timestamp - 60*60*int(24*3.5), timestamp - 60*60*12, secondsInDay - 60*60, secondsInDay + 60*60)
         # print('sql', sqlStr, timestamp)
         dbResult = self.dbManager.query(sqlStr)
         # if len(dbResult) > 0:
