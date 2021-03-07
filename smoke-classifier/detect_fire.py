@@ -85,7 +85,7 @@ def getNextImage(dbManager, cameras, cameraID=None):
     try:
         urlretrieve(camera['url'], imgPath)
         heading = img_archive.getHeading(camera['name'])
-        if not heading:
+        if heading == None:
             logging.error('Camera heading unavailable %s', camera['name'])
             return getNextImage(dbManager, cameras)
     except Exception as e:
