@@ -174,6 +174,7 @@ class DbManager(object):
             ('MapID', 'TEXT'),
             ('polygon', 'TEXT'),
             ('sourcePolygons', 'TEXT'),
+            ('IsProto', 'INT'),
         ]
 
         # votes regarding alerts
@@ -200,6 +201,7 @@ class DbManager(object):
             ('rightlong', 'REAL'),
             ('islabeler', 'INT'),
             ('webNotify', 'INT'),
+            ('showProto', 'INT'),
         ]
 
         # who to notify via email and SMS

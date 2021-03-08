@@ -599,6 +599,7 @@ def updateAlertsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, map
         'MapID': mapUrl,
         'polygon': str(polygon),
         'sourcePolygons': str(sourcePolygons),
+        'IsProto': int(img_archive.isPTZ(cameraID)),
     }
     dbManager.add_data('alerts', dbRow)
 
@@ -625,7 +626,8 @@ def pubsubFireNotification(cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl
         'annotatedUrl': annotatedUrl,
         'croppedUrl': croppedUrl,
         'mapUrl': mapUrl,
-        'polygon': str(polygon)
+        'polygon': str(polygon),
+        'isProto': img_archive.isPTZ(cameraID)
     }
     goog_helper.publish(message)
 

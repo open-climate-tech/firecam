@@ -33,6 +33,10 @@ import numpy as np
 import cv2
 
 
+def isPTZ(cameraID):
+    return False
+
+
 def getImgPath(outputDir, cameraID, timestamp, cropCoords=None, diffMinutes=0):
     """Generate properly formatted image filename path following Firecam conventions
        E.g.: lo-s-mobo-c__2018-06-06T11;12;23_Diff1_Crop_627x632x1279x931.jpg
