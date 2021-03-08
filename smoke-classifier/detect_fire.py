@@ -79,24 +79,23 @@ def getNextImage(dbManager, cameras, stateless):
     else:
         index = dbManager.getNextSourcesCounter() % len(cameras)
         camera = cameras[index]
-    timestamp = int(time.time())
-    imgPath = img_archive.getImgPath(getNextImage.tmpDir.name, camera['name'], timestamp)
-    # logging.warning('urlr %s %s', camera['url'], imgPath)
+
     try:
-        urlretrieve(camera['url'], imgPath)
-        heading = img_archive.getHeading(camera['name'])
-        if heading == None:
-            logging.error('Camera heading unavailable %s', camera['name'])
+        (imgPath, heading, timestamp) = img_archive.fetchImageAndMeta(camera['name'], camera['url'], getNextImage.tmpDir.name)
+        if imgPath == None or heading == None or timestamp == None:
+            logging.error('Image or metadata unavailable for %s', camera['name'])
             return (None, None, None, None)
     except Exception as e:
         logging.error('Error fetching image from %s %s', camera['name'], str(e))
         return (None, None, None, None)
+
     md5 = hashlib.md5(open(imgPath, 'rb').read()).hexdigest()
     if ('md5' in camera) and (camera['md5'] == md5):
         logging.warning('Camera %s image unchanged', camera['name'])
         # skip to next camera
         return (None, None, None, None)
     camera['md5'] = md5
+
     return (camera['name'], heading, timestamp, imgPath)
 getNextImage.tmpDir = None
 

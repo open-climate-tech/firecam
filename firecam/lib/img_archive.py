@@ -32,9 +32,26 @@ from PIL import Image, ImageMath
 import numpy as np
 import cv2
 
-
 def isPTZ(cameraID):
     return False
+
+
+def fetchImageAndMeta(cameraID, cameraUrl, imgDir):
+    """Fetch the image file and metadata for given camera
+
+    Args:
+        cameraID (str): ID of camera
+        cameraUrl (str): URL with image and metadata
+        imgDir (str): Output directory to store iamge
+
+    Returns:
+        Tuple containing filepath of the image, current heading and timestamp
+    """
+    timestamp = int(time.time())
+    imgPath = getImgPath(imgDir, cameraID, timestamp)
+    urllib.request.urlretrieve(cameraUrl, imgPath)
+    heading = getHeading(cameraID)
+    return (imgPath, heading, timestamp)
 
 
 def getImgPath(outputDir, cameraID, timestamp, cropCoords=None, diffMinutes=0):
