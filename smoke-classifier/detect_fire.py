@@ -55,7 +55,7 @@ import ffmpeg
 from shapely.geometry import Polygon
 
 
-def getNextImage(dbManager, cameras, cameraID=None):
+def getNextImage(dbManager, cameras, stateless):
     """Gets the next image to check for smoke
 
     Uses a shared counter being updated by all cooperating detection processes
@@ -65,7 +65,7 @@ def getNextImage(dbManager, cameras, cameraID=None):
     Args:
         dbManager (DbManager):
         cameras (list): list of cameras
-        cameraID (str): optional specific camera to get image from
+        stateless (bool): [optional] if specified use stateless mechanism for camera selection
 
     Returns:
         Tuple containing camera name, current heading, current timestamp, and filepath of the image
@@ -74,8 +74,8 @@ def getNextImage(dbManager, cameras, cameraID=None):
         getNextImage.tmpDir = tempfile.TemporaryDirectory()
         logging.warning('TempDir %s', getNextImage.tmpDir.name)
 
-    if cameraID:
-        camera = list(filter(lambda x: x['name'] == cameraID, cameras))[0]
+    if stateless:
+        camera = cameras[int(len(cameras)*random.random())]
     else:
         index = dbManager.getNextSourcesCounter() % len(cameras)
         camera = cameras[index]
@@ -87,15 +87,15 @@ def getNextImage(dbManager, cameras, cameraID=None):
         heading = img_archive.getHeading(camera['name'])
         if heading == None:
             logging.error('Camera heading unavailable %s', camera['name'])
-            return getNextImage(dbManager, cameras)
+            return (None, None, None, None)
     except Exception as e:
         logging.error('Error fetching image from %s %s', camera['name'], str(e))
-        return getNextImage(dbManager, cameras)
+        return (None, None, None, None)
     md5 = hashlib.md5(open(imgPath, 'rb').read()).hexdigest()
-    if ('md5' in camera) and (camera['md5'] == md5) and not cameraID:
+    if ('md5' in camera) and (camera['md5'] == md5):
         logging.warning('Camera %s image unchanged', camera['name'])
         # skip to next camera
-        return getNextImage(dbManager, cameras)
+        return (None, None, None, None)
     camera['md5'] = md5
     return (camera['name'], heading, timestamp, imgPath)
 getNextImage.tmpDir = None
@@ -451,7 +451,7 @@ def getTriangleVertices(latitude, longitude, heading, rangeAngle):
     return vertices
 
 
-def recordDetection(dbManager, cameraID, heading, timestamp, imgPath, fireSegment, modelId):
+def recordDetection(dbManager, cameraID, heading, timestamp, imgPath, fireSegment, modelId, stateless):
     """Record that a smoke/fire has been detected
 
     Record the detection with useful metrics in 'detections' table in SQL DB.
@@ -474,19 +474,20 @@ def recordDetection(dbManager, cameraID, heading, timestamp, imgPath, fireSegmen
     fileID = goog_helper.copyFile(imgPath, detectionsDateDir)
     logging.warning('Uploaded to detections folder %s', fileID)
 
-    dbRow = {
-        'CameraName': cameraID,
-        'Heading': heading,
-        'Timestamp': timestamp,
-        'MinX': fireSegment['MinX'],
-        'MinY': fireSegment['MinY'],
-        'MaxX': fireSegment['MaxX'],
-        'MaxY': fireSegment['MaxY'],
-        'Score': fireSegment['score'],
-        'ImageID': fileID,
-        'ModelId': modelId
-    }
-    dbManager.add_data('detections', dbRow)
+    if not stateless:
+        dbRow = {
+            'CameraName': cameraID,
+            'Heading': heading,
+            'Timestamp': timestamp,
+            'MinX': fireSegment['MinX'],
+            'MinY': fireSegment['MinY'],
+            'MaxX': fireSegment['MaxX'],
+            'MaxY': fireSegment['MaxY'],
+            'Score': fireSegment['score'],
+            'ImageID': fileID,
+            'ModelId': modelId
+        }
+        dbManager.add_data('detections', dbRow)
     return fileID
 
 
@@ -911,6 +912,7 @@ def main():
         ["t", "time", "Time breakdown for processing images"],
         ["m", "minusMinutes", "(optional) subtract images from given number of minutes ago", int],
         ["r", "restrictType", "Only process images from cameras of given type"],
+        ["n", "noState", "(optional) no changes to state"],
         ["s", "startTime", "(optional) performs search with modifiedTime > startTime"],
         ["e", "endTime", "(optional) performs search with modifiedTime < endTime"],
         ["z", "randomSeed", "(optional) override random seed"],
@@ -932,12 +934,14 @@ def main():
     endTimeDT = dateutil.parser.parse(args.endTime) if args.endTime else None
     timeRangeSeconds = None
     useArchivedImages = False
+    stateless = True if args.noState else False
     if startTimeDT or endTimeDT:
         assert startTimeDT and endTimeDT
         timeRangeSeconds = (endTimeDT-startTimeDT).total_seconds()
         assert timeRangeSeconds > 0
         assert args.collectPositves
         useArchivedImages = True
+        stateless = True
         # if seed not specified, use os.urandom and log value
         randomSeed = args.randomSeed if args.randomSeed else os.urandom(4).hex()
         logging.warning('Random seed %s', randomSeed)
@@ -949,7 +953,7 @@ def main():
                 random.random()
     camArchives = img_archive.getHpwrenCameraArchives(settings.hpwrenArchives)
     DetectionPolicyClass = policies.get_policies()[settings.detectionPolicy]
-    detectionPolicy = DetectionPolicyClass(args, dbManager, minusMinutes, stateless=useArchivedImages)
+    detectionPolicy = DetectionPolicyClass(args, dbManager, minusMinutes, stateless=stateless)
     constants = { # dictionary of constants to reduce parameters in various functions
         'args': args,
         'googleServices': googleServices,
@@ -970,7 +974,7 @@ def main():
             heading = img_archive.getHeading(cameraID)
         # elif minusMinutes: to be resurrected using archive functionality
         else: # regular (non diff mode), grab image and process
-            (cameraID, heading, timestamp, imgPath) = getNextImage(dbManager, cameras)
+            (cameraID, heading, timestamp, imgPath) = getNextImage(dbManager, cameras, stateless)
             classifyImgPath = imgPath
         if not cameraID:
             continue # skip to next camera
@@ -995,8 +999,8 @@ def main():
         if fireSegment:
             numDetections += 1
         if fireSegment and not useArchivedImages:
-            recordDetection(dbManager, cameraID, heading, timestamp, imgPath, fireSegment, detectionPolicy.modelId)
-            if not isDuplicateAlert(dbManager, cameraID, heading, timestamp):
+            recordDetection(dbManager, cameraID, heading, timestamp, imgPath, fireSegment, detectionPolicy.modelId, stateless)
+            if not (isDuplicateAlert(dbManager, cameraID, heading, timestamp) or stateless):
                 alertFire(constants, cameraID, heading, timestamp, imgPath, fireSegment)
                 numAlerts += 1
         deleteImageFiles(classifyImgPath, imgPath)
