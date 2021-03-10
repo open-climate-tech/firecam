@@ -58,7 +58,7 @@ def main():
                                     psqlUser=settings.psqlUser, psqlPasswd=settings.psqlPasswd)
     locations = getCameraLocations(dbManager)
     if args.locationID:
-        locations = list(filter(lambda x: x['locationid'] == args.locationID, locations))
+        locations = list(filter(lambda x: x['locationid'] == args.locationID.strip(), locations))
     for location in locations:
         logging.warning('loc %s', location)
         params = {
