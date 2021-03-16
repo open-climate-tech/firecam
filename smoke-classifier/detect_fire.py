@@ -187,10 +187,10 @@ def genMovie(constants, cameraID, heading, timestamp, imgPath, cropCoords, fireB
     filePathParts = os.path.splitext(imgPath)
     # get images spanning a few minutes so reviewers can evaluate based on progression
     startTimeDT = datetime.datetime.fromtimestamp(timestamp - 4*60)
-    endTimeDT = datetime.datetime.fromtimestamp(timestamp - 1*60)
+    endTimeDT = datetime.datetime.fromtimestamp(timestamp - 30)
 
     with tempfile.TemporaryDirectory() as tmpDirName:
-        oldImages = img_archive.getArchiveImages(constants['googleServices'], settings, tmpDirName,
+        oldImages = img_archive.getArchiveImages(constants['googleServices'], settings, constants['dbManager'], tmpDirName,
                                                  constants['camArchives'], cameraID, heading, startTimeDT, endTimeDT, 1)
         imgSequence = oldImages or []
         imgSequence.append(imgPath)

@@ -681,7 +681,7 @@ def getHpwrenImages(googleServices, settings, outputDir, camArchives, cameraID, 
     return found
 
 
-def getArchiveImages(googleServices, settings, outputDir, camArchives, cameraID, heading, startTimeDT, endTimeDT, gapMinutes):
+def getArchiveImages(googleServices, settings, dbManager, outputDir, camArchives, cameraID, heading, startTimeDT, endTimeDT, gapMinutes):
     return getHpwrenImages(googleServices, settings, outputDir, camArchives, cameraID, startTimeDT, endTimeDT, gapMinutes)
 
 
