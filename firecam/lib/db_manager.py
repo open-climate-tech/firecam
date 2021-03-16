@@ -215,6 +215,14 @@ class DbManager(object):
             ('PhoneEndTime', 'INT'),
         ]
 
+        # archive
+        archive_schema = [
+            ('CameraId', 'TEXT'),
+            ('Heading', 'REAL'),
+            ('Timestamp', 'INT'),
+            ('ImagePath', 'TEXT'),
+        ]
+
         self.tables = {
             'sources': sources_schema,
             'counters': counters_schema,
@@ -229,6 +237,7 @@ class DbManager(object):
             'named_fires': named_fires_schema,
             'user_preferences': user_preferences_schema,
             'notifications': notifications_schema,
+            'archive': archive_schema,
         }
 
         self.sources_table_name = 'sources'
