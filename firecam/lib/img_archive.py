@@ -681,6 +681,10 @@ def getHpwrenImages(googleServices, settings, outputDir, camArchives, cameraID, 
     return found
 
 
+def getArchiveImages(googleServices, settings, outputDir, camArchives, cameraID, heading, startTimeDT, endTimeDT, gapMinutes):
+    return getHpwrenImages(googleServices, settings, outputDir, camArchives, cameraID, startTimeDT, endTimeDT, gapMinutes)
+
+
 def cacheInsert(cache, fileName):
     """Insert given file into given cache object
 

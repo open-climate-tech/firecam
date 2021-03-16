@@ -169,7 +169,7 @@ def drawFireBox(img, destPath, fireBoxCoords, timestamp=None, fireSegment=None, 
     del imgDraw
 
 
-def genMovie(constants, cameraID, timestamp, imgPath, cropCoords, fireBoxCoords):
+def genMovie(constants, cameraID, heading, timestamp, imgPath, cropCoords, fireBoxCoords):
     """Generate cropped movie by fetching old images from archive
 
     Args:
@@ -190,8 +190,8 @@ def genMovie(constants, cameraID, timestamp, imgPath, cropCoords, fireBoxCoords)
     endTimeDT = datetime.datetime.fromtimestamp(timestamp - 1*60)
 
     with tempfile.TemporaryDirectory() as tmpDirName:
-        oldImages = img_archive.getHpwrenImages(constants['googleServices'], settings, tmpDirName,
-                                                constants['camArchives'], cameraID, startTimeDT, endTimeDT, 1)
+        oldImages = img_archive.getArchiveImages(constants['googleServices'], settings, tmpDirName,
+                                                 constants['camArchives'], cameraID, heading, startTimeDT, endTimeDT, 1)
         imgSequence = oldImages or []
         imgSequence.append(imgPath)
         mspecPath = os.path.join(tmpDirName, 'mspec.txt')
@@ -222,7 +222,7 @@ def genMovie(constants, cameraID, timestamp, imgPath, cropCoords, fireBoxCoords)
         return moviePath
 
 
-def genAnnotatedImages(constants, cameraID, timestamp, imgPath, fireSegment):
+def genAnnotatedImages(constants, cameraID, heading, timestamp, imgPath, fireSegment):
     """Generate annotated images (one cropped video, and other full size image)
 
     Args:
@@ -246,7 +246,7 @@ def genAnnotatedImages(constants, cameraID, timestamp, imgPath, fireSegment):
     (cropY0, cropY1) = rect_to_squares.getRangeFromCenter((y0 + y1)/2, 600, 0, img.size[1])
     cropCoords = (cropX0, cropY0, cropX1, cropY1)
     fireBoxCoords = (x0 - cropX0, y0 - cropY0, x1 - cropX0, y1 - cropY0)
-    moviePath = genMovie(constants, cameraID, timestamp, imgPath, cropCoords, fireBoxCoords)
+    moviePath = genMovie(constants, cameraID, heading, timestamp, imgPath, cropCoords, fireBoxCoords)
 
     annotatedPath = filePathParts[0] + '_Ann' + filePathParts[1]
     drawFireBox(img, annotatedPath, (x0, y0, x1, y1))
@@ -696,7 +696,7 @@ def alertFire(constants, cameraID, heading, timestamp, imgPath, fireSegment):
 
     (mapImgGCS, camLatitude, camLongitude) = dbManager.getCameraMapLocation(cameraID)
     (heading, rangeAngle) = getHeadingRange(cameraID, heading, imgPath, fireSegment['MinX'], fireSegment['MaxX'])
-    (croppedPath, annotatedPath) = genAnnotatedImages(constants, cameraID, timestamp, imgPath, fireSegment)
+    (croppedPath, annotatedPath) = genAnnotatedImages(constants, cameraID, heading, timestamp, imgPath, fireSegment)
     triangle = getTriangleVertices(camLatitude, camLongitude, heading, rangeAngle)
     intersectionInfo = intersectRecentAlerts(dbManager, timestamp, triangle)
     if intersectionInfo:
