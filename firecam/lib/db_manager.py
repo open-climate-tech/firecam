@@ -412,7 +412,7 @@ class DbManager(object):
         cursor.execute(sqlStr)
         row = cursor.fetchone()
         if not row:
-            print('failed to find counter')
+            logging.error('failed to find counter %s', counterName)
             exit(1)
         # print(row)
         assert row['name'] == counterName
@@ -448,7 +448,7 @@ class DbManager(object):
         except Exception as e:
             self.conn.rollback()
             cursor.close()
-            print("Error in increment.  Retrying", value, e)
+            logging.error('Error in increment.  Retrying %s: %s', value, e)
             return self.incrementCounter(counterName) # tail-recursive
 
         return value
