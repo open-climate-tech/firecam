@@ -74,30 +74,47 @@ def getNextImage(dbManager, cameras, stateless):
         getNextImage.tmpDir = tempfile.TemporaryDirectory()
         logging.warning('TempDir %s', getNextImage.tmpDir.name)
 
-    if stateless:
+    if getNextImage.queueCamera and (len(getNextImage.queue) > 0):
+        camera = getNextImage.queueCamera
+    elif stateless:
         camera = cameras[int(len(cameras)*random.random())]
     else:
         index = dbManager.getNextSourcesCounter() % len(cameras)
         camera = cameras[index]
 
     try:
-        (imgPath, heading, timestamp) = img_archive.fetchImageAndMeta(camera['name'], camera['url'], getNextImage.tmpDir.name)
+        if len(getNextImage.queue) > 0:
+            fetchResult = getNextImage.queue[0]
+            getNextImage.queue = getNextImage.queue[1:]
+            if len(getNextImage.queue) == 0:
+                getNextImage.queueCamera = None
+        else:
+            fetchResult = img_archive.fetchImageAndMeta(camera['name'], camera['url'], getNextImage.tmpDir.name)
+        if isinstance(fetchResult, list):
+            if len(fetchResult) > 1:
+                getNextImage.queue = fetchResult[1:]
+                getNextImage.queueCamera = camera
+            fetchResult = fetchResult[0]
+        (imgPath, heading, timestamp) = fetchResult
         if imgPath == None or heading == None or timestamp == None:
             logging.error('Image or metadata unavailable for %s', camera['name'])
             return (None, None, None, None)
+
+        md5 = hashlib.md5(open(imgPath, 'rb').read()).hexdigest()
+        if ('md5' in camera) and (camera['md5'] == md5):
+            logging.warning('Camera %s image unchanged', camera['name'])
+            # skip to next camera
+            return (None, None, None, None)
+        camera['md5'] = md5
     except Exception as e:
         logging.error('Error fetching image from %s %s', camera['name'], str(e))
         return (None, None, None, None)
 
-    md5 = hashlib.md5(open(imgPath, 'rb').read()).hexdigest()
-    if ('md5' in camera) and (camera['md5'] == md5):
-        logging.warning('Camera %s image unchanged', camera['name'])
-        # skip to next camera
-        return (None, None, None, None)
-    camera['md5'] = md5
-
     return (camera['name'], heading, timestamp, imgPath)
 getNextImage.tmpDir = None
+getNextImage.queue = []
+getNextImage.queueCamera = None
+
 
 # XXXXX Use a fixed stable directory for testing
 # from collections import namedtuple
