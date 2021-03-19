@@ -36,7 +36,7 @@ def isPTZ(cameraID):
     return False
 
 
-def fetchImageAndMeta(cameraID, cameraUrl, imgDir):
+def fetchImageAndMeta(dbManager, cameraID, cameraUrl, imgDir):
     """Fetch the image file and metadata for given camera
 
     Args:

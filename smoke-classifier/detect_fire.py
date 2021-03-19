@@ -89,7 +89,7 @@ def getNextImage(dbManager, cameras, stateless):
             if len(getNextImage.queue) == 0:
                 getNextImage.queueCamera = None
         else:
-            fetchResult = img_archive.fetchImageAndMeta(camera['name'], camera['url'], getNextImage.tmpDir.name)
+            fetchResult = img_archive.fetchImageAndMeta(dbManager, camera['name'], camera['url'], getNextImage.tmpDir.name)
         if isinstance(fetchResult, list):
             if len(fetchResult) > 1:
                 getNextImage.queue = fetchResult[1:]
