@@ -95,22 +95,22 @@ def getNextImage(dbManager, cameras, stateless):
                 getNextImage.queue = fetchResult[1:]
                 getNextImage.queueCamera = camera
             fetchResult = fetchResult[0]
-        (imgPath, heading, timestamp) = fetchResult
+        (imgPath, heading, timestamp, fov) = fetchResult
         if imgPath == None or heading == None or timestamp == None:
             logging.error('Image or metadata unavailable for %s', camera['name'])
-            return (None, None, None, None)
+            return (None, None, None, None, None)
 
         md5 = hashlib.md5(open(imgPath, 'rb').read()).hexdigest()
         if ('md5' in camera) and (camera['md5'] == md5):
             logging.warning('Camera %s image unchanged', camera['name'])
             # skip to next camera
-            return (None, None, None, None)
+            return (None, None, None, None, None)
         camera['md5'] = md5
     except Exception as e:
         logging.error('Error fetching image from %s %s', camera['name'], str(e))
-        return (None, None, None, None)
+        return (None, None, None, None, None)
 
-    return (camera['name'], heading, timestamp, imgPath)
+    return (camera['name'], heading, timestamp, fov, imgPath)
 getNextImage.tmpDir = None
 getNextImage.queue = []
 getNextImage.queueCamera = None
@@ -272,12 +272,11 @@ def genAnnotatedImages(constants, cameraID, cameraHeading, timestamp, imgPath, f
     return (moviePath, annotatedPath)
 
 
-def getHeadingRange(cameraID, centralHeading, imgPath, minX, maxX):
+def getHeadingRange(centralHeading, fov, imgPath, minX, maxX):
     """Return heading (degrees 0 = North) and range of uncertainty of heading
        for the potential fire direction from given camera
 
     Args:
-        cameraID (str): camera name
         centralHeading (int): direction camera is facing
         imgPath: filepath of the original image
         minX (int): fire segment minX
@@ -286,8 +285,8 @@ def getHeadingRange(cameraID, centralHeading, imgPath, minX, maxX):
     Returns:
         Tuple (int, int): heading and uncertainty of heading
     """
-    degreesInView = 110 # camera horizontal field of view is 110 for most Mobotix cameras
-    degreesAlignmentError = 10 # cameras are not exactly aligned to cardnial headings
+    degreesInView = fov
+    degreesAlignmentError = 10 # camera directions are not perfectly calibrated to north pole
 
     # get horizontal pixel width
     img = Image.open(imgPath)
@@ -698,7 +697,7 @@ def smsFireNotification(dbManager, cameraID):
             sms_helper.sendSms(settings, phone, message)
 
 
-def alertFire(constants, cameraID, cameraHeading, timestamp, imgPath, fireSegment):
+def alertFire(constants, cameraID, cameraHeading, timestamp, fov, imgPath, fireSegment):
     """Update Alerts DB and send alerts about given fire through all channels (pubsub, email, and sms)
 
     Args:
@@ -712,7 +711,7 @@ def alertFire(constants, cameraID, cameraHeading, timestamp, imgPath, fireSegmen
     dbManager = constants['dbManager']
 
     (mapImgGCS, camLatitude, camLongitude) = dbManager.getCameraMapLocation(cameraID)
-    (fireHeading, rangeAngle) = getHeadingRange(cameraID, cameraHeading, imgPath, fireSegment['MinX'], fireSegment['MaxX'])
+    (fireHeading, rangeAngle) = getHeadingRange(cameraHeading, fov, imgPath, fireSegment['MinX'], fireSegment['MaxX'])
     (croppedPath, annotatedPath) = genAnnotatedImages(constants, cameraID, cameraHeading, timestamp, imgPath, fireSegment)
     triangle = getTriangleVertices(camLatitude, camLongitude, fireHeading, rangeAngle)
     intersectionInfo = intersectRecentAlerts(dbManager, timestamp, triangle)
@@ -990,9 +989,10 @@ def main():
             (cameraID, timestamp, imgPath, classifyImgPath) = \
                 getArchivedImages(constants, cameras, startTimeDT, timeRangeSeconds, minusMinutes)
             heading = img_archive.getHeading(cameraID)
+            fov = 110 # camera horizontal field of view is 110 for most Mobotix cameras
         # elif minusMinutes: to be resurrected using archive functionality
         else: # regular (non diff mode), grab image and process
-            (cameraID, heading, timestamp, imgPath) = getNextImage(dbManager, cameras, stateless)
+            (cameraID, heading, timestamp, fov, imgPath) = getNextImage(dbManager, cameras, stateless)
             classifyImgPath = imgPath
         if not cameraID:
             continue # skip to next camera
@@ -1019,7 +1019,7 @@ def main():
         if fireSegment and not useArchivedImages:
             recordDetection(dbManager, cameraID, heading, timestamp, imgPath, fireSegment, detectionPolicy.modelId, stateless)
             if not (isDuplicateAlert(dbManager, cameraID, heading, timestamp) or stateless):
-                alertFire(constants, cameraID, heading, timestamp, imgPath, fireSegment)
+                alertFire(constants, cameraID, heading, timestamp, fov, imgPath, fireSegment)
                 numAlerts += 1
         deleteImageFiles(classifyImgPath, imgPath)
         if (args.heartbeat):

@@ -221,6 +221,7 @@ class DbManager(object):
             ('Heading', 'REAL'),
             ('Timestamp', 'INT'),
             ('ImagePath', 'TEXT'),
+            ('FieldOfView', 'INT'),
         ]
 
         self.tables = {

@@ -47,11 +47,12 @@ def fetchImageAndMeta(dbManager, cameraID, cameraUrl, imgDir):
     Returns:
         Tuple containing filepath of the image, current heading and timestamp
     """
+    fov = 110 # camera horizontal field of view is 110 for most Mobotix cameras
     timestamp = int(time.time())
     imgPath = getImgPath(imgDir, cameraID, timestamp)
     urllib.request.urlretrieve(cameraUrl, imgPath)
     heading = getHeading(cameraID)
-    return (imgPath, heading, timestamp)
+    return (imgPath, heading, timestamp, fov)
 
 
 def getImgPath(outputDir, cameraID, timestamp, cropCoords=None, diffMinutes=0):
