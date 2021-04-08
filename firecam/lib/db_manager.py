@@ -121,6 +121,7 @@ class DbManager(object):
             ('cameraIDs', 'TEXT'),
             ('locationID', 'TEXT'),
             ('mapFile', 'TEXT'),
+            ('CityName', 'TEXT'),
         ]
 
         bbox_schema = [
