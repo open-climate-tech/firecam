@@ -30,7 +30,8 @@ from urllib.request import urlretrieve
 from PIL import Image, ImageDraw
 
 def getCameraLocations(dbManager):
-    sqlStr = "select latitude,longitude from cameras where locationID in (select distinct locationID from sources)"
+    # sqlStr = "select latitude,longitude from cameras where locationID in (select distinct locationID from sources where dormant=0) and network='HPWREN'"
+    sqlStr = "select latitude,longitude from cameras where locationID in (select distinct locationID from sources where dormant=0)"
 
     dbResult = dbManager.query(sqlStr)
     # print('dbr', len(dbResult), dbResult)

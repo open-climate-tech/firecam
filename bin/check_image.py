@@ -63,7 +63,8 @@ def buttonClick(event):
     exit()
 
 # use multiple colors to make it slightly easier to see the overlapping boxes
-colors = ['red', 'blue']
+# colors = ['red', 'blue']
+colors = ['red', 'blue', 'cyan', 'yellow', 'orange']
 
 def displayImageWithScores(imgOrig, segments):
     (rootTk, canvasTk, imgPhoto, scaleFactor) = imageDisplay(imgOrig)
@@ -103,7 +104,7 @@ def drawBoxesAndScores(imgOrig, segments):
         drawRect(imgDraw, x0, y0, x1, y1, lineWidth, color)
         centerX = (x0 + x1)/2
         centerY = (y0 + y1)/2
-        fontSize=60
+        fontSize=40
         fontPath = os.path.join(str(pathlib.Path(os.path.realpath(__file__)).parent.parent), 'firecam/data/Roboto-Regular.ttf')
         font = ImageFont.truetype(fontPath, size=fontSize)
         scoreStr = '%.2f' % segmentInfo['score']
@@ -136,6 +137,7 @@ def main():
     image_spec[-1]['path'] = args.image
     image_spec[-1]['timestamp'] = nameParsed['unixTime']
     image_spec[-1]['cameraID'] = nameParsed['cameraID']
+    image_spec[-1]['heading'] = 0 # fake heading
     if args.startY:
         image_spec[-1]['startY'] = args.startY
     if args.endY:
