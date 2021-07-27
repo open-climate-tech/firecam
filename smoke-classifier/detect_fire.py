@@ -988,7 +988,8 @@ def main():
         if useArchivedImages:
             (cameraID, timestamp, imgPath, classifyImgPath) = \
                 getArchivedImages(constants, cameras, startTimeDT, timeRangeSeconds, minusMinutes)
-            heading = img_archive.getHeading(cameraID)
+            if cameraID:
+                heading = img_archive.getHeading(cameraID)
             fov = 110 # camera horizontal field of view is 110 for most Mobotix cameras
         # elif minusMinutes: to be resurrected using archive functionality
         else: # regular (non diff mode), grab image and process

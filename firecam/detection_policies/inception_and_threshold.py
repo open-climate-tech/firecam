@@ -248,7 +248,8 @@ class InceptionV3AndHistoricalThreshold:
         imgPath = last_image_spec['path']
         timestamp = last_image_spec['timestamp']
         cameraID = last_image_spec['cameraID']
-        heading = last_image_spec['heading']
+        if not self.stateless:
+            heading = last_image_spec['heading']
         detectionResult = {
             'fireSegment': None
         }
