@@ -225,6 +225,14 @@ class DbManager(object):
             ('FieldOfView', 'INT'),
         ]
 
+        # archive
+        weather_schema = [
+            ('CameraId', 'TEXT'),
+            ('Timestamp', 'INT'),
+            ('Weather', 'TEXT'),
+            ('Source', 'TEXT'),
+        ]
+
         self.tables = {
             'sources': sources_schema,
             'counters': counters_schema,
@@ -240,6 +248,7 @@ class DbManager(object):
             'user_preferences': user_preferences_schema,
             'notifications': notifications_schema,
             'archive': archive_schema,
+            'weather': weather_schema,
         }
 
         self.sources_table_name = 'sources'
