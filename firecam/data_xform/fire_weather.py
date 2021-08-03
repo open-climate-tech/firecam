@@ -22,18 +22,22 @@ cached/saved in DB.  Weather data is merged with fire data to genrate output CSV
 
 
 import os, sys
+
 from firecam.lib import settings
 from firecam.lib import collect_args
 from firecam.lib import goog_helper
 from firecam.lib import db_manager
+from firecam.lib import img_archive
 
 import random
-import datetime
+import time, datetime, dateutil.parser
 import logging
 import csv
 import json
 import urllib.request
+import math
 from shapely.geometry import Polygon
+from PIL import Image
 
 
 def getCentroid(polygonStr):
@@ -65,7 +69,7 @@ def saveDbWeather(dbManager, cameraID, timestamp, weatherInfo, source):
     dbManager.add_data('weather', dbRow)
 
 
-def getHistoricalWeather(dbManager, cameraID, timestamp, centroidLatLong, timestampStr):
+def getHistoricalWeather(dbManager, cameraID, timestampStr, centroidLatLong):
     # first check if cached in DB
 
     baseURL = 'https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/'
@@ -99,15 +103,19 @@ def getHistoricalWeather(dbManager, cameraID, timestamp, centroidLatLong, timest
 
     return weatherInfo
 
+def getRandInterpolatedVal(percentiles):
+    randVal = random.random()
+    rand10 = randVal*10
+    rand10Int = int(rand10)
+    minVal = percentiles[rand10Int]
+    maxVal = percentiles[rand10Int + 1]
+    return minVal + (rand10 - rand10Int) * (maxVal - minVal)
 
-def outputWithWeather(outFile, score, centroid, sourcePolygonsStr, weatherInfo, isRealFire):
+
+def outputWithWeather(outFile, score, centroid, numPolys, weatherInfo, isRealFire):
     dataArr = [float(score)]
     dataArr += [centroid[0] - 32, centroid[1] + 120]
-    if sourcePolygonsStr:
-        sourcePolygonsArr = json.loads(sourcePolygonsStr)
-        dataArr += [len(sourcePolygonsArr)]
-    else:
-        dataArr += [1]
+    dataArr += [numPolys]
     dataArr += [(weatherInfo['temp'] - 70) / 10]
     dataArr += [weatherInfo['humidity'] / 100]
     dataArr += [weatherInfo['precip'] or 0]
@@ -130,6 +138,7 @@ def main():
     reqArgs = [
         ["o", "outputFile", "output file name"],
         ["i", "inputCsv", "csvfile with contents of Cropped Images"],
+        ['m', "mode", "mode: votepoly or camdir or pruned"],
     ]
     optArgs = [
         ["s", "startRow", "starting row"],
@@ -138,6 +147,8 @@ def main():
     args = collect_args.collectArgs(reqArgs, optionalArgs=optArgs, parentParsers=[goog_helper.getParentParser()])
     startRow = int(args.startRow) if args.startRow else 0
     endRow = int(args.endRow) if args.endRow else 1e9
+    mode = args.mode
+    assert mode == 'votepoly' or mode == 'camdir' or mode == 'pruned'
     outFile = open(args.outputFile, 'w')
     dbManager = db_manager.DbManager(sqliteFile=settings.db_file,
                                      psqlHost=settings.psqlHost, psqlDb=settings.psqlDb,
@@ -154,19 +165,80 @@ def main():
             if rowIndex > endRow:
                 print('Reached end row', rowIndex, endRow)
                 break
-            [cameraID, timestamp, score, polygon, sourcePolygons, isRealFire] = csvRow[:6]
-            logging.warning('Processing row: %d, cam: %s, ts: %s', rowIndex, cameraID, timestamp)
-            if cameraID == lastCam and timestamp == lastTime:
-                logging.warning('Duplicate row: %d, cam: %s, ts: %s', rowIndex, cameraID, timestamp)
-            lastCam = cameraID
-            lastTime = timestamp
-            centroid = getCentroid(polygon)
-            weatherInfo = getHistoricalWeather(dbManager, cameraID, timestamp, centroid, timestamp)
+            if mode == 'votepoly':
+                [cameraID, timestamp, score, polygon, sourcePolygons, isRealFire] = csvRow[:6]
+                logging.warning('Processing row: %d, cam: %s, ts: %s', rowIndex, cameraID, timestamp)
+                if cameraID == lastCam and timestamp == lastTime:
+                    logging.warning('Duplicate row: %d, cam: %s, ts: %s', rowIndex, cameraID, timestamp)
+                lastCam = cameraID
+                lastTime = timestamp
+                centroid = getCentroid(polygon)
+                numPolys = 1
+                if sourcePolygons:
+                    sourcePolygonsArr = json.loads(sourcePolygons)
+                    numPolys = len(sourcePolygonsArr)
+            else:
+                if mode == 'camdir':
+                    [cameraID, isoTime, direction] = csvRow[:3]
+                    logging.warning('Processing row: %d, cam: %s, ts: %s', rowIndex, cameraID, isoTime)
+                    timestamp = time.mktime(dateutil.parser.parse(isoTime).timetuple())
+                    if 'center left' in direction:
+                        offset = -20
+                    elif 'center right' in direction:
+                        offset = 20
+                    elif 'center' in direction:
+                        offset = 0
+                    elif 'left' in direction:
+                        offset = -40
+                    elif 'right' in direction:
+                        offset = 40
+                    else:
+                        logging.error('Unexpected dir row: %d, dir: %s', rowIndex, direction)
+                        continue
+                elif mode == 'pruned':
+                    [_cropName, minX, _minY, maxX, _maxY, fileName] = csvRow[:6]
+                    minX = int(minX)
+                    maxX = int(maxX)
+                    nameParsed = img_archive.parseFilename(fileName)
+                    cameraID = nameParsed['cameraID']
+                    if cameraID.startswith('lo-'):
+                        cameraID = 'm' + cameraID
+                    elif cameraID.startswith('so-'):
+                        cameraID = 'sojr-' + cameraID[3:]
+                    timestamp = nameParsed['unixTime']
+                    dateStr = nameParsed['isoStr'][:nameParsed['isoStr'].index('T')]
+                    if dateStr == lastTime and cameraID == lastCam:
+                        # logging.warning('Skip same fire. row %s', rowIndex)
+                        continue
+                    lastCam = cameraID
+                    lastTime = dateStr
+                    localFilePath = os.path.join(settings.downloadDir, fileName)
+                    if not os.path.isfile(localFilePath):
+                        logging.warning('Skip missing file %s, row %s', fileName, rowIndex)
+                        continue
+                    img = Image.open(localFilePath)
+                    degreesInView = 110
+                    centerX = (minX + maxX) / 2
+                    offset = centerX / img.size[0] * degreesInView - degreesInView/2
+                    img.close()
+                (mapImgGCS, camLatitude, camLongitude) = dbManager.getCameraMapLocation(cameraID)
+                camHeading = img_archive.getHeading(cameraID)
+                heading = (camHeading + offset) % 360
+                angle = 90 - heading
+                distanceDegrees = 0.2 # approx 14 miles
+                fireLat = camLatitude + math.sin(angle*math.pi/180)*distanceDegrees
+                fireLong = camLongitude + math.cos(angle*math.pi/180)*distanceDegrees
+                centroid = (fireLat, fireLong)
+                score = getRandInterpolatedVal(settings.percentilesScore)
+                numPolys = round(getRandInterpolatedVal(settings.percentilesNumPoly))
+                isRealFire = 1
+                logging.warning('Processing row: %d, heading: %s, centroid: %s, score: %s, numpoly: %s', rowIndex, heading, centroid, score, numPolys)
+            weatherInfo = getHistoricalWeather(dbManager, cameraID, timestamp, centroid)
             if not weatherInfo:
                 logging.warning('Skipping row %d', rowIndex)
                 continue
             # logging.warning('Weather %s', weatherInfo)
-            outputWithWeather(outFile, score, centroid, sourcePolygons, weatherInfo, isRealFire)
+            outputWithWeather(outFile, score, centroid, numPolys, weatherInfo, isRealFire)
 
             logging.warning('Processed row: %d, cam: %s, ts: %s', rowIndex, cameraID, timestamp)
     outFile.close()
