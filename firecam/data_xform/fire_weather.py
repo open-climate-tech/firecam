@@ -14,8 +14,13 @@
 # ==============================================================================
 """
 
-Reads data from csv export of votes and polygons to find historical weather, which is
-cached/saved in DB.  Weather data is merged with fire data to genrate output CSV file.
+Reads data from csv export of one of 3 types of data:
+1) votes and polygons
+2) CameraID and direction
+3) Filename and x/y coordinates of fire region
+For each of these, it finds the approximate location and finds the historical weather,
+which is cached/saved in DB.
+Weather data is merged with fire data to genrate output CSV file.
 
 
 """
@@ -28,6 +33,7 @@ from firecam.lib import collect_args
 from firecam.lib import goog_helper
 from firecam.lib import db_manager
 from firecam.lib import img_archive
+from firecam.lib import weather
 
 import random
 import time, datetime, dateutil.parser
@@ -36,7 +42,7 @@ import csv
 import json
 import urllib.request
 import math
-from shapely.geometry import Polygon
+from shapely.geometry import Polygon, Point
 from PIL import Image
 
 
@@ -47,62 +53,6 @@ def getCentroid(polygonStr):
     return (round(centerLatLong[0],3), round(centerLatLong[1],3))
 
 
-def getDbWeather(dbManager, cameraID, timestamp):
-    sqlTemplate = """SELECT weather as weather, source as source FROM weather WHERE CameraId = '%s' and Timestamp = %s """
-    sqlStr = sqlTemplate % (cameraID, timestamp)
-    dbResult = dbManager.query(sqlStr)
-    if len(dbResult) > 0:
-        # logging.warning('db weather result: %s', dbResult[0])
-        if dbResult[0]['source'] != 'visualcrossing':
-            return
-        weatherStr = dbResult[0]['weather']
-        return json.loads(weatherStr)
-
-
-def saveDbWeather(dbManager, cameraID, timestamp, weatherInfo, source):
-    dbRow = {
-        'CameraId': cameraID,
-        'Timestamp': timestamp,
-        'Weather': json.dumps(weatherInfo),
-        'Source': source
-    }
-    dbManager.add_data('weather', dbRow)
-
-
-def getHistoricalWeather(dbManager, cameraID, timestampStr, centroidLatLong):
-    # first check if cached in DB
-
-    baseURL = 'https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/'
-
-    baseURL += str(centroidLatLong[0]) + ',' + str(centroidLatLong[1]) + '/'
-    timestamp = int(timestampStr)
-
-    isoStr = datetime.datetime.fromtimestamp(timestamp).isoformat()
-    baseURL += isoStr
-
-    baseURL += '?key=' + settings.weatherHistoryKey
-
-    weatherInfo = None
-    try:
-        weatherInfo = getDbWeather(dbManager, cameraID, timestamp)
-        if not weatherInfo:
-            resp = urllib.request.urlopen(baseURL)
-            weatherStr = resp.read().decode('utf-8')
-
-            # XXXXX test data
-            # weatherStr = '{"currentConditions": {"datetime": "10:00:00", "datetimeEpoch": 1600102800, "temp": 93.1, "feelslike": 88.7, "humidity": 14.6, "dew": 37.8, "precip": 0.0, "precipprob": null, "snow": null, "snowdepth": 0.0, "preciptype": null, "windgust": null, "windspeed": 0.0, "winddir": 0.0, "pressure": 1014.6, "visibility": 9.9, "cloudcover": 0.0, "solarradiation": null, "solarenergy": null, "uvindex": null, "conditions": "Clear", "icon": "clear-day", "stations": ["KPSP", "69015093121", "KNXP", "72286893138"], "sunrise": "06:27:29", "sunriseEpoch": 1600090049, "sunset": "18:51:27", "sunsetEpoch": 1600134687, "moonphase": 0.94} }'
-
-            weatherJson = json.loads(weatherStr)
-            weatherInfo = weatherJson['currentConditions']
-            saveDbWeather(dbManager, cameraID, timestamp, weatherInfo, 'visualcrossing')
-        if not weatherInfo['temp']:
-            logging.error('No temperature %s: %s', baseURL, weatherInfo)
-            return None
-    except Exception as e:
-        logging.error('Weather error %s: %s', baseURL, str(e))
-
-    return weatherInfo
-
 def getRandInterpolatedVal(percentiles):
     randVal = random.random()
     rand10 = randVal*10
@@ -112,21 +62,13 @@ def getRandInterpolatedVal(percentiles):
     return minVal + (rand10 - rand10Int) * (maxVal - minVal)
 
 
-def outputWithWeather(outFile, score, centroid, numPolys, weatherInfo, isRealFire):
-    dataArr = [float(score)]
-    dataArr += [centroid[0] - 32, centroid[1] + 120]
-    dataArr += [numPolys]
-    dataArr += [(weatherInfo['temp'] - 70) / 10]
-    dataArr += [weatherInfo['humidity'] / 100]
-    dataArr += [weatherInfo['precip'] or 0]
-    dataArr += [weatherInfo['windspeed'] or 0]
-    dataArr += [(weatherInfo['winddir'] or 0) / 360]
-    dataArr += [((weatherInfo['pressure'] or 1013)- 1000) / 10]
-    dataArr += [weatherInfo['visibility']]
-    dataArr += [weatherInfo['cloudcover'] / 100]
+def keepData(score, centroid, numPolys, weatherInfo, isRealFire):
+    northMexico = Polygon([(32.533, -117.157), (32.696, -115.173), (32.174, -114.692), (32.073, -117.232)])
+    return not northMexico.intersects(Point(centroid))
 
-    dataArr += [int(isRealFire)]
-    # logging.warning('Data array: %s', dataArr)
+
+def outputWithWeather(outFile, score, timestamp, centroid, numPolys, weatherInfo, isRealFire):
+    dataArr = weather.normalizeWeather(score, timestamp, centroid, numPolys, weatherInfo, isRealFire)
     dataArrStr = list(map(str, dataArr))
     # logging.warning('Data arrayStr: %s', dataArrStr)
     dataStr = ', '.join(dataArrStr)
@@ -137,7 +79,7 @@ def outputWithWeather(outFile, score, centroid, numPolys, weatherInfo, isRealFir
 def main():
     reqArgs = [
         ["o", "outputFile", "output file name"],
-        ["i", "inputCsv", "csvfile with contents of Cropped Images"],
+        ["i", "inputCsv", "csvfile with fire/detection data"],
         ['m', "mode", "mode: votepoly or camdir or pruned"],
     ]
     optArgs = [
@@ -167,6 +109,7 @@ def main():
                 break
             if mode == 'votepoly':
                 [cameraID, timestamp, score, polygon, sourcePolygons, isRealFire] = csvRow[:6]
+                timestamp = int(timestamp)
                 logging.warning('Processing row: %d, cam: %s, ts: %s', rowIndex, cameraID, timestamp)
                 if cameraID == lastCam and timestamp == lastTime:
                     logging.warning('Duplicate row: %d, cam: %s, ts: %s', rowIndex, cameraID, timestamp)
@@ -233,12 +176,15 @@ def main():
                 numPolys = round(getRandInterpolatedVal(settings.percentilesNumPoly))
                 isRealFire = 1
                 logging.warning('Processing row: %d, heading: %s, centroid: %s, score: %s, numpoly: %s', rowIndex, heading, centroid, score, numPolys)
-            weatherInfo = getHistoricalWeather(dbManager, cameraID, timestamp, centroid)
+            weatherInfo = weather.getHistoricalWeather(dbManager, cameraID, timestamp, centroid)
             if not weatherInfo:
                 logging.warning('Skipping row %d', rowIndex)
                 continue
             # logging.warning('Weather %s', weatherInfo)
-            outputWithWeather(outFile, score, centroid, numPolys, weatherInfo, isRealFire)
+            if not keepData(score, centroid, numPolys, weatherInfo, isRealFire):
+                logging.warning('Skipping Mexico fire row %d, camera %s', rowIndex, cameraID)
+                continue
+            outputWithWeather(outFile, score, timestamp, centroid, numPolys, weatherInfo, isRealFire)
 
             logging.warning('Processed row: %d, cam: %s, ts: %s', rowIndex, cameraID, timestamp)
     outFile.close()

@@ -164,14 +164,11 @@ def main():
     outFile.write('True Negative: ' + ', '.join(negatives) + '\n')
     outFile.write('Mixed nonSmoke: ' + ', '.join(mixed) + '\n')
 
-    accuracy = safeDiv(truePositive + trueNegative, truePositive + trueNegative + falsePositive + falseNegative)
-    doubleOut(outFile, 'Accuracy: %f' % accuracy)
-    precision = safeDiv(truePositive, truePositive + falsePositive)
+    (precision, recall, f1, accuracy) = tf_helper.confusionStats(truePositive, trueNegative, falsePositive, falseNegative)
     doubleOut(outFile, 'Precision: %f' % precision)
-    recall = safeDiv(truePositive, truePositive + falseNegative)
     doubleOut(outFile, 'Recall: %f' % recall)
-    f1 = safeDiv(2 * precision*recall, precision + recall)
     doubleOut(outFile, 'F1: %f' % f1)
+    doubleOut(outFile, 'Accuracy: %f' % accuracy)
 
     outFile.close()
     print("DONE")

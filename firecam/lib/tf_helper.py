@@ -89,3 +89,17 @@ def classifyFrozenTf2(model, cropsNormalized, segments):
     for i,scores in enumerate(results[0]):
         segments[i]['score'] = scores[1].numpy()
     return results
+
+
+def safeDiv(dividend, divisor):
+    if divisor == 0:
+        return 0
+    return dividend / divisor
+
+
+def confusionStats(truePositive, trueNegative, falsePositive, falseNegative):
+    precision = safeDiv(truePositive, truePositive + falsePositive)
+    recall = safeDiv(truePositive, truePositive + falseNegative)
+    f1 = safeDiv(2 * precision*recall, precision + recall)
+    accuracy = safeDiv(truePositive + trueNegative, truePositive + trueNegative + falsePositive + falseNegative)
+    return (precision, recall, f1, accuracy)
