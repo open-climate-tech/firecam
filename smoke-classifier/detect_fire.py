@@ -34,6 +34,7 @@ from firecam.lib import tf_helper
 from firecam.lib import db_manager
 from firecam.lib import email_helper
 from firecam.lib import sms_helper
+from firecam.lib import weather
 from firecam.detection_policies import policies
 
 import logging
@@ -369,6 +370,11 @@ def drawPolyLatLong(mapImg, leftLongitude, rightLongitude, topLatitude, bottomLa
     return drawPolyPixels(mapImg, coordsPixels, fillColor)
 
 
+def getCentroid(polygonCoords):
+    poly = Polygon(polygonCoords)
+    return list(zip(*poly.centroid.xy))[0]
+
+
 def cropCentered(mapImg, leftLongitude, rightLongitude, topLatitude, bottomLatitude, polygonCoords):
     """Crop given image to 1/4 size centered at the centroid of given polygon
 
@@ -380,8 +386,7 @@ def cropCentered(mapImg, leftLongitude, rightLongitude, topLatitude, bottomLatit
     Returns:
         Cropped Image object
     """
-    poly = Polygon(polygonCoords)
-    centerLatLong = list(zip(*poly.centroid.xy))[0]
+    centerLatLong = getCentroid(polygonCoords)
     centerXY = convertLatLongToPixels(mapImg, leftLongitude, rightLongitude, topLatitude, bottomLatitude, centerLatLong)
     centerX = min(max(centerXY[0], mapImg.size[0]/4), mapImg.size[0]*3/4)
     centerY = min(max(centerXY[1], mapImg.size[1]/4), mapImg.size[1]*3/4)
@@ -733,6 +738,8 @@ def alertFire(constants, cameraID, cameraHeading, timestamp, fov, imgPath, fireS
     annotatedUrl = annotatedID.replace('gs://', 'https://storage.googleapis.com/')
     mapUrl = mapID.replace('gs://', 'https://storage.googleapis.com/')
 
+    centroidLatLong = getCentroid(polygon)
+    weatherInfo = weather.getWeatherData(dbManager, cameraID, timestamp, centroidLatLong)
     updateAlertsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon, sourcePolygons)
     pubsubFireNotification(cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon)
     emailFireNotification(constants, cameraID, timestamp, imgPath, annotatedPath, fireSegment)

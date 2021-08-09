@@ -40,7 +40,6 @@ import time, datetime, dateutil.parser
 import logging
 import csv
 import json
-import urllib.request
 import math
 from shapely.geometry import Polygon, Point
 from PIL import Image

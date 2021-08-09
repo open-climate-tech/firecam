@@ -390,6 +390,8 @@ class DbManager(object):
             startY = entry['StartY'] if 'StartY' in entry else startY
             endY = entry['endy'] if 'endy' in entry else None
             endY = entry['EndY'] if 'EndY' in entry else endY
+            if endY == '':
+                endY = None
             dictRes[entry['cameraname']] = {
                 'startY': startY,
                 'endY': endY
