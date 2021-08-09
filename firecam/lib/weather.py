@@ -19,12 +19,14 @@ Helper functions for weather related functionality
 """
 
 from firecam.lib import settings
+from firecam.lib import tf_helper
 
 import logging
-import datetime
+import time, datetime
 import urllib.request
 import json
 import pandas as pd
+import numpy as np
 
 
 def getHistoricalWeatherExternal(timestamp, centroidLatLong):
@@ -48,8 +50,41 @@ def getHistoricalWeatherExternal(timestamp, centroidLatLong):
         weatherInfo = weatherJson['currentConditions']
     except Exception as e:
         logging.error('Weather error %s: %s', baseURL, str(e))
+        weatherInfo = None
 
-    return weatherInfo
+    return (weatherInfo, 'visualcrossing')
+
+
+def getCurrentWeatherExternal(centroidLatLong):
+    urlTemplate = 'https://api.openweathermap.org/data/2.5/onecall?lat=%s&lon=%s&units=%s&exclude=minutely,hourly,daily&appid=%s'
+    urlStr = urlTemplate % (centroidLatLong[0], centroidLatLong[1], 'imperial', settings.weatherCurrentKey)
+    weatherInfo = None
+    try:
+        resp = urllib.request.urlopen(urlStr)
+        weatherStr = resp.read().decode('utf-8')
+        # XXXXX test data
+        # weatherStr = '{"current": {"dt": 1628472036, "sunrise": 1628420122, "sunset": 1628472234, "temp": 69.17, "feels_like": 70.39, "pressure": 1007, "humidity": 98, "dew_point": 68.58, "uvi": 0, "clouds": 100, "visibility": 8592, "wind_speed": 1.54, "wind_deg": 330, "wind_gust": 2.06, "weather": [{"id": 501, "main": "Rain", "description": "moderate rain", "icon": "10d"}], "rain": {"1h": 1.64}}}'
+        weatherJson = json.loads(weatherStr)
+        weatherInfo = weatherJson['current']
+        weatherInfo['dew'] = weatherInfo['dew_point']
+        if 'rain' in weatherInfo and '1h' in weatherInfo['rain']:
+            weatherInfo['precip'] = weatherInfo['rain']['1h']
+        elif 'snow' in weatherInfo and '1h' in weatherInfo['snow']:
+            weatherInfo['precip'] = weatherInfo['snow']['1h']
+        else:
+            weatherInfo['precip'] = 0
+        weatherInfo['windspeed'] = weatherInfo['wind_speed']
+        weatherInfo['winddir'] = weatherInfo['wind_deg']
+        weatherInfo['orig_visibility'] = weatherInfo['visibility']
+        weatherInfo['visibility'] = weatherInfo['visibility'] / 1000 # meters to km
+        # max visibility on visualcrossing is 9.9 and openweathermap max is 10000
+        weatherInfo['cloudcover'] = weatherInfo['clouds']
+        # logging.warning('wc %s', weatherInfo )
+    except Exception as e:
+        logging.error('Weather error %s: %s', urlStr, str(e))
+        weatherInfo = None
+
+    return (weatherInfo, 'openweathermap')
 
 
 def getDbWeather(dbManager, cameraID, timestamp):
@@ -58,8 +93,6 @@ def getDbWeather(dbManager, cameraID, timestamp):
     dbResult = dbManager.query(sqlStr)
     if len(dbResult) > 0:
         # logging.warning('db weather result: %s', dbResult[0])
-        if dbResult[0]['source'] != 'visualcrossing':
-            return
         weatherStr = dbResult[0]['weather']
         return json.loads(weatherStr)
 
@@ -74,14 +107,18 @@ def saveDbWeather(dbManager, cameraID, timestamp, weatherInfo, source):
     dbManager.add_data('weather', dbRow)
 
 
-def getHistoricalWeather(dbManager, cameraID, timestamp, centroidLatLong):
+def getWeatherData(dbManager, cameraID, timestamp, centroidLatLong):
     # first check if cached in DB
     weatherInfo = getDbWeather(dbManager, cameraID, timestamp)
     if not weatherInfo:
-        weatherInfo = getHistoricalWeatherExternal(timestamp, centroidLatLong)
+        currentTime = time.time()
+        if (currentTime - timestamp) > 60 * 60: # one hour
+            (weatherInfo, source) = getHistoricalWeatherExternal(timestamp, centroidLatLong)
+        else:
+            (weatherInfo, source) = getCurrentWeatherExternal(centroidLatLong)
         if not weatherInfo:
             return None
-        saveDbWeather(dbManager, cameraID, timestamp, weatherInfo, 'visualcrossing')
+        saveDbWeather(dbManager, cameraID, timestamp, weatherInfo, source)
     if not weatherInfo['temp']:
         logging.error('No temperature %s: %s', timestamp, weatherInfo)
         return None
@@ -106,7 +143,7 @@ def normalizeWeather(score, timestamp, centroid, numPolys, weatherInfo, isRealFi
     dataArr += [((weatherInfo['windspeed'] or 0) - 6) / 6]
     dataArr += [((weatherInfo['winddir'] or 0) - 180)/ 180]
     dataArr += [((weatherInfo['pressure'] or 1013) - 1013) / 10]
-    dataArr += [(weatherInfo['visibility'] - 9) / 5]
+    dataArr += [(weatherInfo['visibility'] - 5) / 5]
     dataArr += [(weatherInfo['cloudcover'] - 50) / 50]
 
     dataArr += [int(isRealFire)]
@@ -127,3 +164,18 @@ def readWeatherCsv(inputCsv):
 
     labels = raw_dataset.pop('realfire')
     return (raw_dataset, labels)
+
+
+def measureTrueFalse(labels, predictions, threshold):
+    val_thresh = predictions > threshold
+    logging.warning('Threshold %s', threshold)
+    truePositive = np.logical_and(labels, val_thresh).sum()
+    falseNegative = np.logical_and(labels, np.logical_not(val_thresh)).sum()
+    falsePositive = np.logical_and(np.logical_not(labels), val_thresh).sum()
+    trueNegative = np.logical_and(np.logical_not(labels), np.logical_not(val_thresh)).sum()
+    logging.warning('TT %s', truePositive)
+    logging.warning('TF %s', falseNegative)
+    logging.warning('FT %s', falsePositive)
+    logging.warning('FF %s', trueNegative)
+    (precision, recall, f1, accuracy) = tf_helper.confusionStats(truePositive, trueNegative, falsePositive, falseNegative)
+    logging.warning('Precision: %f, Recall: %f, F1: %f, Accuracy: %f', precision, recall, f1, accuracy)

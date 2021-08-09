@@ -176,7 +176,7 @@ def main():
                 numPolys = round(getRandInterpolatedVal(settings.percentilesNumPoly))
                 isRealFire = 1
                 logging.warning('Processing row: %d, heading: %s, centroid: %s, score: %s, numpoly: %s', rowIndex, heading, centroid, score, numPolys)
-            weatherInfo = weather.getHistoricalWeather(dbManager, cameraID, timestamp, centroid)
+            weatherInfo = weather.getWeatherData(dbManager, cameraID, timestamp, centroid)
             if not weatherInfo:
                 logging.warning('Skipping row %d', rowIndex)
                 continue
