@@ -126,13 +126,8 @@ def getWeatherData(dbManager, cameraID, timestamp, centroidLatLong):
     return weatherInfo
 
 
-def normalizeWeather(score, timestamp, centroid, numPolys, weatherInfo, isRealFire):
+def normalizeWeather(score, numPolys, weatherInfo, timestamp=None, centroid=None, isRealFire=None):
     dataArr = [(float(score) - 0.5) * 2]
-    dt = datetime.datetime.fromtimestamp(timestamp)
-    # month would bias because too little data
-    dataArr += [(dt.hour - 12) / 6]
-    dataArr += [centroid[0] - 33.5]
-    dataArr += [centroid[1] + 118]
     dataArr += [numPolys - 1]
     dataArr += [(weatherInfo['temp'] - 70) / 20]
     # feelslike is almost identical to temp
@@ -146,15 +141,24 @@ def normalizeWeather(score, timestamp, centroid, numPolys, weatherInfo, isRealFi
     dataArr += [(weatherInfo['visibility'] - 5) / 5]
     dataArr += [(weatherInfo['cloudcover'] - 50) / 50]
 
-    dataArr += [int(isRealFire)]
+    # optional columns
+    if timestamp:
+        dt = datetime.datetime.fromtimestamp(timestamp)
+        # month would bias because too little data
+        dataArr += [(dt.hour - 12) / 6]
+    if centroid:
+        dataArr += [centroid[0] - 33.5]
+        dataArr += [centroid[1] + 118]
+    if isRealFire != None:
+        dataArr += [int(isRealFire)]
     # logging.warning('Data array: %s', dataArr)
     return dataArr
 
 
 def readWeatherCsv(inputCsv):
-    column_names = ['imgScore', 'hour', 'lat', 'long', 'numintersects', 'temp', 'dew',
-                    'humidity', 'precip', 'windspeed', 'winddir', 'pressure', 'visibility', 'cloudcover',
-                    'realfire']
+    column_names = ['imgScore', 'numintersects', 'temp', 'dew', 'humidity', 'precip',
+                    'windspeed', 'winddir', 'pressure', 'visibility', 'cloudcover',
+                    'hour', 'lat', 'long', 'realfire']
     raw_dataset = pd.read_csv(inputCsv, names=column_names, skipinitialspace=True)
 
     # drop useless columns

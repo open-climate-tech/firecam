@@ -67,7 +67,7 @@ def keepData(score, centroid, numPolys, weatherInfo, isRealFire):
 
 
 def outputWithWeather(outFile, score, timestamp, centroid, numPolys, weatherInfo, isRealFire):
-    dataArr = weather.normalizeWeather(score, timestamp, centroid, numPolys, weatherInfo, isRealFire)
+    dataArr = weather.normalizeWeather(score, numPolys, weatherInfo, timestamp, centroid, isRealFire)
     dataArrStr = list(map(str, dataArr))
     # logging.warning('Data arrayStr: %s', dataArrStr)
     dataStr = ', '.join(dataArrStr)
