@@ -22,10 +22,11 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+from firecam.lib import goog_helper
+
 import logging
-import numpy as np
+import tempfile
 import tensorflow as tf
-import time
 
 def loadModel(modelPath):
     """Load from given keras model
@@ -36,7 +37,15 @@ def loadModel(modelPath):
     Returns:
         Model object
     """
-    return tf.keras.models.load_model(modelPath)
+    # if model is on GCS, download it locally first
+    gcsModel = goog_helper.parseGCSPath(modelPath)
+    if gcsModel:
+        tmpDir = tempfile.TemporaryDirectory()
+        goog_helper.downloadBucketDir(gcsModel['bucket'], gcsModel['name'], tmpDir.name)
+        localPath = tmpDir.name
+    else:
+        localPath = modelPath
+    return tf.keras.models.load_model(localPath)
 
 
 def classifySegments(model, cropsNormalized, segments):

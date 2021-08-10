@@ -28,19 +28,15 @@ from firecam.lib import tf_helper
 from firecam.lib import rect_to_squares
 
 import pathlib
-from PIL import Image, ImageFile, ImageDraw, ImageFont
+from PIL import Image
 import logging
-import shutil
 import datetime
-import math
 import time
-import tempfile
 import random
 
 import tensorflow as tf
 
 testMode = False
-useFrozen = False
 
 class InceptionV3AndHistoricalThreshold:
 
@@ -55,16 +51,8 @@ class InceptionV3AndHistoricalThreshold:
         if not modelLocation:
             modelLocation = settings.model_file
         self.modelId = '/'.join(modelLocation.split('/')[-2:]) # the last two dirpath components
-        # if model is on GCS, download it locally first
-        gcsModel = goog_helper.parseGCSPath(modelLocation)
-        if gcsModel:
-            tmpDir = tempfile.TemporaryDirectory()
-            goog_helper.downloadBucketDir(gcsModel['bucket'], gcsModel['name'], tmpDir.name)
-            modelLocation = tmpDir.name
         if testMode:
             self.model = None
-        elif useFrozen:
-            self.model = tf_helper.loadFrozenModelTf2(modelLocation)
         else:
             self.model = tf_helper.loadModel(modelLocation)
 
@@ -101,8 +89,6 @@ class InceptionV3AndHistoricalThreshold:
         if testMode:
             for segmentInfo in segments:
                 segmentInfo['score'] = random.random()
-        elif useFrozen:
-            tf_helper.classifyFrozenTf2(self.model, crops, segments)
         else:
             tf_helper.classifySegments(self.model, crops, segments)
 
