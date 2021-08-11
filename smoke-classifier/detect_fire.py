@@ -596,6 +596,18 @@ def intersectRecentAlerts(dbManager, timestamp, triangle):
             return (intersection, json.loads(alert['sourcepolygons']))
 
 
+def checkWeatherInfo(weatherModel, dbManager, cameraID, timestamp, fireSegment, polygon, sourcePolygons):
+    centroidLatLong = getCentroid(polygon)
+    weatherInfo = weather.getWeatherData(dbManager, cameraID, timestamp, centroidLatLong)
+    if not weatherInfo:
+        return 1
+    numPolys = len(sourcePolygons)
+    imgScore = fireSegment['AdjScore'] if 'AdjScore' in fireSegment else fireSegment['score']
+    featureData = weather.normalizeWeather(imgScore, numPolys, weatherInfo)
+    prediction = weatherModel.predict([featureData])[0][0]
+    return prediction
+
+
 def updateAlertsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon, sourcePolygons):
     """Add new entry to Alerts table
 
@@ -620,6 +632,7 @@ def updateAlertsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, map
         'polygon': str(polygon),
         'sourcePolygons': str(sourcePolygons),
         'IsProto': int(img_archive.isPTZ(cameraID)),
+        'WeatherScore': fireSegment['weatherScore'],
     }
     dbManager.add_data('alerts', dbRow)
 
@@ -647,7 +660,8 @@ def pubsubFireNotification(cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl
         'croppedUrl': croppedUrl,
         'mapUrl': mapUrl,
         'polygon': str(polygon),
-        'isProto': img_archive.isPTZ(cameraID)
+        'isProto': img_archive.isPTZ(cameraID),
+        'weatherScore': fireSegment['weatherScore'],
     }
     goog_helper.publish(message)
 
@@ -714,6 +728,7 @@ def alertFire(constants, cameraID, cameraHeading, timestamp, fov, imgPath, fireS
         fireSegment (dictionary): dictionary with information for the segment with fire/smoke
     """
     dbManager = constants['dbManager']
+    weatherModel = constants['weatherModel']
 
     (mapImgGCS, camLatitude, camLongitude) = dbManager.getCameraMapLocation(cameraID)
     (fireHeading, rangeAngle) = getHeadingRange(cameraHeading, fov, imgPath, fireSegment['MinX'], fireSegment['MaxX'])
@@ -726,6 +741,9 @@ def alertFire(constants, cameraID, cameraHeading, timestamp, fov, imgPath, fireS
     else:
         polygon = triangle
         sourcePolygons = [triangle]
+    weatherScore = checkWeatherInfo(weatherModel, dbManager, cameraID, timestamp, fireSegment, polygon, sourcePolygons)
+    fireSegment['weatherScore'] = weatherScore
+
     mapPath = genAnnotatedMap(mapImgGCS, camLatitude, camLongitude, imgPath, polygon, sourcePolygons)
 
     # copy annotated image to publicly accessible settings.noticationsDir
@@ -738,8 +756,6 @@ def alertFire(constants, cameraID, cameraHeading, timestamp, fov, imgPath, fireS
     annotatedUrl = annotatedID.replace('gs://', 'https://storage.googleapis.com/')
     mapUrl = mapID.replace('gs://', 'https://storage.googleapis.com/')
 
-    centroidLatLong = getCentroid(polygon)
-    weatherInfo = weather.getWeatherData(dbManager, cameraID, timestamp, centroidLatLong)
     updateAlertsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon, sourcePolygons)
     pubsubFireNotification(cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon)
     emailFireNotification(constants, cameraID, timestamp, imgPath, annotatedPath, fireSegment)
@@ -978,11 +994,13 @@ def main():
     camArchives = img_archive.getHpwrenCameraArchives(settings.hpwrenArchives)
     DetectionPolicyClass = policies.get_policies()[settings.detectionPolicy]
     detectionPolicy = DetectionPolicyClass(args, dbManager, minusMinutes, stateless=stateless)
+    weatherModel = tf_helper.loadModel(settings.weather_model)
     constants = { # dictionary of constants to reduce parameters in various functions
         'args': args,
         'googleServices': googleServices,
         'camArchives': camArchives,
         'dbManager': dbManager,
+        'weatherModel': weatherModel,
     }
 
     numImages = 0

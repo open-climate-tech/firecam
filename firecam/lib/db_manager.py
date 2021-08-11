@@ -176,6 +176,7 @@ class DbManager(object):
             ('polygon', 'TEXT'),
             ('sourcePolygons', 'TEXT'),
             ('IsProto', 'INT'),
+            ('WeatherScore', 'REAL'),
         ]
 
         # votes regarding alerts
