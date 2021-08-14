@@ -222,6 +222,8 @@ def main():
     random.seed(0)
     googleServices = goog_helper.getGoogleServices(settings, args)
     camArchives = img_archive.getHpwrenCameraArchives(settings.hpwrenArchives)
+    downloadDirCache = img_archive.cacheDir(settings.downloadDir, settings.downloadDir)
+
     if minusMinutes:
         timeGapDelta = datetime.timedelta(seconds = 60*minusMinutes)
     cameraCache = {}
@@ -255,7 +257,7 @@ def main():
             imgDT = datetime.datetime.fromtimestamp(nameParsed['unixTime'])
             localFilePath = os.path.join(settings.downloadDir, fileName)
             if not os.path.isfile(localFilePath):# if file has not been downloaded by a previous iteration
-                files = img_archive.getHpwrenImages(googleServices, settings, settings.downloadDir, camArchives, nameParsed['cameraID'], imgDT, imgDT, 1)
+                files = img_archive.getHpwrenImages(googleServices, settings, downloadDirCache, camArchives, nameParsed['cameraID'], imgDT, imgDT, 1)
                 if not files or len(files) == 0:
                     logging.warning('Skip image without archive: %s', fileName)
                     skippedArchive.append((rowIndex, fileName, imgDT))
@@ -264,7 +266,7 @@ def main():
             imgOrig = Image.open(localFilePath)
             if not isImageValid(imgOrig):  # retry download if image invalid
                 os.remove(localFilePath)
-                files = img_archive.getHpwrenImages(googleServices, settings, settings.downloadDir, camArchives, nameParsed['cameraID'], imgDT, imgDT, 1)
+                files = img_archive.getHpwrenImages(googleServices, settings, downloadDirCache, camArchives, nameParsed['cameraID'], imgDT, imgDT, 1)
                 localFilePath = files[0]
                 imgOrig = Image.open(localFilePath)
 
@@ -291,7 +293,7 @@ def main():
                 earlierName = img_archive.repackFileName(nameParsed)
                 earlierImgPath = os.path.join(settings.downloadDir, earlierName)
                 if not os.path.isfile(earlierImgPath):# if file has not been downloaded by a previous iteration
-                    files = img_archive.getHpwrenImages(googleServices, settings, settings.downloadDir, camArchives, nameParsed['cameraID'], dt, dt, 1)
+                    files = img_archive.getHpwrenImages(googleServices, settings, downloadDirCache, camArchives, nameParsed['cameraID'], dt, dt, 1)
                     if files:
                         earlierImgPath = files[0]
                     else:
@@ -303,7 +305,7 @@ def main():
                 if not isImageValid(earlierImg):  # retry download if image invalid
                     earlierImg.close()
                     os.remove(earlierImgPath)
-                    files = img_archive.getHpwrenImages(googleServices, settings, settings.downloadDir, camArchives, nameParsed['cameraID'], dt, dt, 1)
+                    files = img_archive.getHpwrenImages(googleServices, settings, downloadDirCache, camArchives, nameParsed['cameraID'], dt, dt, 1)
                     earlierImgPath = files[0]
                     earlierImg = Image.open(earlierImgPath)
 
