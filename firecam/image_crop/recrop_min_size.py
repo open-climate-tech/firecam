@@ -256,6 +256,10 @@ def main():
             localFilePath = os.path.join(settings.downloadDir, fileName)
             if not os.path.isfile(localFilePath):# if file has not been downloaded by a previous iteration
                 files = img_archive.getHpwrenImages(googleServices, settings, settings.downloadDir, camArchives, nameParsed['cameraID'], imgDT, imgDT, 1)
+                if not files or len(files) == 0:
+                    logging.warning('Skip image without archive: %s', fileName)
+                    skippedArchive.append((rowIndex, fileName, imgDT))
+                    continue
                 localFilePath = files[0]
             imgOrig = Image.open(localFilePath)
             if not isImageValid(imgOrig):  # retry download if image invalid
