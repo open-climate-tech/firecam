@@ -121,7 +121,7 @@ class InceptionV3AndHistoricalThreshold:
                     if not imgObj:
                         imgObj = Image.open(imgPath)
                     cropped_img = imgObj.crop(segmentInfo['coords'])
-                    cropped_img.save(cropImgPath, format='JPEG')
+                    cropped_img.save(cropImgPath, format='JPEG', quality=95)
                     cropped_img.close()
                     goog_helper.copyFile(cropImgPath, postivesDateDir)
                     os.remove(cropImgPath)
