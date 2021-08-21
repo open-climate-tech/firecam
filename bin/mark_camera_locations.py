@@ -81,7 +81,7 @@ def main():
         centerY = mapImg.size[1] - (location['latitude'] - args.bottomLatitude)/diffLat*mapImg.size[1]
         mapImg = drawCircle(mapImg, centerX, centerY, radiusDegrees/diffLat*mapImg.size[1])
 
-    mapImg.save('amap.jpg')
+    mapImg.save('amap.jpg', quality=95)
 
 
 if __name__=="__main__":

@@ -50,7 +50,7 @@ def _parse_function(example_proto):
 
     # Parse the input `tf.Example` proto using the dictionary above.
     example = tf.io.parse_single_example(example_proto, feature_description)
-    image = tf.image.decode_image(example['image/encoded'], channels=3)
+    image = tf.image.decode_jpeg(example['image/encoded'], channels=3, dct_method='INTEGER_ACCURATE')
 
     #Resizing images in training set because they are apprently rectangular much fo the time
     if example['image/height'] != 299 or example['image/width'] != 299:

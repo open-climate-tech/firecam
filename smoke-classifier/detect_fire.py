@@ -183,7 +183,7 @@ def drawFireBox(img, destPath, fireBoxCoords, timestamp=None, fireSegment=None, 
     font = ImageFont.truetype(fontPath, size=fontSize)
     imgDraw.text((20, img.size[1] - fontSize - 20), "Open Climate Tech - Wildfire", font=font, fill=color)
 
-    img.save(destPath, format="JPEG")
+    img.save(destPath, format="JPEG", quality=95)
     del imgDraw
 
 
@@ -434,7 +434,7 @@ def genAnnotatedMap(mapImgGCS, camLatitude, camLongitude, imgPath, polygon, sour
     # crop to smaller map centered around fire area
     mapImgCropped = cropCentered(mapImg, leftLongitude, rightLongitude, topLatitude, bottomLatitude, polygon)
     mapCroppedPath = filePathParts[0] + '_map.jpg'
-    mapImgCropped.save(mapCroppedPath)
+    mapImgCropped.save(mapCroppedPath, quality=95)
     mapImgCropped.close()
     mapImg.close()
     os.remove(mapOrig)
@@ -817,7 +817,7 @@ def genDiffImage(imgPath, earlierImgPath, minusMinutes):
     diffImgName = img_archive.repackFileName(parsedName)
     ppath = pathlib.PurePath(imgPath)
     diffImgPath = os.path.join(str(ppath.parent), diffImgName)
-    diffImg.save(diffImgPath, format='JPEG')
+    diffImg.save(diffImgPath, format='JPEG', quality=95)
     return diffImgPath
 
 

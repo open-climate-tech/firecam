@@ -329,12 +329,12 @@ def main():
                 cropImgPath = os.path.join(args.outputDir, cropImgName)
                 cropped_img = imgOrig.crop((newCoords[0] - extremaCoords[0], newCoords[1] - extremaCoords[1],
                                             newCoords[2] - extremaCoords[0], newCoords[3] - extremaCoords[1]))
-                cropped_img.save(cropImgPath, format='JPEG')
+                cropped_img.save(cropImgPath, format='JPEG', quality=95)
                 if recropType == 'augment':
                     flipped_img = cropped_img.transpose(Image.FLIP_LEFT_RIGHT)
                     flipImgName = imgNameNoExt + '_Crop_' + 'x'.join(list(map(lambda x: str(x), newCoords))) + '_Flip.jpg'
                     flipImgPath = os.path.join(args.outputDir, flipImgName)
-                    flipped_img.save(flipImgPath, format='JPEG')
+                    flipped_img.save(flipImgPath, format='JPEG', quality=95)
             logging.warning('Processed row: %d, file: %s', rowIndex, fileName)
     logging.warning('Skipped tiny images %d, %s', len(skippedTiny), str(skippedTiny))
     logging.warning('Skipped huge images %d, %s', len(skippedHuge), str(skippedHuge))

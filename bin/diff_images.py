@@ -42,7 +42,7 @@ def main():
     imgB = Image.open(args.imgB)
 
     imgOut = img_archive.diffImages(imgA, imgB)
-    imgOut.save(args.imgOutput, format='JPEG')
+    imgOut.save(args.imgOutput, format='JPEG', quality=95)
 
 
 if __name__=="__main__":

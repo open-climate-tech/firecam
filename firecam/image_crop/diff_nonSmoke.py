@@ -105,7 +105,7 @@ def main():
         parsedName['diffMinutes'] = minusMinutes
         diffImgPath = os.path.join(args.outputDir, img_archive.repackFileName(parsedName))
         logging.warning('Saving new image %s', diffImgPath)
-        diffImg.save(diffImgPath, format='JPEG')
+        diffImg.save(diffImgPath, format='JPEG', quality=95)
     logging.warning('Skipped bad parse %d, %s', len(skippedBadParse), str(skippedBadParse))
     logging.warning('Skipped images without archives %d, %s', len(skippedArchive), str(skippedArchive))
 

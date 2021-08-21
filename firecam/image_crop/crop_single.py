@@ -109,7 +109,7 @@ def middleClick(event):
         cropImgPath = os.path.join(outputDirectory, cropImgName)
         print('coords:'+str(area), cropImgName)
         cropped_img = imgOrig.crop(area)
-        cropped_img.save(cropImgPath, format='JPEG')
+        cropped_img.save(cropImgPath, format='JPEG', quality=95)
         cadre.delete(rectangleShapes[rectNum])
         result.append({
             'name': cropImgPath,
