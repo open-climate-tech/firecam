@@ -661,7 +661,7 @@ def pubsubFireNotification(cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl
         'mapUrl': mapUrl,
         'polygon': str(polygon),
         'isProto': img_archive.isPTZ(cameraID),
-        'weatherScore': fireSegment['weatherScore'],
+        'weatherScore': str(fireSegment['weatherScore']),
     }
     goog_helper.publish(message)
 
