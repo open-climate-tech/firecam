@@ -634,7 +634,7 @@ def updateAlertsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, map
         'IsProto': int(img_archive.isPTZ(cameraID)),
         'WeatherScore': fireSegment['weatherScore'],
     }
-    dbManager.add_data('alerts', dbRow)
+    dbManager.add_data('all_alerts', dbRow)
 
 
 def pubsubFireNotification(cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon):
@@ -757,9 +757,10 @@ def alertFire(constants, cameraID, cameraHeading, timestamp, fov, imgPath, fireS
     mapUrl = mapID.replace('gs://', 'https://storage.googleapis.com/')
 
     updateAlertsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon, sourcePolygons)
-    pubsubFireNotification(cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon)
-    emailFireNotification(constants, cameraID, timestamp, imgPath, annotatedPath, fireSegment)
-    smsFireNotification(dbManager, cameraID)
+    if weatherScore > settings.weatherThreshold:
+        pubsubFireNotification(cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon)
+        emailFireNotification(constants, cameraID, timestamp, imgPath, annotatedPath, fireSegment)
+        smsFireNotification(dbManager, cameraID)
 
     # remove temporary files
     os.remove(croppedPath)

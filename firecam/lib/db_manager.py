@@ -165,8 +165,8 @@ class DbManager(object):
             ('Heading', 'REAL'),
         ]
 
-        # alerts sent out via various means
-        alerts_schema = [
+        # all_alerts sent out via various means
+        all_alerts_schema = [
             ('CameraName', 'TEXT'),
             ('Timestamp', 'INT'),
             ('AdjScore', 'REAL'),
@@ -243,7 +243,7 @@ class DbManager(object):
             'bbox': bbox_schema,
             'scores': scores_schema,
             'detections': detections_schema,
-            'alerts': alerts_schema,
+            'all_alerts': all_alerts_schema,
             'votes': votes_schema,
             'named_fires': named_fires_schema,
             'user_preferences': user_preferences_schema,
