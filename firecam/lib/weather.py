@@ -148,9 +148,7 @@ def getWeatherData(dbManager, cameraID, timestamp, centroidLatLong, cameraLatLon
     return (weatherCentroid, weatherCamera)
 
 
-def normalizeWeather(score, numPolys, weatherInfo, timestamp=None, centroid=None, isRealFire=None):
-    dataArr = [(float(score) - 0.5) * 2]
-    dataArr += [numPolys - 1]
+def appendNormalizedWeather(dataArr, weatherInfo):
     dataArr += [(weatherInfo['temp'] - 70) / 20]
     # feelslike is almost identical to temp
     # uvindex is null
@@ -163,6 +161,12 @@ def normalizeWeather(score, numPolys, weatherInfo, timestamp=None, centroid=None
     dataArr += [(weatherInfo['visibility'] - 5) / 5]
     dataArr += [(weatherInfo['cloudcover'] - 50) / 50]
 
+
+def normalizeWeather(score, numPolys, weatherCentroid, weatherCamera, timestamp=None, centroid=None, isRealFire=None):
+    dataArr = [(float(score) - 0.5) * 2]
+    dataArr += [numPolys - 1]
+    appendNormalizedWeather(dataArr, weatherCentroid)
+    appendNormalizedWeather(dataArr, weatherCamera)
     # optional columns
     if timestamp:
         dt = datetime.datetime.fromtimestamp(timestamp)
@@ -178,9 +182,11 @@ def normalizeWeather(score, numPolys, weatherInfo, timestamp=None, centroid=None
 
 
 def readWeatherCsv(inputCsv):
-    column_names = ['imgScore', 'numintersects', 'temp', 'dew', 'humidity', 'precip',
-                    'windspeed', 'winddir', 'pressure', 'visibility', 'cloudcover',
-                    'hour', 'lat', 'long', 'realfire']
+    column_names = ['imgScore', 'numintersects']
+    weather_names = ['temp', 'dew', 'humidity', 'precip', 'windspeed', 'winddir', 'pressure', 'visibility', 'cloudcover']
+    column_names += weather_names
+    column_names += list(map(lambda x: 'cam_' + x, weather_names))
+    column_names += ['hour', 'lat', 'long', 'realfire']
     raw_dataset = pd.read_csv(inputCsv, names=column_names, skipinitialspace=True)
 
     # drop useless columns

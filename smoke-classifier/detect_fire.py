@@ -603,7 +603,7 @@ def checkWeatherInfo(weatherModel, dbManager, cameraID, timestamp, fireSegment, 
         return 1
     numPolys = len(sourcePolygons)
     imgScore = fireSegment['AdjScore'] if 'AdjScore' in fireSegment else fireSegment['score']
-    featureData = weather.normalizeWeather(imgScore, numPolys, weatherCentroid)
+    featureData = weather.normalizeWeather(imgScore, numPolys, weatherCentroid, weatherCamera)
     prediction = weatherModel.predict([featureData])[0][0]
     return prediction
 

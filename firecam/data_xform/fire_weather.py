@@ -61,13 +61,13 @@ def getRandInterpolatedVal(percentiles):
     return minVal + (rand10 - rand10Int) * (maxVal - minVal)
 
 
-def keepData(score, centroid, numPolys, weatherInfo, isRealFire):
+def keepData(score, centroid, numPolys, isRealFire):
     northMexico = Polygon([(32.533, -117.157), (32.696, -115.173), (32.174, -114.692), (32.073, -117.232)])
     return not northMexico.intersects(Point(centroid))
 
 
-def outputWithWeather(outFile, score, timestamp, centroid, numPolys, weatherInfo, isRealFire):
-    dataArr = weather.normalizeWeather(score, numPolys, weatherInfo, timestamp, centroid, isRealFire)
+def outputWithWeather(outFile, score, timestamp, centroid, numPolys, weatherCentroid, weatherCamera, isRealFire):
+    dataArr = weather.normalizeWeather(score, numPolys, weatherCentroid, weatherCamera, timestamp, centroid, isRealFire)
     dataArrStr = list(map(str, dataArr))
     # logging.warning('Data arrayStr: %s', dataArrStr)
     dataStr = ', '.join(dataArrStr)
@@ -176,16 +176,15 @@ def main():
                 numPolys = round(getRandInterpolatedVal(settings.percentilesNumPoly))
                 isRealFire = 1
                 logging.warning('Processing row: %d, heading: %s, centroid: %s, score: %s, numpoly: %s', rowIndex, heading, centroid, score, numPolys)
-            (weatherCentroid, weatherCamera) = weather.getWeatherData(dbManager, cameraID, timestamp, centroid, (camLatitude, camLongitude))
-            weatherInfo = weatherCentroid
-            if not weatherInfo:
-                logging.warning('Skipping row %d', rowIndex)
-                continue
-            # logging.warning('Weather %s', weatherInfo)
-            if not keepData(score, centroid, numPolys, weatherInfo, isRealFire):
+            if not keepData(score, centroid, numPolys, isRealFire):
                 logging.warning('Skipping Mexico fire row %d, camera %s', rowIndex, cameraID)
                 continue
-            outputWithWeather(outFile, score, timestamp, centroid, numPolys, weatherInfo, isRealFire)
+            (weatherCentroid, weatherCamera) = weather.getWeatherData(dbManager, cameraID, timestamp, centroid, (camLatitude, camLongitude))
+            if not weatherCentroid:
+                logging.warning('Skipping row %d', rowIndex)
+                continue
+            # logging.warning('Weather %s', weatherCentroid)
+            outputWithWeather(outFile, score, timestamp, centroid, numPolys, weatherCentroid, weatherCamera, isRealFire)
 
             logging.warning('Processed row: %d, cam: %s, ts: %s', rowIndex, cameraID, timestamp)
     outFile.close()
