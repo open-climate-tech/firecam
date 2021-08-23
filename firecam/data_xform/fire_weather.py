@@ -119,6 +119,7 @@ def main():
                 if sourcePolygons:
                     sourcePolygonsArr = json.loads(sourcePolygons)
                     numPolys = len(sourcePolygonsArr)
+                (mapImgGCS, camLatitude, camLongitude) = dbManager.getCameraMapLocation(cameraID)
             else:
                 if mode == 'camdir':
                     [cameraID, isoTime, direction] = csvRow[:3]
@@ -175,7 +176,8 @@ def main():
                 numPolys = round(getRandInterpolatedVal(settings.percentilesNumPoly))
                 isRealFire = 1
                 logging.warning('Processing row: %d, heading: %s, centroid: %s, score: %s, numpoly: %s', rowIndex, heading, centroid, score, numPolys)
-            weatherInfo = weather.getWeatherData(dbManager, cameraID, timestamp, centroid)
+            (weatherCentroid, weatherCamera) = weather.getWeatherData(dbManager, cameraID, timestamp, centroid, (camLatitude, camLongitude))
+            weatherInfo = weatherCentroid
             if not weatherInfo:
                 logging.warning('Skipping row %d', rowIndex)
                 continue

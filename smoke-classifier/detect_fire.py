@@ -596,14 +596,14 @@ def intersectRecentAlerts(dbManager, timestamp, triangle):
             return (intersection, json.loads(alert['sourcepolygons']))
 
 
-def checkWeatherInfo(weatherModel, dbManager, cameraID, timestamp, fireSegment, polygon, sourcePolygons):
+def checkWeatherInfo(weatherModel, dbManager, cameraID, timestamp, fireSegment, polygon, sourcePolygons, cameraLatLong):
     centroidLatLong = getCentroid(polygon)
-    weatherInfo = weather.getWeatherData(dbManager, cameraID, timestamp, centroidLatLong)
-    if not weatherInfo:
+    (weatherCentroid, weatherCamera) = weather.getWeatherData(dbManager, cameraID, timestamp, centroidLatLong, cameraLatLong)
+    if (not weatherCentroid) or (not weatherCamera):
         return 1
     numPolys = len(sourcePolygons)
     imgScore = fireSegment['AdjScore'] if 'AdjScore' in fireSegment else fireSegment['score']
-    featureData = weather.normalizeWeather(imgScore, numPolys, weatherInfo)
+    featureData = weather.normalizeWeather(imgScore, numPolys, weatherCentroid)
     prediction = weatherModel.predict([featureData])[0][0]
     return prediction
 
@@ -741,7 +741,7 @@ def alertFire(constants, cameraID, cameraHeading, timestamp, fov, imgPath, fireS
     else:
         polygon = triangle
         sourcePolygons = [triangle]
-    weatherScore = checkWeatherInfo(weatherModel, dbManager, cameraID, timestamp, fireSegment, polygon, sourcePolygons)
+    weatherScore = checkWeatherInfo(weatherModel, dbManager, cameraID, timestamp, fireSegment, polygon, sourcePolygons, (camLatitude, camLongitude))
     fireSegment['weatherScore'] = weatherScore
 
     mapPath = genAnnotatedMap(mapImgGCS, camLatitude, camLongitude, imgPath, polygon, sourcePolygons)

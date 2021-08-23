@@ -230,8 +230,10 @@ class DbManager(object):
         weather_schema = [
             ('CameraId', 'TEXT'),
             ('Timestamp', 'INT'),
-            ('Weather', 'TEXT'),
+            ('Weather', 'TEXT'), # at centroid
             ('Source', 'TEXT'),
+            ('WeatherCamera', 'TEXT'),
+            ('SourceCamera', 'TEXT'),
         ]
 
         self.tables = {

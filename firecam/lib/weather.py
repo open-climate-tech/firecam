@@ -88,42 +88,64 @@ def getCurrentWeatherExternal(centroidLatLong):
 
 
 def getDbWeather(dbManager, cameraID, timestamp):
-    sqlTemplate = """SELECT weather as weather, source as source FROM weather WHERE CameraId = '%s' and Timestamp = %s """
+    sqlTemplate = """SELECT weather as weathercentroid, source as sourcecentroid,
+                     WeatherCamera as weathercamera, sourceCamera as sourcecamera
+                     FROM weather WHERE CameraId = '%s' and Timestamp = %s """
     sqlStr = sqlTemplate % (cameraID, timestamp)
     dbResult = dbManager.query(sqlStr)
     if len(dbResult) > 0:
         # logging.warning('db weather result: %s', dbResult[0])
-        weatherStr = dbResult[0]['weather']
-        return json.loads(weatherStr)
+        weatherCentroidStr = dbResult[0]['weathercentroid']
+        weatherCentroid = json.loads(weatherCentroidStr) if weatherCentroidStr else None
+        weatherCameraStr = dbResult[0]['weathercamera']
+        weatherCamera = json.loads(weatherCameraStr) if weatherCameraStr else None
+        return (weatherCentroid, dbResult[0]['sourcecentroid'], weatherCamera, dbResult[0]['sourcecamera'])
+    return (None, None, None, None)
 
 
-def saveDbWeather(dbManager, cameraID, timestamp, weatherInfo, source):
-    dbRow = {
-        'CameraId': cameraID,
-        'Timestamp': timestamp,
-        'Weather': json.dumps(weatherInfo),
-        'Source': source
-    }
-    dbManager.add_data('weather', dbRow)
+def saveDbWeather(dbManager, cameraID, timestamp, weatherCentroid, sourceCentroid, weatherCamera, sourceCamera):
+    (dbWeatherCentroid, dbSourceCentroid, dbWeatherCamera, dbSourceCamera) = getDbWeather(dbManager, cameraID, timestamp)
+    if (not dbWeatherCentroid) and (not dbWeatherCamera):
+        dbRow = {
+            'CameraId': cameraID,
+            'Timestamp': timestamp,
+            'Weather': json.dumps(weatherCentroid),
+            'Source': sourceCentroid,
+            'WeatherCamera': json.dumps(weatherCamera),
+            'SourceCamera': sourceCamera,
+        }
+        dbManager.add_data('weather', dbRow)
+    else:
+        sqlTemplate = """UPDATE weather set Weather = '%s', Source = '%s', WeatherCamera = '%s', SourceCamera = '%s'
+                         WHERE CameraId = '%s' and Timestamp = %s """
+        sqlStr = sqlTemplate % (json.dumps(weatherCentroid), sourceCentroid, json.dumps(weatherCamera), sourceCamera, cameraID, timestamp)
+        dbManager.execute(sqlStr)
 
 
-def getWeatherData(dbManager, cameraID, timestamp, centroidLatLong):
+def getWeatherExternal(timestamp, latLong):
+    currentTime = time.time()
+    if (currentTime - timestamp) > 60 * 60: # one hour
+        (weatherInfo, source) = getHistoricalWeatherExternal(timestamp, latLong)
+    else:
+        (weatherInfo, source) = getCurrentWeatherExternal(latLong)
+    return (weatherInfo, source)
+
+
+def getWeatherData(dbManager, cameraID, timestamp, centroidLatLong, cameraLatLong):
     # first check if cached in DB
-    weatherInfo = getDbWeather(dbManager, cameraID, timestamp)
-    if not weatherInfo:
-        currentTime = time.time()
-        if (currentTime - timestamp) > 60 * 60: # one hour
-            (weatherInfo, source) = getHistoricalWeatherExternal(timestamp, centroidLatLong)
-        else:
-            (weatherInfo, source) = getCurrentWeatherExternal(centroidLatLong)
-        if not weatherInfo:
-            return None
-        saveDbWeather(dbManager, cameraID, timestamp, weatherInfo, source)
-    if not weatherInfo['temp']:
-        logging.error('No temperature %s: %s', timestamp, weatherInfo)
-        return None
-
-    return weatherInfo
+    (weatherCentroid, sourceCentroid, weatherCamera, sourceCamera) = getDbWeather(dbManager, cameraID, timestamp)
+    if (not weatherCentroid) or (not weatherCamera):
+        if not weatherCentroid:
+            (weatherCentroid, sourceCentroid) = getWeatherExternal(timestamp, centroidLatLong)
+        if not weatherCamera:
+            (weatherCamera, sourceCamera) = getWeatherExternal(timestamp, cameraLatLong)
+        if (not weatherCentroid) or (not weatherCamera):
+            return (None, None)
+        saveDbWeather(dbManager, cameraID, timestamp, weatherCentroid, sourceCentroid, weatherCamera, sourceCamera)
+    if (not weatherCentroid['temp']) or (not weatherCamera['temp']):
+        logging.error('No temperature %s: %s, %s', timestamp, weatherCentroid, weatherCamera)
+        return (None, None)
+    return (weatherCentroid, weatherCamera)
 
 
 def normalizeWeather(score, numPolys, weatherInfo, timestamp=None, centroid=None, isRealFire=None):
