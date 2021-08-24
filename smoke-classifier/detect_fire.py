@@ -471,10 +471,10 @@ def getTriangleVertices(latitude, longitude, heading, rangeAngle):
     return vertices
 
 
-def recordDetection(dbManager, cameraID, heading, timestamp, imgPath, fireSegment, modelId, stateless):
-    """Record that a smoke/fire has been detected
+def recordProbables(dbManager, cameraID, heading, timestamp, imgPath, fireSegment, modelId, stateless):
+    """Record that a probable smoke/fire has been observed
 
-    Record the detection with useful metrics in 'detections' table in SQL DB.
+    Record the probable detection with useful metrics in 'probables' table in SQL DB.
     Also, upload image file to google cloud
 
     Args:
@@ -490,9 +490,9 @@ def recordDetection(dbManager, cameraID, heading, timestamp, imgPath, fireSegmen
     """
     logging.warning('Fire detected by camera %s, image %s, segment %s', cameraID, imgPath, str(fireSegment))
     # copy/upload file to detection dir
-    detectionsDateDir = goog_helper.dateSubDir(settings.detectionsDir)
-    fileID = goog_helper.copyFile(imgPath, detectionsDateDir)
-    logging.warning('Uploaded to detections folder %s', fileID)
+    probablesDateDir = goog_helper.dateSubDir(settings.probablesDir)
+    fileID = goog_helper.copyFile(imgPath, probablesDateDir)
+    logging.warning('Uploaded to probables folder %s', fileID)
 
     if not stateless:
         dbRow = {
@@ -507,12 +507,13 @@ def recordDetection(dbManager, cameraID, heading, timestamp, imgPath, fireSegmen
             'ImageID': fileID,
             'ModelId': modelId
         }
-        dbManager.add_data('detections', dbRow)
+        dbManager.add_data('probables', dbRow)
     return fileID
 
 
-def isDuplicateAlert(dbManager, cameraID, heading, timestamp):
-    """Check if alert has been recently sent out for given camera
+def isDuplicateProbables(dbManager, cameraID, heading, timestamp):
+    """Check if this event has already been recently (last hour) discovered for given camera
+       This prevents spam from long lasting fires
 
     Args:
         dbManager (DbManager):
@@ -521,23 +522,21 @@ def isDuplicateAlert(dbManager, cameraID, heading, timestamp):
         timestamp (int): time.time() value when image was taken
 
     Returns:
-        True if this is a duplicate alert, False otherwise
+        True if this is a duplicate probables, False otherwise
     """
-    # Only alert if there has not been a detection in the last hour.  This prevents spam
-    # from long lasting fires.
-    sqlTemplate = """SELECT * FROM detections
+    sqlTemplate = """SELECT * FROM probables
     where CameraName='%s' and Heading=%s and timestamp > %s and timestamp < %s"""
     sqlStr = sqlTemplate % (cameraID, heading, timestamp - 60*60, timestamp)
 
     dbResult = dbManager.query(sqlStr)
     if len(dbResult) > 0:
-        logging.warning('Supressing new alert due to recent detection')
+        logging.warning('Supressing due to recent probables')
         return True
     return False
 
 
-def getRecentAlerts(dbManager, timestamp):
-    """Return all recent (last 15 minutes) alerts
+def getRecentDetections(dbManager, timestamp):
+    """Return all recent (last 15 minutes) detections
 
     Args:
         dbManager (DbManager):
@@ -546,7 +545,7 @@ def getRecentAlerts(dbManager, timestamp):
     Returns:
         List of alerts
     """
-    sqlTemplate = """SELECT * FROM alerts where timestamp > %s order by timestamp desc"""
+    sqlTemplate = """SELECT * FROM detections where timestamp > %s order by timestamp desc"""
     sqlStr = sqlTemplate % (timestamp - 15*60)
 
     dbResult = dbManager.query(sqlStr)
@@ -577,8 +576,8 @@ def getPolygonIntersection(coords1, coords2):
     return intersection
 
 
-def intersectRecentAlerts(dbManager, timestamp, triangle):
-    """Check for area intersection of given triangle with polygons of recent alerts
+def intersectRecentDetections(dbManager, timestamp, triangle):
+    """Check for area intersection of given triangle with polygons of recent detections
 
     Args:
         dbManager (DbManager):
@@ -586,10 +585,10 @@ def intersectRecentAlerts(dbManager, timestamp, triangle):
         triangle (list): vertices of triangle
 
     Returns:
-        Intersection area and all source polygons of recent alert
+        Intersection area and all source polygons of recent detections
     """
-    recentAlerts = getRecentAlerts(dbManager, timestamp)
-    for alert in recentAlerts:
+    recentDetections = getRecentDetections(dbManager, timestamp)
+    for alert in recentDetections:
         alertCoords = json.loads(alert['polygon'])
         intersection = getPolygonIntersection(triangle, alertCoords)
         if intersection:
@@ -608,8 +607,8 @@ def checkWeatherInfo(weatherModel, dbManager, cameraID, timestamp, fireSegment, 
     return prediction
 
 
-def updateAlertsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon, sourcePolygons):
-    """Add new entry to Alerts table
+def updateDetectionsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon, sourcePolygons):
+    """Add new entry to detections table
 
     Args:
         dbManager (DbManager):
@@ -634,7 +633,36 @@ def updateAlertsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, map
         'IsProto': int(img_archive.isPTZ(cameraID)),
         'WeatherScore': fireSegment['weatherScore'],
     }
-    dbManager.add_data('all_alerts', dbRow)
+    dbManager.add_data('detections', dbRow)
+
+
+def updateAlertsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon, sourcePolygons):
+    """Add new entry to alerts table
+
+    Args:
+        dbManager (DbManager):
+        cameraID (str): camera name
+        timestamp (int): time.time() value when image was taken
+        croppedUrl: Public URL for cropped video
+        annotatedUrl: Public URL for annotated iamge
+        mapUrl: Public URL for annotated map
+        fireSegment (dictionary): dictionary with information for the segment with fire/smoke
+        polygon (list): list of vertices of polygon of potential fire location
+        sourcePolygons (list): list of polygons from individual cameras contributing to the polygon
+    """
+    dbRow = {
+        'CameraName': cameraID,
+        'Timestamp': timestamp,
+        'AdjScore': fireSegment['AdjScore'] if 'AdjScore' in fireSegment else fireSegment['score'],
+        'ImageID': annotatedUrl,
+        'CroppedID': croppedUrl,
+        'MapID': mapUrl,
+        'polygon': str(polygon),
+        'sourcePolygons': str(sourcePolygons),
+        'IsProto': int(img_archive.isPTZ(cameraID)),
+        'WeatherScore': fireSegment['weatherScore'],
+    }
+    dbManager.add_data('alerts', dbRow)
 
 
 def pubsubFireNotification(cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon):
@@ -716,8 +744,8 @@ def smsFireNotification(dbManager, cameraID):
             sms_helper.sendSms(settings, phone, message)
 
 
-def alertFire(constants, cameraID, cameraHeading, timestamp, fov, imgPath, fireSegment):
-    """Update Alerts DB and send alerts about given fire through all channels (pubsub, email, and sms)
+def fireDetected(constants, cameraID, cameraHeading, timestamp, fov, imgPath, fireSegment):
+    """Update Detections DB and send alerts about given fire through all channels (pubsub, email, and sms)
 
     Args:
         constants (dict): "global" contants
@@ -734,7 +762,7 @@ def alertFire(constants, cameraID, cameraHeading, timestamp, fov, imgPath, fireS
     (fireHeading, rangeAngle) = getHeadingRange(cameraHeading, fov, imgPath, fireSegment['MinX'], fireSegment['MaxX'])
     (croppedPath, annotatedPath) = genAnnotatedImages(constants, cameraID, cameraHeading, timestamp, imgPath, fireSegment)
     triangle = getTriangleVertices(camLatitude, camLongitude, fireHeading, rangeAngle)
-    intersectionInfo = intersectRecentAlerts(dbManager, timestamp, triangle)
+    intersectionInfo = intersectRecentDetections(dbManager, timestamp, triangle)
     if intersectionInfo:
         polygon = intersectionInfo[0]
         sourcePolygons = intersectionInfo[1] + [triangle]
@@ -756,8 +784,9 @@ def alertFire(constants, cameraID, cameraHeading, timestamp, fov, imgPath, fireS
     annotatedUrl = annotatedID.replace('gs://', 'https://storage.googleapis.com/')
     mapUrl = mapID.replace('gs://', 'https://storage.googleapis.com/')
 
-    updateAlertsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon, sourcePolygons)
+    updateDetectionsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon, sourcePolygons)
     if weatherScore > settings.weatherThreshold:
+        updateAlertsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon, sourcePolygons)
         pubsubFireNotification(cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon)
         emailFireNotification(constants, cameraID, timestamp, imgPath, annotatedPath, fireSegment)
         smsFireNotification(dbManager, cameraID)
@@ -1005,7 +1034,7 @@ def main():
     }
 
     numImages = 0
-    numDetections = 0
+    numProbables = 0
     numAlerts = 0
     processingTimeTracker = initializeTimeTracker()
     while True:
@@ -1042,11 +1071,11 @@ def main():
         numImages += 1
         fireSegment = detectionResult['fireSegment']
         if fireSegment:
-            numDetections += 1
+            numProbables += 1
         if fireSegment and not useArchivedImages:
-            recordDetection(dbManager, cameraID, heading, timestamp, imgPath, fireSegment, detectionPolicy.modelId, stateless)
-            if not (isDuplicateAlert(dbManager, cameraID, heading, timestamp) or stateless):
-                alertFire(constants, cameraID, heading, timestamp, fov, imgPath, fireSegment)
+            recordProbables(dbManager, cameraID, heading, timestamp, imgPath, fireSegment, detectionPolicy.modelId, stateless)
+            if not (isDuplicateProbables(dbManager, cameraID, heading, timestamp) or stateless):
+                fireDetected(constants, cameraID, heading, timestamp, fov, imgPath, fireSegment)
                 numAlerts += 1
         deleteImageFiles(classifyImgPath, imgPath)
         if (args.heartbeat):
@@ -1060,7 +1089,7 @@ def main():
             logging.warning('Timings: fetch=%.2f, detect0=%.2f, detect1=%.2f post=%.2f',
                 timeFetch-timeStart, detectionResult['timeMid']-timeFetch, timeDetect-detectionResult['timeMid'], timePost-timeDetect)
         if (numImages % 10) == 0:
-            logging.warning('Stats: alerts=%d, detects=%d, images=%d', numAlerts, numDetections, numImages)
+            logging.warning('Stats: alerts=%d, detects=%d, images=%d', numAlerts, numProbables, numImages)
             if numImages >= limitImages:
                 logging.warning('Reached limit on images')
                 return

@@ -118,9 +118,9 @@ def main():
         sqlTemplate = """SELECT max(timestamp) as maxtime FROM scores WHERE CameraName = '%s' """
         dbResult = execCameraSql(dbManager, sqlTemplate, args.cameraID, isQuery=True)
         logging.warning('Most recent image scanned: %s', getTime(dbResult))
-        sqlTemplate = """SELECT max(timestamp) as maxtime FROM detections WHERE CameraName = '%s' """
+        sqlTemplate = """SELECT max(timestamp) as maxtime FROM probables WHERE CameraName = '%s' """
         dbResult = execCameraSql(dbManager, sqlTemplate, args.cameraID, isQuery=True)
-        logging.warning('Most recent smoke detection: %s', getTime(dbResult))
+        logging.warning('Most recent smoke probables: %s', getTime(dbResult))
         sqlTemplate = """SELECT max(timestamp) as maxtime FROM alerts WHERE CameraName = '%s' """
         dbResult = execCameraSql(dbManager, sqlTemplate, args.cameraID, isQuery=True)
         logging.warning('Most recent smoke alert: %s', getTime(dbResult))

@@ -151,8 +151,8 @@ class DbManager(object):
             ('Heading', 'REAL'),
         ]
 
-        # detections above halfway between historical max and 1.0
-        detections_schema = [
+        # probables above halfway between historical max and 1.0
+        probables_schema = [
             ('CameraName', 'TEXT'),
             ('Timestamp', 'INT'),
             ('MinX', 'INT'),
@@ -165,8 +165,22 @@ class DbManager(object):
             ('Heading', 'REAL'),
         ]
 
-        # all_alerts sent out via various means
-        all_alerts_schema = [
+        # detections are subset of probables likely to be new fires
+        detections_schema = [
+            ('CameraName', 'TEXT'),
+            ('Timestamp', 'INT'),
+            ('AdjScore', 'REAL'),
+            ('ImageID', 'TEXT'),
+            ('CroppedID', 'TEXT'),
+            ('MapID', 'TEXT'),
+            ('polygon', 'TEXT'),
+            ('sourcePolygons', 'TEXT'),
+            ('IsProto', 'INT'),
+            ('WeatherScore', 'REAL'),
+        ]
+
+        # alerts are notifications sent out via various means
+        alerts_schema = [
             ('CameraName', 'TEXT'),
             ('Timestamp', 'INT'),
             ('AdjScore', 'REAL'),
@@ -244,8 +258,9 @@ class DbManager(object):
             'cameras': cameras_schema,
             'bbox': bbox_schema,
             'scores': scores_schema,
+            'probables': probables_schema,
             'detections': detections_schema,
-            'all_alerts': all_alerts_schema,
+            'alerts': alerts_schema,
             'votes': votes_schema,
             'named_fires': named_fires_schema,
             'user_preferences': user_preferences_schema,
