@@ -75,6 +75,14 @@ def outputWithWeather(outFile, score, timestamp, centroid, numPolys, weatherCent
     outFile.write(dataStr + '\n')
 
 
+def patchCameraId(cameraID):
+    if cameraID.startswith('lo-'):
+        cameraID = 'm' + cameraID
+    elif cameraID.startswith('so-'):
+        cameraID = 'sojr-' + cameraID[3:]
+    return cameraID
+
+
 def main():
     reqArgs = [
         ["o", "outputFile", "output file name"],
@@ -115,10 +123,17 @@ def main():
                 lastCam = cameraID
                 lastTime = timestamp
                 centroid = getCentroid(polygon)
-                numPolys = 1
-                if sourcePolygons:
-                    sourcePolygonsArr = json.loads(sourcePolygons)
-                    numPolys = len(sourcePolygonsArr)
+                if timestamp < 1607786165: #sourcePolygons didn't exist before this
+                    if isRealFire:
+                        numPolys = round(getRandInterpolatedVal(settings.percentilesNumPolyFire))
+                    else:
+                        numPolys = round(getRandInterpolatedVal(settings.percentilesNumPolyOther))
+                else:
+                    numPolys = 1
+                    if sourcePolygons:
+                        sourcePolygonsArr = json.loads(sourcePolygons)
+                        numPolys = len(sourcePolygonsArr)
+                cameraID = patchCameraId(cameraID)
                 (mapImgGCS, camLatitude, camLongitude) = dbManager.getCameraMapLocation(cameraID)
             else:
                 if mode == 'camdir':
@@ -144,10 +159,7 @@ def main():
                     maxX = int(maxX)
                     nameParsed = img_archive.parseFilename(fileName)
                     cameraID = nameParsed['cameraID']
-                    if cameraID.startswith('lo-'):
-                        cameraID = 'm' + cameraID
-                    elif cameraID.startswith('so-'):
-                        cameraID = 'sojr-' + cameraID[3:]
+                    cameraID = patchCameraId(cameraID)
                     timestamp = nameParsed['unixTime']
                     dateStr = nameParsed['isoStr'][:nameParsed['isoStr'].index('T')]
                     if dateStr == lastTime and cameraID == lastCam:
@@ -172,8 +184,8 @@ def main():
                 fireLat = camLatitude + math.sin(angle*math.pi/180)*distanceDegrees
                 fireLong = camLongitude + math.cos(angle*math.pi/180)*distanceDegrees
                 centroid = (fireLat, fireLong)
-                score = getRandInterpolatedVal(settings.percentilesScore)
-                numPolys = round(getRandInterpolatedVal(settings.percentilesNumPoly))
+                score = getRandInterpolatedVal(settings.percentilesScoreFire)
+                numPolys = round(getRandInterpolatedVal(settings.percentilesNumPolyFire))
                 isRealFire = 1
                 logging.warning('Processing row: %d, heading: %s, centroid: %s, score: %s, numpoly: %s', rowIndex, heading, centroid, score, numPolys)
             if not keepData(score, centroid, numPolys, isRealFire):
