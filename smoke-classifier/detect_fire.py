@@ -80,7 +80,11 @@ def getNextImage(dbManager, cameras, stateless):
     elif stateless:
         camera = cameras[int(len(cameras)*random.random())]
     else:
-        index = dbManager.getNextSourcesCounter() % len(cameras)
+        if settings.counterName:
+            counterValue = dbManager.incrementCounter(settings.counterName)
+        else:
+            counterValue = dbManager.getNextSourcesCounter()
+        index = counterValue % len(cameras)
         camera = cameras[index]
 
     try:
@@ -121,6 +125,10 @@ getNextImage.queueCamera = None
 # from collections import namedtuple
 # Tdir = namedtuple('Tdir', ['name'])
 # getNextImage.tmpDir = Tdir('c:/tmp/dftest')
+
+
+def isProto(cameraID):
+    return img_archive.isPTZ(cameraID)
 
 
 def drawRect(imgDraw, x0, y0, x1, y1, width, color):
@@ -630,7 +638,7 @@ def updateDetectionsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl,
         'MapID': mapUrl,
         'polygon': str(polygon),
         'sourcePolygons': str(sourcePolygons),
-        'IsProto': int(img_archive.isPTZ(cameraID)),
+        'IsProto': int(isProto(cameraID)),
         'WeatherScore': fireSegment['weatherScore'],
     }
     dbManager.add_data('detections', dbRow)
@@ -659,7 +667,7 @@ def updateAlertsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, map
         'MapID': mapUrl,
         'polygon': str(polygon),
         'sourcePolygons': str(sourcePolygons),
-        'IsProto': int(img_archive.isPTZ(cameraID)),
+        'IsProto': int(isProto(cameraID)),
         'WeatherScore': fireSegment['weatherScore'],
     }
     dbManager.add_data('alerts', dbRow)
@@ -688,7 +696,7 @@ def pubsubFireNotification(cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl
         'croppedUrl': croppedUrl,
         'mapUrl': mapUrl,
         'polygon': str(polygon),
-        'isProto': img_archive.isPTZ(cameraID),
+        'isProto': isProto(cameraID),
         'weatherScore': str(fireSegment['weatherScore']),
     }
     goog_helper.publish(message)
@@ -744,6 +752,10 @@ def smsFireNotification(dbManager, cameraID):
             sms_helper.sendSms(settings, phone, message)
 
 
+def publishAlert(cameraID, weatherScore):
+    return (weatherScore > settings.weatherThreshold) and not isProto(cameraID)
+
+
 def fireDetected(constants, cameraID, cameraHeading, timestamp, fov, imgPath, fireSegment):
     """Update Detections DB and send alerts about given fire through all channels (pubsub, email, and sms)
 
@@ -785,7 +797,7 @@ def fireDetected(constants, cameraID, cameraHeading, timestamp, fov, imgPath, fi
     mapUrl = mapID.replace('gs://', 'https://storage.googleapis.com/')
 
     updateDetectionsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon, sourcePolygons)
-    if weatherScore > settings.weatherThreshold:
+    if publishAlert(cameraID, weatherScore):
         updateAlertsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon, sourcePolygons)
         pubsubFireNotification(cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon)
         emailFireNotification(constants, cameraID, timestamp, imgPath, annotatedPath, fireSegment)
