@@ -177,6 +177,7 @@ class DbManager(object):
             ('sourcePolygons', 'TEXT'),
             ('IsProto', 'INT'),
             ('WeatherScore', 'REAL'),
+            ('ImgSequence', 'TEXT'),
         ]
 
         # alerts are notifications sent out via various means

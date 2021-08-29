@@ -195,7 +195,7 @@ def drawFireBox(img, destPath, fireBoxCoords, timestamp=None, fireSegment=None, 
     del imgDraw
 
 
-def genMovie(constants, cameraID, cameraHeading, timestamp, imgPath, cropCoords, fireBoxCoords):
+def genMovie(notificationsDateDir, constants, cameraID, cameraHeading, timestamp, imgPath, cropCoords, fireBoxCoords):
     """Generate cropped movie by fetching old images from archive
 
     Args:
@@ -220,9 +220,11 @@ def genMovie(constants, cameraID, cameraHeading, timestamp, imgPath, cropCoords,
                                                  constants['camArchives'], cameraID, cameraHeading, startTimeDT, endTimeDT, 1)
         imgSequence = oldImages or []
         imgSequence.append(imgPath)
+        imgIDs = []
         mspecPath = os.path.join(tmpDirName, 'mspec.txt')
         mspecFile = open(mspecPath, 'w')
         for (i, imgFile) in enumerate(imgSequence):
+            imgIDs.append(goog_helper.copyFile(imgFile, notificationsDateDir))
             finalImg = (i == len(imgSequence) - 1)
             imgParsed = img_archive.parseFilename(imgFile)
             cropName = 'img' + ("%03d" % i) + filePathParts[1]
@@ -245,10 +247,12 @@ def genMovie(constants, cameraID, cameraHeading, timestamp, imgPath, cropCoords,
                 .filter('fps', fps=25, round='up')
                 .output(moviePath, pix_fmt='yuv420p').run()
         )
-        return moviePath
+        movieID = goog_helper.copyFile(moviePath, notificationsDateDir)
+        os.remove(moviePath)
+        return (movieID, imgIDs)
 
 
-def genAnnotatedImages(constants, cameraID, cameraHeading, timestamp, imgPath, fireSegment):
+def genAnnotatedImages(notificationsDateDir, constants, cameraID, cameraHeading, timestamp, imgPath, fireSegment):
     """Generate annotated images (one cropped video, and other full size image)
 
     Args:
@@ -272,13 +276,15 @@ def genAnnotatedImages(constants, cameraID, cameraHeading, timestamp, imgPath, f
     (cropY0, cropY1) = rect_to_squares.getRangeFromCenter((y0 + y1)/2, 600, 0, img.size[1])
     cropCoords = (cropX0, cropY0, cropX1, cropY1)
     fireBoxCoords = (x0 - cropX0, y0 - cropY0, x1 - cropX0, y1 - cropY0)
-    moviePath = genMovie(constants, cameraID, cameraHeading, timestamp, imgPath, cropCoords, fireBoxCoords)
+    (movieID, imgIDs) = genMovie(notificationsDateDir, constants, cameraID, cameraHeading, timestamp, imgPath, cropCoords, fireBoxCoords)
 
     annotatedPath = filePathParts[0] + '_Ann' + filePathParts[1]
     drawFireBox(img, annotatedPath, (x0, y0, x1, y1))
     img.close()
+    annotatedID = goog_helper.copyFile(annotatedPath, notificationsDateDir)
+    os.remove(annotatedPath)
 
-    return (moviePath, annotatedPath)
+    return (movieID, imgIDs, annotatedID)
 
 
 def getHeadingRange(centralHeading, fov, imgPath, minX, maxX):
@@ -615,7 +621,7 @@ def checkWeatherInfo(weatherModel, dbManager, cameraID, timestamp, fireSegment, 
     return prediction
 
 
-def updateDetectionsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon, sourcePolygons):
+def updateDetectionsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon, sourcePolygons, imgIDs):
     """Add new entry to detections table
 
     Args:
@@ -640,6 +646,7 @@ def updateDetectionsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl,
         'sourcePolygons': str(sourcePolygons),
         'IsProto': int(isProto(cameraID)),
         'WeatherScore': fireSegment['weatherScore'],
+        'ImgSequence': ','.join(imgIDs),
     }
     dbManager.add_data('detections', dbRow)
 
@@ -702,7 +709,7 @@ def pubsubFireNotification(cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl
     goog_helper.publish(message)
 
 
-def emailFireNotification(constants, cameraID, timestamp, imgPath, annotatedFile, fireSegment):
+def emailFireNotification(constants, cameraID, timestamp, imgPath, annotatedUrl, fireSegment):
     """Send an email alert for a potential new fire
 
     Send email with information about the camera and fire score includeing
@@ -713,7 +720,7 @@ def emailFireNotification(constants, cameraID, timestamp, imgPath, annotatedFile
         cameraID (str): camera name
         timestamp (int): time.time() value when image was taken
         imgPath: filepath of the original image
-        annotatedFile: filepath of the annotated image
+        annotatedUrl: Public URL for annotated iamge
         fireSegment (dictionary): dictionary with information for the segment with fire/smoke
     """
     dbManager = constants['dbManager']
@@ -732,8 +739,6 @@ def emailFireNotification(constants, cameraID, timestamp, imgPath, annotatedFile
                                                     constants['camArchives'], cameraID, startTimeDT, endTimeDT, 1)
             attachments = oldImages or []
             attachments.append(imgPath)
-            if annotatedFile:
-                attachments.append(annotatedFile)
             email_helper.sendEmail(constants['googleServices']['mail'], settings.fuegoEmail, emails, subject, body, attachments)
 
 
@@ -770,9 +775,11 @@ def fireDetected(constants, cameraID, cameraHeading, timestamp, fov, imgPath, fi
     dbManager = constants['dbManager']
     weatherModel = constants['weatherModel']
 
+    # copy annotated image to publicly accessible settings.noticationsDir
+    notificationsDateDir = goog_helper.dateSubDir(settings.noticationsDir)
     (mapImgGCS, camLatitude, camLongitude) = dbManager.getCameraMapLocation(cameraID)
     (fireHeading, rangeAngle) = getHeadingRange(cameraHeading, fov, imgPath, fireSegment['MinX'], fireSegment['MaxX'])
-    (croppedPath, annotatedPath) = genAnnotatedImages(constants, cameraID, cameraHeading, timestamp, imgPath, fireSegment)
+    (croppedID, imgIDs, annotatedID) = genAnnotatedImages(notificationsDateDir, constants, cameraID, cameraHeading, timestamp, imgPath, fireSegment)
     triangle = getTriangleVertices(camLatitude, camLongitude, fireHeading, rangeAngle)
     intersectionInfo = intersectRecentDetections(dbManager, timestamp, triangle)
     if intersectionInfo:
@@ -786,26 +793,20 @@ def fireDetected(constants, cameraID, cameraHeading, timestamp, fov, imgPath, fi
 
     mapPath = genAnnotatedMap(mapImgGCS, camLatitude, camLongitude, imgPath, polygon, sourcePolygons)
 
-    # copy annotated image to publicly accessible settings.noticationsDir
-    alertsDateDir = goog_helper.dateSubDir(settings.noticationsDir)
-    croppedID = goog_helper.copyFile(croppedPath, alertsDateDir)
-    annotatedID = goog_helper.copyFile(annotatedPath, alertsDateDir)
-    mapID = goog_helper.copyFile(mapPath, alertsDateDir)
+    mapID = goog_helper.copyFile(mapPath, notificationsDateDir)
     # convert fileIDs into URLs usable by web UI
     croppedUrl = croppedID.replace('gs://', 'https://storage.googleapis.com/')
     annotatedUrl = annotatedID.replace('gs://', 'https://storage.googleapis.com/')
     mapUrl = mapID.replace('gs://', 'https://storage.googleapis.com/')
 
-    updateDetectionsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon, sourcePolygons)
+    updateDetectionsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon, sourcePolygons, imgIDs)
     if publishAlert(cameraID, weatherScore):
         updateAlertsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon, sourcePolygons)
         pubsubFireNotification(cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon)
-        emailFireNotification(constants, cameraID, timestamp, imgPath, annotatedPath, fireSegment)
+        emailFireNotification(constants, cameraID, timestamp, imgPath, annotatedUrl, fireSegment)
         smsFireNotification(dbManager, cameraID)
 
     # remove temporary files
-    os.remove(croppedPath)
-    os.remove(annotatedPath)
     os.remove(mapPath)
 
 
