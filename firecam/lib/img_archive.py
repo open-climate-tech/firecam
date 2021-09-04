@@ -52,6 +52,18 @@ def fetchImageAndMeta(dbManager, cameraID, cameraUrl, imgDir):
     imgPath = getImgPath(imgDir, cameraID, timestamp)
     urllib.request.urlretrieve(cameraUrl, imgPath)
     heading = getHeading(cameraID)
+    # read EXIF header for original timestamp and rename file
+    img = Image.open(imgPath)
+    imgExif = ('exif' in img.info) and img.info['exif']
+    img.close()
+    timeMatch = imgExif and re.findall('(\d+) UTC', imgExif.decode('utf-8','ignore'))
+    if timeMatch and len(timeMatch):
+        newTimestamp = int(timeMatch[0])
+        if (newTimestamp > timestamp - 5*60) and (newTimestamp < timestamp + 5*60):
+            newImgPath = getImgPath(imgDir, cameraID, newTimestamp)
+            timestamp = newTimestamp
+            os.rename(imgPath, newImgPath)
+            imgPath = newImgPath
     return (imgPath, heading, timestamp, fov)
 
 
