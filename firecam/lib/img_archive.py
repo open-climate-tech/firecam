@@ -492,6 +492,7 @@ def downloadFilesForDate(googleServices, settings, outputDir, hpwrenSource, gapM
     lastQNum = 0 # 0 never matches because Q numbers start with 1
     curTimeDT = startTimeDT
     downloaded_files = []
+    prevTime = None
     while curTimeDT <= endTimeDT:
         qNum = 1 + int(curTimeDT.hour/3)
         urlPartsQ = urlPartsDate[:] # copy URL
@@ -519,10 +520,12 @@ def downloadFilesForDate(googleServices, settings, outputDir, hpwrenSource, gapM
             closestEntry = min(imgTimes, key=lambda x: abs(x['time']-desiredTime))
             closestTime = closestEntry['time']
             downloaded = None
-            if useHttp:
-                downloaded = downloadHttpFileAtTime(outputDir, urlPartsQ, hpwrenSource['cameraID'], closestTime, verboseLogs)
-            else:
-                downloaded = downloadGCSFileAtTime(outputDir, closestEntry)
+            if closestTime != prevTime: # skip if closest timestamp is still same as previous iteration
+                prevTime = closestTime
+                if useHttp:
+                    downloaded = downloadHttpFileAtTime(outputDir, urlPartsQ, hpwrenSource['cameraID'], closestTime, verboseLogs)
+                else:
+                    downloaded = downloadGCSFileAtTime(outputDir, closestEntry)
             if downloaded and verboseLogs:
                 logging.warning('Successful download for time %s', str(datetime.datetime.fromtimestamp(closestTime)))
             if downloaded:
