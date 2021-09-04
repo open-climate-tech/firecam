@@ -1090,6 +1090,8 @@ def main():
             if not (isDuplicateProbables(dbManager, cameraID, heading, timestamp) or stateless):
                 fireDetected(constants, cameraID, heading, timestamp, fov, imgPath, fireSegment)
                 numAlerts += 1
+        if not stateless:
+            img_archive.markImageProcessed(dbManager, cameraID, heading, timestamp)
         deleteImageFiles(classifyImgPath, imgPath)
         if (args.heartbeat):
             heartBeat(args.heartbeat)

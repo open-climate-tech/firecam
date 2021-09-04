@@ -55,6 +55,10 @@ def fetchImageAndMeta(dbManager, cameraID, cameraUrl, imgDir):
     return (imgPath, heading, timestamp, fov)
 
 
+def markImageProcessed(dbManager, cameraID, heading, timestamp):
+    return
+
+
 def getImgPath(outputDir, cameraID, timestamp, cropCoords=None, diffMinutes=0):
     """Generate properly formatted image filename path following Firecam conventions
        E.g.: lo-s-mobo-c__2018-06-06T11;12;23_Diff1_Crop_627x632x1279x931.jpg

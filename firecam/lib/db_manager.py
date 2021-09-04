@@ -239,6 +239,7 @@ class DbManager(object):
             ('Timestamp', 'INT'),
             ('ImagePath', 'TEXT'),
             ('FieldOfView', 'INT'),
+            ('Processed', 'INT'),
         ]
 
         # archive
