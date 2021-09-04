@@ -75,7 +75,6 @@ class LRTensorBoard(keras.callbacks.TensorBoard):
 
 
 def main():
-    logging.warning('h0')
     reqArgs = [
         ["i", "inputDir", "directory containing TFRecord files"],
         ["o", "outputDir", "directory to write out checkpoints and tensorboard logs"],

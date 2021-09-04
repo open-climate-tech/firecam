@@ -789,7 +789,7 @@ def fireDetected(constants, cameraID, cameraHeading, timestamp, fov, imgPath, fi
         polygon = triangle
         sourcePolygons = [triangle]
     weatherScore = checkWeatherInfo(weatherModel, dbManager, cameraID, timestamp, fireSegment, polygon, sourcePolygons, (camLatitude, camLongitude))
-    fireSegment['weatherScore'] = weatherScore
+    fireSegment['weatherScore'] = round(weatherScore, 4)
 
     mapPath = genAnnotatedMap(mapImgGCS, camLatitude, camLongitude, imgPath, polygon, sourcePolygons)
 
