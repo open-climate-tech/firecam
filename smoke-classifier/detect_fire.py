@@ -213,31 +213,34 @@ def genMovie(notificationsDateDir, constants, cameraID, cameraHeading, timestamp
     filePathParts = os.path.splitext(imgPath)
     # get images spanning a few minutes so reviewers can evaluate based on progression
     startTimeDT = datetime.datetime.fromtimestamp(timestamp - 4*60)
-    endTimeDT = datetime.datetime.fromtimestamp(timestamp - 30)
+    endTimeDT = datetime.datetime.fromtimestamp(timestamp + 4*60)  # check "future" in case new image arrived during processing
 
     with tempfile.TemporaryDirectory() as tmpDirName:
         oldImages = img_archive.getArchiveImages(constants['googleServices'], settings, constants['dbManager'], tmpDirName,
                                                  constants['camArchives'], cameraID, cameraHeading, startTimeDT, endTimeDT, 1)
         imgSequence = oldImages or []
-        imgSequence.append(imgPath)
         imgIDs = []
         mspecPath = os.path.join(tmpDirName, 'mspec.txt')
         mspecFile = open(mspecPath, 'w')
         for (i, imgFile) in enumerate(imgSequence):
             imgIDs.append(goog_helper.copyFile(imgFile, notificationsDateDir))
-            finalImg = (i == len(imgSequence) - 1)
             imgParsed = img_archive.parseFilename(imgFile)
             cropName = 'img' + ("%03d" % i) + filePathParts[1]
             croppedPath = os.path.join(tmpDirName, cropName)
             imgSeq = Image.open(imgFile)
             croppedImg = imgSeq.crop(cropCoords)
-            color = 'red' if finalImg else 'yellow'
+            if imgParsed['unixTime'] < timestamp:
+                color = 'yellow'
+            elif imgParsed['unixTime'] == timestamp:
+                color = 'red'
+            else:
+                color = 'orange'
             drawFireBox(croppedImg, croppedPath, fireBoxCoords, timestamp=imgParsed['unixTime'], color=color)
             imgSeq.close()
             croppedImg.close()
             mspecFile.write("file '" + croppedPath + "'\n")
             mspecFile.write('duration 1\n')
-            if finalImg:
+            if (i == len(imgSequence) - 1): # final image has to be repeated for ffmpeg
                 mspecFile.write("file '" + croppedPath + "'\n")
         mspecFile.close()
         # now make movie from this sequence of cropped images
