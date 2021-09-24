@@ -12,6 +12,7 @@ dist/
 # keys and configs
 credentials.json
 token.json
+oct-fire-settings.json
 local.db
 
 # special directories
