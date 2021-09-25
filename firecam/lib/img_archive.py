@@ -767,6 +767,48 @@ def cacheDir(readDirPath, writeDirPath=None):
     return cache
 
 
+def findTranslationOffset(cvImgA, cvImgB, maxIterations, eps):
+    headerHeight = 250 # clouds and watermark
+    footerHeight = 250 # nearby trees moving with wind and shadows and watermark
+    footerPos = cvImgA.shape[0] - footerHeight
+    grayA = cv2.cvtColor(cvImgA[headerHeight:footerPos], cv2.COLOR_BGR2GRAY)
+    grayB = cv2.cvtColor(cvImgB[headerHeight:footerPos], cv2.COLOR_BGR2GRAY)
+    warp_matrix = np.eye(2, 3, dtype=np.float32)
+
+    # find optimal shifts limited to given maxIterations
+    criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, maxIterations, eps)
+    (cc0, warp_matrix0) = cv2.findTransformECC(grayA, grayB, warp_matrix, cv2.MOTION_TRANSLATION, criteria)
+
+    # check another 10 iterations to determine if findTransformECC has converged
+    criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, eps)
+    (cc1, warp_matrix1) = cv2.findTransformECC(grayA, grayB, warp_matrix0, cv2.MOTION_TRANSLATION, criteria)
+    epsAllowance = 10 * eps # allow up 10 eps change to mean convergence (truly unaligned images are > 1000*eps)
+
+    dx = warp_matrix1[0][2]
+    dy = warp_matrix1[1][2]
+    logging.warning('Translation: %s: %s, %s, %s , %s', cc0 >= cc1 - epsAllowance, round((cc1-cc0)/eps,1), round(cc1, 4), round(dx, 1), round(dy, 1))
+    if (cc0 < cc1 - epsAllowance) or (cc1 < 0.85) or (abs(dx) > 20) or (abs(dy) > 10):
+        return (False, None, None) # alignment failed
+    return (True, dx, dy)
+
+
+def alignImage(imgFileName, baseImgFileName):
+    maxIterations = 40
+    terminationEps = 1e-6
+    imgCv = cv2.imread(imgFileName)
+    baseImgCv = cv2.imread(baseImgFileName)
+    (alignable, dx, dy) = findTranslationOffset(baseImgCv, imgCv, maxIterations, terminationEps)
+    if alignable:
+        logging.warning('shifting image dx, dy: %s, %s', round(dx), round(dy))
+        img = Image.open(imgFileName)
+        shiftedImg = img.transform(img.size, Image.AFFINE, (1, 0, dx, 0, 1, dy))
+        img.close()
+        os.remove(imgFileName)
+        shiftedImg.save(imgFileName, format='JPEG', quality=95)
+        shiftedImg.close()
+    return alignable
+
+
 def diffImages(imgA, imgB):
     """Subtract two images (r-r, g-g, b-b).  Also add 128 to reduce negative values
        If a pixel is exactly same in both images, then the result will be 128,128,128 gray

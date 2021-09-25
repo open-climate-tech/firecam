@@ -21,6 +21,7 @@ This is the main code for reading images from webcams and detecting fires
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
+from bin.diff_images import alignImages
 
 import os, sys
 from firecam.lib import settings
@@ -223,8 +224,12 @@ def genMovie(notificationsDateDir, constants, cameraID, cameraHeading, timestamp
         mspecPath = os.path.join(tmpDirName, 'mspec.txt')
         mspecFile = open(mspecPath, 'w')
         for (i, imgFile) in enumerate(imgSequence):
-            imgIDs.append(goog_helper.copyFile(imgFile, notificationsDateDir))
             imgParsed = img_archive.parseFilename(imgFile)
+            if imgParsed['unixTime'] != timestamp:
+                algined = img_archive.alignImage(imgFile, imgPath)
+                if not algined:
+                    continue # skip this image
+            imgIDs.append(goog_helper.copyFile(imgFile, notificationsDateDir))
             cropName = 'img' + ("%03d" % i) + filePathParts[1]
             croppedPath = os.path.join(tmpDirName, cropName)
             imgSeq = Image.open(imgFile)
@@ -803,7 +808,7 @@ def fireDetected(constants, cameraID, cameraHeading, timestamp, fov, imgPath, fi
     mapUrl = mapID.replace('gs://', 'https://storage.googleapis.com/')
 
     updateDetectionsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon, sourcePolygons, imgIDs)
-    if publishAlert(cameraID, weatherScore):
+    if publishAlert(cameraID, weatherScore) and len(imgIDs) > 1:
         updateAlertsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon, sourcePolygons)
         pubsubFireNotification(cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon)
         emailFireNotification(constants, cameraID, timestamp, imgPath, annotatedUrl, fireSegment)
