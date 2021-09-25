@@ -21,7 +21,6 @@ This is the main code for reading images from webcams and detecting fires
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
-from bin.diff_images import alignImages
 
 import os, sys
 from firecam.lib import settings
