@@ -616,6 +616,36 @@ def intersectRecentDetections(dbManager, timestamp, triangle):
             return (intersection, json.loads(alert['sourcepolygons']))
 
 
+def intersectLand(triangle):
+    landVertices = [
+        [42.252, -114.000], [42.252, -124.411], #oregon
+        [41.996, -124.211], [41.814, -124.231], [41.784, -124.255], [41.746, -124.203], [41.737, -124.159],
+        [41.657, -124.134], [41.593, -124.100], [41.562, -124.096], [41.546, -124.075], [41.531, -124.080],
+        [41.437, -124.063], [41.286, -124.090], [41.228, -124.086], [41.226, -124.108], [41.157, -124.101],
+        [41.156, -124.135], [41.138, -124.157], [41.100, -124.162], [41.070, -124.158], [41.031, -124.116],
+        [40.931, -124.131], [40.868, -124.159], [40.844, -124.077], [40.802, -124.135], [40.796, -124.181],
+        [40.754, -124.194], [40.723, -124.222], [40.688, -124.201], [40.691, -124.280], [40.443, -124.411],
+        [40.242, -124.325], [39.750, -123.825], [39.494, -123.765], [39.362, -123.822], [39.285, -123.798],
+        [38.936, -123.723], [38.236, -122.972], [38.026, -123.001], [37.908, -122.649], [37.767, -122.512],
+        [37.497, -122.490], [37.327, -122.397], [37.213, -122.419], [36.946, -122.078], [36.946, -121.892],
+        [36.788, -121.776], [36.660, -121.826], [36.576, -121.975], [36.546, -121.934], [36.515, -121.947],
+        [36.408, -121.918], [36.306, -121.901], [36.237, -121.818], [36.156, -121.671], [36.020, -121.570],
+        [36.003, -121.504], [35.881, -121.456], [35.770, -121.325], [35.714, -121.312], [35.671, -121.283],
+        [35.642, -121.200], [35.631, -121.159], [35.461, -121.001], [35.445, -120.901], [35.366, -120.866],
+        [35.255, -120.897], [35.163, -120.762], [35.164, -120.691], [35.114, -120.635], [35.010, -120.639],
+        [34.903, -120.670], [34.884, -120.640], [34.859, -120.608], [34.758, -120.635], [34.705, -120.601],
+        [34.568, -120.636], [34.540, -120.549], [34.457, -120.470], [34.464, -120.093], [34.434, -119.953],
+        [34.407, -119.860], [34.395, -119.715], [34.420, -119.601], [34.353, -119.434], [34.276, -119.304],
+        [34.153, -119.219], [34.084, -119.052], [34.009, -118.808], [34.037, -118.533], [33.824, -118.387],
+        [33.773, -118.425], [33.707, -118.289], [33.768, -118.167], [33.617, -117.937], [33.546, -117.801],
+        [33.460, -117.714], [33.428, -117.628], [33.378, -117.586], [33.204, -117.390], [33.026, -117.287],
+        [32.916, -117.256], [32.849, -117.259], [32.843, -117.286], [32.771, -117.255], [32.664, -117.242],
+        [32.592, -117.131], [32.536, -117.124],
+        [32.280, -117.036], [32.280, -114.000], # mexico
+    ]
+    return getPolygonIntersection(triangle, landVertices)
+
+
 def checkWeatherInfo(weatherModel, dbManager, cameraID, timestamp, fireSegment, polygon, sourcePolygons, cameraLatLong):
     centroidLatLong = getCentroid(polygon)
     (weatherCentroid, weatherCamera) = weather.getWeatherData(dbManager, cameraID, timestamp, centroidLatLong, cameraLatLong)
@@ -788,13 +818,14 @@ def fireDetected(constants, cameraID, cameraHeading, timestamp, fov, imgPath, fi
     (fireHeading, rangeAngle) = getHeadingRange(cameraHeading, fov, imgPath, fireSegment['MinX'], fireSegment['MaxX'])
     (croppedID, imgIDs, annotatedID) = genAnnotatedImages(notificationsDateDir, constants, cameraID, cameraHeading, timestamp, imgPath, fireSegment)
     triangle = getTriangleVertices(camLatitude, camLongitude, fireHeading, rangeAngle)
-    intersectionInfo = intersectRecentDetections(dbManager, timestamp, triangle)
+    currentViewShed = intersectLand(triangle)
+    intersectionInfo = intersectRecentDetections(dbManager, timestamp, currentViewShed)
     if intersectionInfo:
         polygon = intersectionInfo[0]
-        sourcePolygons = intersectionInfo[1] + [triangle]
+        sourcePolygons = intersectionInfo[1] + [currentViewShed]
     else:
-        polygon = triangle
-        sourcePolygons = [triangle]
+        polygon = currentViewShed
+        sourcePolygons = [currentViewShed]
     weatherScore = checkWeatherInfo(weatherModel, dbManager, cameraID, timestamp, fireSegment, polygon, sourcePolygons, (camLatitude, camLongitude))
     fireSegment['weatherScore'] = round(weatherScore, 4)
 
