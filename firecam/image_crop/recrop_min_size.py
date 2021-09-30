@@ -192,6 +192,30 @@ def isImageValid(img):
     return False
 
 
+def getArchiveImage(googleServices, downloadDirCache, camArchives, cameraID, expectedFileName, imgDT):
+    localFilePath = os.path.join(settings.downloadDir, expectedFileName)
+    if not os.path.isfile(localFilePath):# if file has not been downloaded by a previous iteration
+        files = img_archive.getHpwrenImages(googleServices, settings, downloadDirCache, camArchives, cameraID, imgDT, imgDT, 1)
+        if not files or len(files) == 0:
+            return (None, None)
+        localFilePath = files[0]
+    img = Image.open(localFilePath)
+    if not isImageValid(img):  # retry download if image invalid
+        os.remove(localFilePath)
+        files = img_archive.getHpwrenImages(googleServices, settings, downloadDirCache, camArchives, cameraID, imgDT, imgDT, 1)
+        localFilePath = files[0]
+        img = Image.open(localFilePath)
+    return (img, localFilePath)
+
+
+def findAlignedImage(baseImgFilePath, filePaths):
+    for filePath in filePaths:
+        img = img_archive.alignImageObj(filePath, baseImgFilePath)
+        if img:
+            return img
+    return None
+
+
 def main():
     reqArgs = [
         ["o", "outputDir", "local directory to save images segments"],
@@ -255,20 +279,11 @@ def main():
 
             nameParsed = img_archive.parseFilename(fileName)
             imgDT = datetime.datetime.fromtimestamp(nameParsed['unixTime'])
-            localFilePath = os.path.join(settings.downloadDir, fileName)
-            if not os.path.isfile(localFilePath):# if file has not been downloaded by a previous iteration
-                files = img_archive.getHpwrenImages(googleServices, settings, downloadDirCache, camArchives, nameParsed['cameraID'], imgDT, imgDT, 1)
-                if not files or len(files) == 0:
-                    logging.warning('Skip image without archive: %s', fileName)
-                    skippedArchive.append((rowIndex, fileName, imgDT))
-                    continue
-                localFilePath = files[0]
-            imgOrig = Image.open(localFilePath)
-            if not isImageValid(imgOrig):  # retry download if image invalid
-                os.remove(localFilePath)
-                files = img_archive.getHpwrenImages(googleServices, settings, downloadDirCache, camArchives, nameParsed['cameraID'], imgDT, imgDT, 1)
-                localFilePath = files[0]
-                imgOrig = Image.open(localFilePath)
+            (imgOrig, imgFilePath) = getArchiveImage(googleServices, downloadDirCache, camArchives, nameParsed['cameraID'], fileName, imgDT)
+            if not imgOrig:
+                logging.warning('Skip image without archive: %s', fileName)
+                skippedArchive.append((rowIndex, fileName, imgDT))
+                continue
 
             # find coordinates for cropping
             if recropType == 'raw':
@@ -288,26 +303,25 @@ def main():
 
             # if in subracted images mode, download an earlier image and subtract
             if minusMinutes:
-                dt = imgDT - timeGapDelta
-                nameParsed['unixTime'] -= 60*minusMinutes
-                earlierName = img_archive.repackFileName(nameParsed)
-                earlierImgPath = os.path.join(settings.downloadDir, earlierName)
-                if not os.path.isfile(earlierImgPath):# if file has not been downloaded by a previous iteration
-                    files = img_archive.getHpwrenImages(googleServices, settings, downloadDirCache, camArchives, nameParsed['cameraID'], dt, dt, 1)
+                if not img_archive.findCameraInArchive(camArchives, nameParsed['cameraID']):
+                    earlierImg = None
+                    files = img_archive.cacheFetchRange(downloadDirCache, nameParsed['cameraID'], nameParsed['unixTime'], -minusMinutes*60, -10*minusMinutes*60)
                     if files:
-                        earlierImgPath = files[0]
-                    else:
+                        earlierImg = findAlignedImage(imgFilePath, files)
+                    if not files or not earlierImg:
+                        logging.warning('Skipping image without prior image: %s', fileName)
+                        skippedArchive.append((rowIndex, fileName, None))
+                        continue
+                else:
+                    nameParsed['unixTime'] -= 60*minusMinutes
+                    earlierName = img_archive.repackFileName(nameParsed)
+                    dt = imgDT - timeGapDelta
+                    (earlierImg, _) = getArchiveImage(googleServices, downloadDirCache, camArchives, nameParsed['cameraID'], earlierName, dt)
+                    if not earlierImg:
                         logging.warning('Skipping image without prior image: %s, %s', str(dt), fileName)
                         skippedArchive.append((rowIndex, fileName, dt))
                         continue
-                logging.warning('Subtracting old image %s', earlierImgPath)
-                earlierImg = Image.open(earlierImgPath)
-                if not isImageValid(earlierImg):  # retry download if image invalid
-                    earlierImg.close()
-                    os.remove(earlierImgPath)
-                    files = img_archive.getHpwrenImages(googleServices, settings, downloadDirCache, camArchives, nameParsed['cameraID'], dt, dt, 1)
-                    earlierImgPath = files[0]
-                    earlierImg = Image.open(earlierImgPath)
+                    logging.warning('Subtracting old image %s', earlierName)
 
                 earlierImg = earlierImg.crop(extremaCoords)
                 diffImg = img_archive.diffSmoothImages(imgOrig, earlierImg)

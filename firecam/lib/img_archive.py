@@ -746,6 +746,19 @@ def cacheFindEntry(cache, cameraID, desiredTime):
         return None
 
 
+def cacheFetchRange(cache, cameraID, maxTime, desiredOffset, minOffset):
+    if not cameraID in cache:
+        return None
+    cameraTimes = cache[cameraID]
+    minTime = maxTime + minOffset
+    desiredTime = maxTime + desiredOffset
+    allowedEntries = list(filter(lambda x: (x['time'] > minTime) and (x['time'] < maxTime), cameraTimes))
+    if len(allowedEntries) == 0:
+        return None
+    sortedEntries = sorted(allowedEntries, key=lambda x: abs(x['time'] - desiredTime))
+    return list(map(lambda x: os.path.join(cache['readDir'], x['fileName']), sortedEntries))
+
+
 def cacheDir(readDirPath, writeDirPath=None):
     """Create a cache of iamges in given directory and return the cache object
 
@@ -775,15 +788,18 @@ def findTranslationOffset(cvImgA, cvImgB, maxIterations, eps):
     grayB = cv2.cvtColor(cvImgB[headerHeight:footerPos], cv2.COLOR_BGR2GRAY)
     warp_matrix = np.eye(2, 3, dtype=np.float32)
 
-    # find optimal shifts limited to given maxIterations
-    criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, maxIterations, eps)
-    (cc0, warp_matrix0) = cv2.findTransformECC(grayA, grayB, warp_matrix, cv2.MOTION_TRANSLATION, criteria)
+    try:
+        # find optimal shifts limited to given maxIterations
+        criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, maxIterations, eps)
+        (cc0, warp_matrix0) = cv2.findTransformECC(grayA, grayB, warp_matrix, cv2.MOTION_TRANSLATION, criteria)
 
-    # check another 10 iterations to determine if findTransformECC has converged
-    criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, eps)
-    (cc1, warp_matrix1) = cv2.findTransformECC(grayA, grayB, warp_matrix0, cv2.MOTION_TRANSLATION, criteria)
+        # check another 10 iterations to determine if findTransformECC has converged
+        criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, eps)
+        (cc1, warp_matrix1) = cv2.findTransformECC(grayA, grayB, warp_matrix0, cv2.MOTION_TRANSLATION, criteria)
+    except Exception as e:
+        return (False, None, None) # alignment failed
+
     epsAllowance = 10 * eps # allow up 10 eps change to mean convergence (truly unaligned images are > 1000*eps)
-
     dx = warp_matrix1[0][2]
     dy = warp_matrix1[1][2]
     logging.warning('Translation: %s: %s, %s, %s , %s', cc0 >= cc1 - epsAllowance, round((cc1-cc0)/eps,1), round(cc1, 4), round(dx, 1), round(dy, 1))
@@ -792,7 +808,7 @@ def findTranslationOffset(cvImgA, cvImgB, maxIterations, eps):
     return (True, dx, dy)
 
 
-def alignImage(imgFileName, baseImgFileName):
+def alignImageObj(imgFileName, baseImgFileName):
     maxIterations = 40
     terminationEps = 1e-6
     imgCv = cv2.imread(imgFileName)
@@ -803,10 +819,18 @@ def alignImage(imgFileName, baseImgFileName):
         img = Image.open(imgFileName)
         shiftedImg = img.transform(img.size, Image.AFFINE, (1, 0, dx, 0, 1, dy))
         img.close()
+        return shiftedImg
+    return None
+
+
+def alignImage(imgFileName, baseImgFileName):
+    shiftedImg = alignImageObj(imgFileName, baseImgFileName)
+    if shiftedImg:
         os.remove(imgFileName)
         shiftedImg.save(imgFileName, format='JPEG', quality=95)
         shiftedImg.close()
-    return alignable
+        return True
+    return False
 
 
 def diffImages(imgA, imgB):
