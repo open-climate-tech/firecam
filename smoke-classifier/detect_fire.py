@@ -1117,7 +1117,7 @@ def main():
             if 'endY' in usableEntry:
                 image_spec[-1]['endY'] = usableEntry['endY']
         # ignore top and bottom 50 (cloud, metadata, too nearby)
-        if ('starty' not in image_spec[-1]) or not image_spec[-1]['startY']:
+        if ('startY' not in image_spec[-1]) or not image_spec[-1]['startY']:
             image_spec[-1]['startY'] = 50
         if ('endY' not in image_spec[-1]) or not image_spec[-1]['endY']:
             image_spec[-1]['endY'] = -50
