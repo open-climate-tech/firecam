@@ -43,7 +43,7 @@ import datetime
 import logging
 import csv
 import tkinter as tk
-from PIL import Image, ImageTk
+from PIL import Image, ImageTk, ImageStat
 
 def imageDisplay(imgOrig, title=''):
     rootTk = tk.Tk()
@@ -216,6 +216,12 @@ def findAlignedImage(baseImgFilePath, filePaths):
     return None
 
 
+def brightness(img):
+    medians = ImageStat.Stat(img).median
+    brightness = (medians[0] + medians[1] + medians[2]) / 3
+    return max(brightness, .01) # to avoid div by 0
+
+
 def main():
     reqArgs = [
         ["o", "outputDir", "local directory to save images segments"],
@@ -324,6 +330,12 @@ def main():
                     logging.warning('Subtracting old image %s', earlierName)
 
                 earlierImg = earlierImg.crop(extremaCoords)
+                brightnessRatio = brightness(imgOrig)/brightness(earlierImg)
+                logging.warning('brightness ratio %s, %s, %s', round(brightnessRatio, 3), rowIndex, fileName)
+                if (brightnessRatio < 0.92) or (brightnessRatio > 1.08): # large diffs hide the smoke
+                    logging.warning('Skipping extreme brigthness diff %s, name=%s', brightnessRatio, fileName)
+                    skippedTiny.append((rowIndex, fileName, brightnessRatio))
+                    continue
                 diffImg = img_archive.diffSmoothImages(imgOrig, earlierImg)
                 extremas = diffImg.getextrema()
                 if (extremas[0][0] == 128 and extremas[0][1] == 128) or (extremas[1][0] == 128 and extremas[1][1] == 128) or (extremas[2][0] == 128 and extremas[2][1] == 128):
