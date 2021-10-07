@@ -781,8 +781,15 @@ def cacheDir(readDirPath, writeDirPath=None):
 
 
 def findTranslationOffset(cvImgA, cvImgB, maxIterations, eps):
-    headerHeight = 250 # clouds and watermark
-    footerHeight = 250 # nearby trees moving with wind and shadows and watermark
+    if cvImgA.shape[0] > 1000:
+        headerHeight = 250 # clouds, metadata, and watermark
+        footerHeight = 250 # nearby trees moving with wind and shadows, metadata, and watermark
+    elif cvImgA.shape[0] > 300:
+        headerHeight = 100 # clouds, metadata, and watermark
+        footerHeight = 100 # nearby trees moving with wind and shadows, metadata, and watermark
+    else:
+        headerHeight = 0 # too small for headers and footers
+        footerHeight = 0
     footerPos = cvImgA.shape[0] - footerHeight
     grayA = cv2.cvtColor(cvImgA[headerHeight:footerPos], cv2.COLOR_BGR2GRAY)
     grayB = cv2.cvtColor(cvImgB[headerHeight:footerPos], cv2.COLOR_BGR2GRAY)
@@ -815,6 +822,8 @@ def alignImageObj(imgFileName, baseImgFileName):
     baseImgCv = cv2.imread(baseImgFileName)
     (alignable, dx, dy) = findTranslationOffset(baseImgCv, imgCv, maxIterations, terminationEps)
     if alignable:
+        if round(dx) == 0 and round(dy) == 0: # optimization for sub-pixel shifts
+            return Image.open(imgFileName)
         logging.warning('shifting image dx, dy: %s, %s', round(dx), round(dy))
         img = Image.open(imgFileName)
         shiftedImg = img.transform(img.size, Image.AFFINE, (1, 0, dx, 0, 1, dy))
@@ -911,4 +920,19 @@ def diffSmoothImages(imgA, imgB):
     smoothImgB = smoothImage(imgB)
 
     return diffImages(smoothImgA, smoothImgB)
+
+
+def rescaleValues(img, ratios):
+    bandsImg = img.split()
+    evalCmds = [
+        "convert(float(a)*%s, 'L')" % ratios[0],
+        "convert(float(a)*%s, 'L')" % ratios[1],
+        "convert(float(a)*%s, 'L')" % ratios[2],
+    ]
+    bandsImgOut = [
+        ImageMath.eval(evalCmds[0], a = bandsImg[0]),
+        ImageMath.eval(evalCmds[1], a = bandsImg[1]),
+        ImageMath.eval(evalCmds[2], a = bandsImg[2]),
+    ]
+    return Image.merge('RGB', bandsImgOut)
 
