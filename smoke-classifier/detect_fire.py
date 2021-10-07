@@ -817,6 +817,8 @@ def fireDetected(constants, cameraID, cameraHeading, timestamp, fov, imgPath, fi
     (mapImgGCS, camLatitude, camLongitude) = dbManager.getCameraMapLocation(cameraID)
     (fireHeading, rangeAngle) = getHeadingRange(cameraHeading, fov, imgPath, fireSegment['MinX'], fireSegment['MaxX'])
     (croppedID, imgIDs, annotatedID) = genAnnotatedImages(notificationsDateDir, constants, cameraID, cameraHeading, timestamp, imgPath, fireSegment)
+    if len(imgIDs) < 2:
+        return # ignore events without multiple images
     triangle = getTriangleVertices(camLatitude, camLongitude, fireHeading, rangeAngle)
     currentViewShed = intersectLand(triangle)
     intersectionInfo = intersectRecentDetections(dbManager, timestamp, currentViewShed)
@@ -838,7 +840,7 @@ def fireDetected(constants, cameraID, cameraHeading, timestamp, fov, imgPath, fi
     mapUrl = mapID.replace('gs://', 'https://storage.googleapis.com/')
 
     updateDetectionsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon, sourcePolygons, imgIDs)
-    if publishAlert(cameraID, weatherScore) and len(imgIDs) > 1:
+    if publishAlert(cameraID, weatherScore):
         updateAlertsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon, sourcePolygons)
         pubsubFireNotification(cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon)
         emailFireNotification(constants, cameraID, timestamp, imgPath, annotatedUrl, fireSegment)
