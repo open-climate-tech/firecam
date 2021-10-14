@@ -815,7 +815,7 @@ def findTranslationOffset(cvImgA, cvImgB, maxIterations, eps):
     return (True, dx, dy)
 
 
-def alignImageObj(imgFileName, baseImgFileName):
+def alignImageObj(imgFileName, baseImgFileName, noShift=False):
     maxIterations = 40
     terminationEps = 1e-6
     imgCv = cv2.imread(imgFileName)
@@ -824,6 +824,8 @@ def alignImageObj(imgFileName, baseImgFileName):
     if alignable:
         if round(dx) == 0 and round(dy) == 0: # optimization for sub-pixel shifts
             return Image.open(imgFileName)
+        if noShift:
+            return None
         logging.warning('shifting image dx, dy: %s, %s', round(dx), round(dy))
         img = Image.open(imgFileName)
         shiftedImg = img.transform(img.size, Image.AFFINE, (1, 0, dx, 0, 1, dy))

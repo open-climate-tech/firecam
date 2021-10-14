@@ -208,9 +208,9 @@ def getArchiveImage(googleServices, downloadDirCache, camArchives, cameraID, exp
     return (img, localFilePath)
 
 
-def findAlignedImage(baseImgFilePath, filePaths):
+def findAlignedImage(baseImgFilePath, filePaths, fullImage):
     for filePath in filePaths:
-        img = img_archive.alignImageObj(filePath, baseImgFilePath)
+        img = img_archive.alignImageObj(filePath, baseImgFilePath, noShift=fullImage)
         if img:
             return img
     return None
@@ -294,10 +294,16 @@ def main():
             # find coordinates for cropping
             if recropType == 'raw':
                 cropCoords = [oldCoords]
+            elif recropType == 'full': # useful for generating full diffs
+                cropCoords = [(0, 0, imgOrig.size[0], imgOrig.size[1])]
             else:
                 # crop the full sized image to show just the smoke, but shifted and flipped
                 # shifts and flips increase number of segments for training and also prevent overfitting by perturbing data
                 cropCoords = getCropCoords((minX, minY, maxX, maxY), minSizeX, minSizeY, growRatio, (imgOrig.size[0], imgOrig.size[1]), recropType)
+            fullImage = False
+            if len(cropCoords) == 1 and cropCoords[0][0] == 0 and cropCoords[0][1] == 0 and cropCoords[0][2] == imgOrig.size[0] and cropCoords[0][3] == imgOrig.size[1]:
+                fullImage = True
+            assert fullImage or ('minX' not in nameParsed) # disallow crops of crops
             # find extrema (min/max) crop coordinates to crop the original image to speed up processing
             extremaCoords = list(cropCoords[0])
             for coords in cropCoords:
@@ -313,7 +319,7 @@ def main():
                     earlierImg = None
                     files = img_archive.cacheFetchRange(downloadDirCache, nameParsed['cameraID'], nameParsed['unixTime'], -minusMinutes*60, -10*minusMinutes*60)
                     if files:
-                        earlierImg = findAlignedImage(imgFilePath, files)
+                        earlierImg = findAlignedImage(imgFilePath, files, fullImage)
                     if not files or not earlierImg:
                         logging.warning('Skipping image without prior image: %s', fileName)
                         skippedArchive.append((rowIndex, fileName, None))
@@ -348,10 +354,16 @@ def main():
                 fileName = str(fileNameParts[0]) + ('_Diff%d' % minusMinutes) + fileNameParts[1]
 
             for newCoords in cropCoords:
-                # XXXX - save work if old=new?
                 logging.warning('coords old %s, new %s', str(oldCoords), str(newCoords))
-                imgNameNoExt = str(os.path.splitext(fileName)[0])
-                cropImgName = imgNameNoExt + '_Crop_' + 'x'.join(list(map(lambda x: str(x), newCoords))) + '.jpg'
+                parsed = img_archive.parseFilename(fileName)
+                if not fullImage:
+                    parsed['minX'] = newCoords[0]
+                    parsed['minY'] = newCoords[1]
+                    parsed['maxX'] = newCoords[2]
+                    parsed['maxY'] = newCoords[3]
+                if minusMinutes:
+                    parsed['diffMinutes'] = 1
+                cropImgName = img_archive.repackFileName(parsed)
                 cropImgPath = os.path.join(args.outputDir, cropImgName)
                 cropped_img = imgOrig.crop((newCoords[0] - extremaCoords[0], newCoords[1] - extremaCoords[1],
                                             newCoords[2] - extremaCoords[0], newCoords[3] - extremaCoords[1]))
