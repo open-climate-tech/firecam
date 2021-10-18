@@ -370,7 +370,7 @@ def main():
                 cropped_img.save(cropImgPath, format='JPEG', quality=95)
                 if recropType == 'augment':
                     flipped_img = cropped_img.transpose(Image.FLIP_LEFT_RIGHT)
-                    flipImgName = imgNameNoExt + '_Crop_' + 'x'.join(list(map(lambda x: str(x), newCoords))) + '_Flip.jpg'
+                    flipImgName = cropImgName.replace('.jpg', '_Flip.jpg')
                     flipImgPath = os.path.join(args.outputDir, flipImgName)
                     flipped_img.save(flipImgPath, format='JPEG', quality=95)
             logging.warning('Processed row: %d, file: %s', rowIndex, fileName)
