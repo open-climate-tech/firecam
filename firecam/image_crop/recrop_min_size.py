@@ -43,7 +43,7 @@ import datetime
 import logging
 import csv
 import tkinter as tk
-from PIL import Image, ImageTk, ImageStat
+from PIL import Image, ImageTk
 
 def imageDisplay(imgOrig, title=''):
     rootTk = tk.Tk()
@@ -216,12 +216,6 @@ def findAlignedImage(baseImgFilePath, filePaths, fullImage):
     return None
 
 
-def brightness(img):
-    medians = ImageStat.Stat(img).median
-    brightness = (medians[0] + medians[1] + medians[2]) / 3
-    return max(brightness, .01) # to avoid div by 0
-
-
 def main():
     reqArgs = [
         ["o", "outputDir", "local directory to save images segments"],
@@ -236,7 +230,7 @@ def main():
         ["t", "throwSize", "(optional) override default throw away size of 598x598"],
         ["g", "growRatio", "(optional) override default grow ratio of 1.2"],
         ["m", "minusMinutes", "(optional) subtract images from given number of minutes ago"],
-        ["r", "recropType", "recrop type: 'raw', 'center', 'shift', 'augment' (default)"],
+        ["r", "recropType", "recrop type: 'raw', 'center', 'full', 'shift', 'augment' (default)"],
     ]
     args = collect_args.collectArgs(reqArgs, optionalArgs=optArgs, parentParsers=[goog_helper.getParentParser()])
     startRow = int(args.startRow) if args.startRow else 0
@@ -336,19 +330,10 @@ def main():
                     logging.warning('Subtracting old image %s', earlierName)
 
                 earlierImg = earlierImg.crop(extremaCoords)
-                brightnessRatio = brightness(imgOrig)/brightness(earlierImg)
-                logging.warning('brightness ratio %s, %s, %s', round(brightnessRatio, 3), rowIndex, fileName)
-                if (brightnessRatio < 0.92) or (brightnessRatio > 1.08): # large diffs hide the smoke
-                    logging.warning('Skipping extreme brigthness diff %s, name=%s', brightnessRatio, fileName)
-                    skippedTiny.append((rowIndex, fileName, brightnessRatio))
+                diffImg = img_archive.diffWithChecks(imgOrig, earlierImg)
+                if not diffImg:
+                    skippedTiny.append((rowIndex, fileName))
                     continue
-                diffImg = img_archive.diffSmoothImages(imgOrig, earlierImg)
-                extremas = diffImg.getextrema()
-                if (extremas[0][0] == 128 and extremas[0][1] == 128) or (extremas[1][0] == 128 and extremas[1][1] == 128) or (extremas[2][0] == 128 and extremas[2][1] == 128):
-                    logging.warning('Skipping no diffs %s, name=%s', str(extremas), fileName)
-                    skippedTiny.append((rowIndex, fileName, extremas))
-                    continue
-                # realImgOrig = imgOrig # is this useful?
                 imgOrig = diffImg
                 fileNameParts = os.path.splitext(fileName)
                 fileName = str(fileNameParts[0]) + ('_Diff%d' % minusMinutes) + fileNameParts[1]
