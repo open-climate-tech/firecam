@@ -247,6 +247,8 @@ def genMovie(notificationsDateDir, constants, cameraID, cameraHeading, timestamp
             mspecFile.write('duration 1\n')
             if (i == len(imgSequence) - 1): # final image has to be repeated for ffmpeg
                 mspecFile.write("file '" + croppedPath + "'\n")
+        mspecFile.flush()
+        os.fsync(mspecFile.fileno())
         mspecFile.close()
         # now make movie from this sequence of cropped images
         moviePath = filePathParts[0] + '_AnnCrop_' + 'x'.join(list(map(lambda x: str(x), cropCoords))) + '.mp4'
