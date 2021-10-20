@@ -116,7 +116,9 @@ class InceptionV3AndHistoricalThreshold:
         for segmentInfo in segments:
             if segmentInfo['score'] > .5:
                 if settings.positivesDir:
-                    postivesDateDir = goog_helper.dateSubDir(settings.positivesDir)
+                    positivesPrefix = settings.positivesDir if settings.positivesDir[-1] != '/' else settings.positivesDir[:-1]
+                    postivesModelDir = positivesPrefix + '/' + self.modelId.replace('/', '_')
+                    postivesDateDir = goog_helper.dateSubDir(postivesModelDir)
                     cropImgName = imgNameNoExt + '_Crop_' + segmentInfo['coordStr'] + '.jpg'
                     cropImgPath = os.path.join(str(ppath.parent), cropImgName)
                     if not imgObj:

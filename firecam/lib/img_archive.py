@@ -837,6 +837,7 @@ def alignImageObj(imgFileName, baseImgFileName, noShift=False):
 def alignImage(imgFileName, baseImgFileName):
     shiftedImg = alignImageObj(imgFileName, baseImgFileName)
     if shiftedImg:
+        shiftedImg.load() # ensure file read before remove
         os.remove(imgFileName)
         shiftedImg.save(imgFileName, format='JPEG', quality=95)
         shiftedImg.close()
