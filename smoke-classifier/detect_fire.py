@@ -219,6 +219,7 @@ def genMovie(notificationsDateDir, constants, cameraID, cameraHeading, timestamp
         oldImages = img_archive.getArchiveImages(constants['googleServices'], settings, constants['dbManager'], tmpDirName,
                                                  constants['camArchives'], cameraID, cameraHeading, startTimeDT, endTimeDT, 1)
         imgSequence = oldImages or []
+        imgSequence = imgSequence[:5] # max 5 total images
         imgIDs = []
         mspecPath = os.path.join(tmpDirName, 'mspec.txt')
         mspecFile = open(mspecPath, 'w')
@@ -641,7 +642,7 @@ def intersectLand(triangle):
         [33.460, -117.714], [33.428, -117.628], [33.378, -117.586], [33.204, -117.390], [33.026, -117.287],
         [32.916, -117.256], [32.849, -117.259], [32.843, -117.286], [32.771, -117.255], [32.664, -117.242],
         [32.592, -117.131], [32.536, -117.124],
-        [32.280, -117.036], [32.280, -114.000], # mexico
+        [32.100, -116.950], [32.100, -114.000], # mexico
     ]
     return getPolygonIntersection(triangle, landVertices)
 
@@ -877,33 +878,6 @@ def heartBeat(filename):
     pathlib.Path(filename).touch()
 
 
-def genDiffImage(imgPath, earlierImgPath, minusMinutes):
-    """Subtract the two given images and store result in new difference image file
-
-    Args:
-        imgPath (str): filepath of the current image (to subtract from)
-        imgPath (str): filepath of the earlier image (value to subtract)
-        minusMinutes (int): number of minutes separating subtracted images
-
-    Returns:
-        file path to the difference image
-    """
-    imgA = Image.open(imgPath)
-    imgB = Image.open(earlierImgPath)
-    diffImg = img_archive.diffSmoothImages(imgA, imgB)
-    extremas = diffImg.getextrema()
-    if extremas[0][0] == 128 or extremas[0][1] == 128 or extremas[1][0] == 128 or extremas[1][1] == 128 or extremas[2][0] == 128 or extremas[2][1] == 128:
-        logging.warning('Skipping no diffs %s', str(extremas))
-        return None
-    parsedName = img_archive.parseFilename(imgPath)
-    parsedName['diffMinutes'] = minusMinutes
-    diffImgName = img_archive.repackFileName(parsedName)
-    ppath = pathlib.PurePath(imgPath)
-    diffImgPath = os.path.join(str(ppath.parent), diffImgName)
-    diffImg.save(diffImgPath, format='JPEG', quality=95)
-    return diffImgPath
-
-
 def updateTimeTracker(timeTracker, processingTime):
     """Update the time tracker data with given time to process current image
 
@@ -938,7 +912,7 @@ def initializeTimeTracker():
     }
 
 
-def getArchivedImages(constants, cameras, startTimeDT, timeRangeSeconds, minusMinutes):
+def getArchivedImages(constants, cameras, startTimeDT, timeRangeSeconds):
     """Get random images from HPWREN archive matching given constraints and optionally subtract them
 
     Args:
@@ -946,7 +920,6 @@ def getArchivedImages(constants, cameras, startTimeDT, timeRangeSeconds, minusMi
         cameras (list): list of cameras
         startTimeDT (datetime): starting time of time range
         timeRangeSeconds (int): number of seconds in time range
-        minusMinutes (int): number of desired minutes between images to subract
 
     Returns:
         Tuple containing camera name, current timestamp, filepath of regular image, and filepath of difference image
@@ -976,12 +949,8 @@ def getArchivedImages(constants, cameras, startTimeDT, timeRangeSeconds, minusMi
         timeDT += datetime.timedelta(hours=8)
     elif timeDT.hour >= 20:
         timeDT -= datetime.timedelta(hours=4)
-    if minusMinutes:
-        prevTimeDT = timeDT + datetime.timedelta(seconds = -60 * minusMinutes)
-    else:
-        prevTimeDT = timeDT
     files = img_archive.getHpwrenImages(constants['googleServices'], settings, downloadDirOrCache,
-                                        constants['camArchives'], cameraID, prevTimeDT, timeDT, minusMinutes or 1)
+                                        constants['camArchives'], cameraID, timeDT, timeDT, 1)
     # logging.warning('files %s', str(files))
     if not files:
         return (None, None, None, None)
@@ -996,31 +965,7 @@ def getArchivedImages(constants, cameras, startTimeDT, timeRangeSeconds, minusMi
             tmpFiles.append(destPath)
         files = tmpFiles
 
-    if minusMinutes:
-        if len(files) > 1:
-            diffFail = False
-            imgDiffPath = None
-            if files[0] < files[1]: # files[0] is supposed to be earlier than files[1]
-                imgDiffPath = genDiffImage(files[1], files[0], minusMinutes)
-            else:
-                diffFail = True
-            if diffFail or not imgDiffPath:
-                logging.warning('diff fail %s', str(files))
-                prevFile = None
-                for file in files:
-                    if file != prevFile:
-                        os.remove(file)
-                    prevFile = file
-                return (None, None, None, None)
-            os.remove(files[0]) # no longer needed
-            parsedName = img_archive.parseFilename(files[1])
-            return (cameraID, parsedName['unixTime'], files[1], imgDiffPath)
-        else:
-            logging.warning('unexpected file count %s', str(files))
-            for file in files:
-                os.remove(file)
-            return (None, None, None, None)
-    elif len(files) > 0:
+    if len(files) > 0:
         parsedName = img_archive.parseFilename(files[0])
         return (cameraID, parsedName['unixTime'], files[0], files[0])
     return (None, None, None, None)
@@ -1028,12 +973,43 @@ getArchivedImages.tmpDir = None
 getArchivedImages.cache = None
 
 
+def fetchPriorAligned(constants, cameraID, heading, timestamp, baseImgPath, outputDirName):
+    imgDT = datetime.datetime.fromtimestamp(timestamp)
+    dt = imgDT - datetime.timedelta(seconds = 60)
+    oldImages = img_archive.getArchiveImages(constants['googleServices'], settings, constants['dbManager'], outputDirName,
+                    constants['camArchives'], cameraID, heading, dt, dt, 1)
+    priorImg = None
+    if len(oldImages) >= 1:
+        # find the most recent aligned image
+        oldImages.reverse()
+        if img_archive.isPTZ(cameraID): # PTZ iamges require alignment
+            for filePath in oldImages:
+                img = img_archive.alignImageObj(filePath, baseImgPath)
+                if img:
+                    priorImg = img
+                    break
+        else:
+            priorImg = Image.open(oldImages[0])
+    if priorImg:
+        priorImg.load() # force load to allow remove below to succeed on Windows
+    for filePath in oldImages:
+        os.remove(filePath)
+    return priorImg
+
+
+def fetchDiffImage(constants, cameraID, heading, timestamp, baseImgPath, outputDirName):
+    priorImg = fetchPriorAligned(constants, cameraID, heading, timestamp, baseImgPath, outputDirName)
+    if not priorImg:
+        return None
+    imgOrig = Image.open(baseImgPath)
+    return img_archive.diffWithChecks(imgOrig, priorImg)
+
+
 def main():
     optArgs = [
         ["b", "heartbeat", "filename used for heartbeating check"],
         ["c", "collectPositves", "collect positive segments for training data"],
         ["t", "time", "Time breakdown for processing images"],
-        ["m", "minusMinutes", "(optional) subtract images from given number of minutes ago", int],
         ["r", "restrictType", "Only process images from cameras of given type"],
         ["n", "noState", "(optional) no changes to state"],
         ["s", "startTime", "(optional) performs search with modifiedTime > startTime"],
@@ -1043,7 +1019,6 @@ def main():
         ["l", "limitImages", "(optional) stop after processing given number of images", int],
     ]
     args = collect_args.collectArgs([], optionalArgs=optArgs, parentParsers=[goog_helper.getParentParser()])
-    minusMinutes = args.minusMinutes if args.minusMinutes else 0
     limitImages = args.limitImages if args.limitImages else 1e9
     # TODO: Fix googleServices auth to resurrect email alerts
     # googleServices = goog_helper.getGoogleServices(settings, args)
@@ -1076,7 +1051,7 @@ def main():
                 random.random()
     camArchives = img_archive.getHpwrenCameraArchives(settings.hpwrenArchives)
     DetectionPolicyClass = policies.get_policies()[settings.detectionPolicy]
-    detectionPolicy = DetectionPolicyClass(args, dbManager, minusMinutes, stateless=stateless)
+    detectionPolicy = DetectionPolicyClass(args, dbManager, stateless=stateless)
     weatherModel = tf_helper.loadModel(settings.weather_model)
     constants = { # dictionary of constants to reduce parameters in various functions
         'args': args,
@@ -1095,11 +1070,10 @@ def main():
         timeStart = time.time()
         if useArchivedImages:
             (cameraID, timestamp, imgPath, classifyImgPath) = \
-                getArchivedImages(constants, cameras, startTimeDT, timeRangeSeconds, minusMinutes)
+                getArchivedImages(constants, cameras, startTimeDT, timeRangeSeconds)
             if cameraID:
                 heading = img_archive.getHeading(cameraID)
             fov = 110 # camera horizontal field of view is 110 for most Mobotix cameras
-        # elif minusMinutes: to be resurrected using archive functionality
         else: # regular (non diff mode), grab image and process
             (cameraID, heading, timestamp, fov, imgPath) = getNextImage(dbManager, cameras, stateless)
             classifyImgPath = imgPath
@@ -1124,7 +1098,8 @@ def main():
         if ('endY' not in image_spec[-1]) or not image_spec[-1]['endY']:
             image_spec[-1]['endY'] = -50
 
-        detectionResult = detectionPolicy.detect(image_spec, checkShifts=True)
+        detectionResult = detectionPolicy.detect(image_spec, checkShifts=True,
+                            fetchDiff=lambda x: fetchDiffImage(constants, cameraID, heading, timestamp, classifyImgPath, x))
         timeDetect = time.time()
         numImages += 1
         fireSegment = detectionResult['fireSegment']

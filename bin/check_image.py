@@ -129,7 +129,7 @@ def main():
     args = collect_args.collectArgs(reqArgs, optionalArgs=optArgs)
     model_file = args.model if args.model else settings.model_file
     DetectionPolicyClass = policies.get_policies()[settings.detectionPolicy]
-    detectionPolicy = DetectionPolicyClass(args, None, 0, stateless=True, modelLocation=model_file)
+    detectionPolicy = DetectionPolicyClass(args, None, stateless=True, modelLocation=model_file)
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
     nameParsed = img_archive.parseFilename(args.image)

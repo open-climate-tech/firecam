@@ -24,11 +24,11 @@ import time
 
 class DetectNever:
 
-    def __init__(self, args, dbManager, minusMinutes, stateless):
-        pass
+    def __init__(self, args, dbManager, stateless, modelLocation=None):
+        self.modelId = 'never'
 
 
-    def detect(self, image_spec):
+    def detect(self, image_spec, checkShifts=False, silent=False, fetchDiff=None):
         detectionResult = {
             'fireSegment': None,
             'timeMid': time.time()

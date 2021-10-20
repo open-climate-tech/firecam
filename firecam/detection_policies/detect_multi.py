@@ -28,7 +28,7 @@ import logging
 
 class DetectMulti:
 
-    def __init__(self, args, dbManager, minusMinutes, stateless):
+    def __init__(self, args, dbManager, stateless):
         self.mainPolicy = None
         self.confirmationPolicies = []
         modelIDs = []
@@ -38,7 +38,7 @@ class DetectMulti:
             logging.warning('Multi init %s: %s, %s', counter, policyType, policyArg)
             DetectionPolicyClass = policies.get_policies()[policyType]
             statelessArg = stateless or (counter > 0)
-            detectionPolicy = DetectionPolicyClass(args, dbManager, minusMinutes, stateless=statelessArg, modelLocation=policyArg)
+            detectionPolicy = DetectionPolicyClass(args, dbManager, stateless=statelessArg, modelLocation=policyArg)
             if counter == 0:
                 self.mainPolicy = detectionPolicy
             else:
@@ -47,8 +47,8 @@ class DetectMulti:
         self.modelId = ','.join(modelIDs)
 
 
-    def detect(self, image_spec, checkShifts=False, silent=False):
-        mainDetectionResult = self.mainPolicy.detect(image_spec, checkShifts=True)
+    def detect(self, image_spec, checkShifts=False, silent=False, fetchDiff=None):
+        mainDetectionResult = self.mainPolicy.detect(image_spec, checkShifts=True, fetchDiff=fetchDiff)
         mainFireSegment = mainDetectionResult['fireSegment']
         if not mainFireSegment:
             return mainDetectionResult
@@ -69,7 +69,7 @@ class DetectMulti:
         # ensure all the confirmation policies also detect fire
         for counter, confirmationPolicy in enumerate(self.confirmationPolicies):
             # no need to check shifts as these are already double checking confirmation policies
-            detectionResult = confirmationPolicy.detect(image_spec, checkShifts=False)
+            detectionResult = confirmationPolicy.detect(image_spec, checkShifts=False, fetchDiff=fetchDiff)
             # logging.warning('Multi confirm %s res %s', counter, detectionResult['fireSegment'])
             if not detectionResult['fireSegment']:
                 # return result as is if last policy or no fire detected

@@ -28,7 +28,7 @@ from html.parser import HTMLParser
 import requests
 import re
 import pathlib
-from PIL import Image, ImageMath
+from PIL import Image, ImageMath, ImageStat
 import numpy as np
 import cv2
 
@@ -938,3 +938,21 @@ def rescaleValues(img, ratios):
     ]
     return Image.merge('RGB', bandsImgOut)
 
+
+def brightness(img):
+    medians = ImageStat.Stat(img).median
+    brightness = (medians[0] + medians[1] + medians[2]) / 3
+    return max(brightness, .01) # to avoid div by 0
+
+
+def diffWithChecks(baseImg, earlierImg):
+    brightnessRatio = brightness(baseImg)/brightness(earlierImg)
+    if (brightnessRatio < 0.92) or (brightnessRatio > 1.08): # large diffs hide the smoke
+        logging.warning('Skipping extreme brigthness diff %s', brightnessRatio)
+        return None
+    diffImg = diffSmoothImages(baseImg, earlierImg)
+    extremas = diffImg.getextrema()
+    if (extremas[0][0] == 128 and extremas[0][1] == 128) or (extremas[1][0] == 128 and extremas[1][1] == 128) or (extremas[2][0] == 128 and extremas[2][1] == 128):
+        logging.warning('Skipping no diffs %s', str(extremas))
+        return None
+    return diffImg

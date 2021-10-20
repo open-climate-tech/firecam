@@ -43,14 +43,15 @@ class InceptionV3AndHistoricalThreshold:
     SEQUENCE_LENGTH = 1
     SEQUENCE_SPACING_MIN = None
 
-    def __init__(self, args, dbManager, minusMinutes, stateless, modelLocation=None):
+    def __init__(self, args, dbManager, stateless, modelLocation=None):
         self.dbManager = dbManager
         self.args = args
-        self.minusMinutes = minusMinutes
+        self.minusMinutes = 0
         self.stateless = stateless
         if not modelLocation:
             modelLocation = settings.model_file
         self.modelId = '/'.join(modelLocation.split('/')[-2:]) # the last two dirpath components
+        logging.warning('InceptionV3 init %s', self.modelId)
         if testMode:
             self.model = None
         else:
@@ -229,7 +230,7 @@ class InceptionV3AndHistoricalThreshold:
         return maxFireSegment
 
 
-    def detect(self, image_spec, checkShifts=False, silent=False):
+    def detect(self, image_spec, checkShifts=False, silent=False, fetchDiff=None):
         # This detection policy only uses a single image, so just take the last one
         last_image_spec = image_spec[-1]
         imgPath = last_image_spec['path']
