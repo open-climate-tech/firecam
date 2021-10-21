@@ -980,6 +980,8 @@ def fetchPriorAligned(constants, cameraID, heading, timestamp, baseImgPath, outp
     dt = imgDT - datetime.timedelta(seconds = 60)
     oldImages = img_archive.getArchiveImages(constants['googleServices'], settings, constants['dbManager'], outputDirName,
                     constants['camArchives'], cameraID, heading, dt, dt, 1)
+    if not oldImages:
+        return None
     priorImg = None
     if len(oldImages) >= 1:
         # find the most recent aligned image
