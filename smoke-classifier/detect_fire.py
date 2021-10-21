@@ -219,7 +219,7 @@ def genMovie(notificationsDateDir, constants, cameraID, cameraHeading, timestamp
         oldImages = img_archive.getArchiveImages(constants['googleServices'], settings, constants['dbManager'], tmpDirName,
                                                  constants['camArchives'], cameraID, cameraHeading, startTimeDT, endTimeDT, 1)
         imgSequence = oldImages or []
-        imgSequence = imgSequence[:5] # max 5 total images
+        imgSequence = imgSequence[-5:] # max 5 total images
         imgIDs = []
         mspecPath = os.path.join(tmpDirName, 'mspec.txt')
         mspecFile = open(mspecPath, 'w')
