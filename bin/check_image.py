@@ -23,6 +23,7 @@ from __future__ import division
 from __future__ import print_function
 
 import os, sys
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' # quiet down tensorflow logging (must be done before tf_helper)
 from firecam.lib import settings
 from firecam.lib import collect_args
 from firecam.lib import img_archive

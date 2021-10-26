@@ -130,7 +130,7 @@ def main():
     labels_file = args.labels if args.labels else settings.labels_file
     checkShifts = bool(int(args.checkShifts)) if args.checkShifts else True
     DetectionPolicyClass = policies.get_policies()[settings.detectionPolicy]
-    detectionPolicy = DetectionPolicyClass(args, None, 0, stateless=True, modelLocation=model_file)
+    detectionPolicy = DetectionPolicyClass(args, None, stateless=True, modelLocation=model_file)
 
     smokeDir = os.path.join(args.directory, 'test_set_smoke')
     smoke_image_list = listJpegs(smokeDir)

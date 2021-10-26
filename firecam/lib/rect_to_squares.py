@@ -29,7 +29,7 @@ def getSegmentRanges(fullSize, segmentSize):
 
     Divide the range (0,fullSize) into multiple ranges of size
     segmentSize that are equally spaced apart and have approximately
-    10% overlap (overlapRatio)
+    15% overlap (overlapRatio)
 
     Args:
         fullSize (int): size of the full range (0, fullSize)
@@ -38,7 +38,7 @@ def getSegmentRanges(fullSize, segmentSize):
     Returns:
         (list): list of tuples (start, end) marking each segment's range
     """
-    overlapRatio = 1.1
+    overlapRatio = 1.15
     if fullSize < segmentSize:
         return []  # all segments must be exactly segmentSize
     elif fullSize == segmentSize:
