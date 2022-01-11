@@ -57,7 +57,7 @@ class DetectDiff:
             last_image_spec['path'] = diffImgPath
             base_image_spec = [last_image_spec]
 
-        detectionResult = self.basePolicy.detect(base_image_spec, checkShifts=checkShifts)
+        detectionResult = self.basePolicy.detect(base_image_spec, checkShifts=checkShifts, silent=silent)
         if diffImgPath:
             os.remove(diffImgPath)
         return detectionResult

@@ -41,12 +41,13 @@ def getCameraLocations(dbManager):
     return dbResult
 
 
-def drawCircle(mapImg, centerX, centerY, radius):
+def drawCircle(mapImg, centerX, centerY, radius, opacityRatio):
     mapImgAlpha = mapImg.convert('RGBA')
     circle = Image.new('RGBA', mapImgAlpha.size)
     circleDraw = ImageDraw.Draw(circle)
-    circleDraw.ellipse((centerX - radius, centerY - radius, centerX + radius, centerY + radius), fill=(255,0,0,10))
-    circleDraw.ellipse((centerX - 3, centerY - 3, centerX + 3, centerY + 3), fill=(255,0,0,255))
+    opacity = max(round(opacityRatio*12), 2)
+    circleDraw.ellipse((centerX - radius, centerY - radius, centerX + radius, centerY + radius), fill=(255,0,0,opacity))
+    circleDraw.ellipse((centerX - 3, centerY - 3, centerX + 3, centerY + 3), fill=(255,0,0,64))
     mapImgAlpha.paste(circle, mask=circle)
     del circleDraw
     circle.close()
@@ -76,10 +77,12 @@ def main():
     radiusDegrees = 0.3
 
     for location in locations:
-        logging.warning('loc %s', location)
+        numNearby = len(list(filter(lambda x: ((x['longitude'] - location['longitude'])**2 + (x['latitude'] - location['latitude'])**2) < radiusDegrees**2, locations)))
+        logging.warning('loc %s, %s', location, numNearby)
         centerX = (location['longitude'] - args.leftLongitude)/diffLong*mapImg.size[0]
         centerY = mapImg.size[1] - (location['latitude'] - args.bottomLatitude)/diffLat*mapImg.size[1]
-        mapImg = drawCircle(mapImg, centerX, centerY, radiusDegrees/diffLat*mapImg.size[1])
+        opacityRatio = min(4/numNearby, 1)
+        mapImg = drawCircle(mapImg, centerX, centerY, radiusDegrees/diffLat*mapImg.size[1], opacityRatio)
 
     mapImg.save('amap.jpg', quality=95)
 
