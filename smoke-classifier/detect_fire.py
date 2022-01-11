@@ -56,7 +56,7 @@ import ffmpeg
 from shapely.geometry import Polygon
 
 
-def getNextImage(dbManager, cameras, stateless):
+def getNextImage(dbManager, cameras, stateless, counterName):
     """Gets the next image to check for smoke
 
     Uses a shared counter being updated by all cooperating detection processes
@@ -80,10 +80,7 @@ def getNextImage(dbManager, cameras, stateless):
     elif stateless:
         camera = cameras[int(len(cameras)*random.random())]
     else:
-        if settings.counterName:
-            counterValue = dbManager.incrementCounter(settings.counterName)
-        else:
-            counterValue = dbManager.getNextSourcesCounter()
+        counterValue = dbManager.incrementCounter(counterName)
         index = counterValue % len(cameras)
         camera = cameras[index]
 
@@ -1015,6 +1012,7 @@ def main():
         ["c", "collectPositves", "collect positive segments for training data"],
         ["t", "time", "Time breakdown for processing images"],
         ["r", "restrictType", "Only process images from cameras of given type"],
+        ["d", "counterName", "Name of row in counters table"],
         ["n", "noState", "(optional) no changes to state"],
         ["s", "startTime", "(optional) performs search with modifiedTime > startTime"],
         ["e", "endTime", "(optional) performs search with modifiedTime < endTime"],
@@ -1032,6 +1030,8 @@ def main():
                                     psqlUser=settings.psqlUser, psqlPasswd=settings.psqlPasswd)
     cameras = dbManager.get_sources(activeOnly=True, restrictType=args.restrictType)
     usableRegions = dbManager.get_usable_regions_dict()
+    counterName = args.counterName if args.counterName else 'sources'
+    logging.warning('Counter name %s', counterName)
     startTimeDT = dateutil.parser.parse(args.startTime) if args.startTime else None
     endTimeDT = dateutil.parser.parse(args.endTime) if args.endTime else None
     timeRangeSeconds = None
@@ -1077,9 +1077,9 @@ def main():
                 getArchivedImages(constants, cameras, startTimeDT, timeRangeSeconds)
             if cameraID:
                 heading = img_archive.getHeading(cameraID)
-            fov = 110 # camera horizontal field of view is 110 for most Mobotix cameras
+            fov = img_archive.getCameraFov(cameraID)
         else: # regular (non diff mode), grab image and process
-            (cameraID, heading, timestamp, fov, imgPath) = getNextImage(dbManager, cameras, stateless)
+            (cameraID, heading, timestamp, fov, imgPath) = getNextImage(dbManager, cameras, stateless, counterName)
             classifyImgPath = imgPath
         if not cameraID:
             continue # skip to next camera

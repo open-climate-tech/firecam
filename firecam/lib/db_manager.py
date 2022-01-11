@@ -487,10 +487,6 @@ class DbManager(object):
         return value
 
 
-    def getNextSourcesCounter(self):
-        return self.incrementCounter('sources')
-
-
     def getNotifications(self, filterActiveEmail = False, filterActivePhone = False):
         """Get all the notifications matching optinal active email and phone filters
 
