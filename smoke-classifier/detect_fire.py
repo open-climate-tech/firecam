@@ -1006,6 +1006,26 @@ def fetchDiffImage(constants, cameraID, heading, timestamp, baseImgPath, outputD
     return img_archive.diffWithChecks(imgOrig, priorImg)
 
 
+def getGroupConfig():
+    groupName = goog_helper.getInstanceGroup()
+    if not groupName:
+        return None
+    groupName = groupName.split('/').pop() # get last path component
+    if not settings.detectGroups:
+        return None
+    groupConfig = next(filter(lambda x: x[0] == groupName, settings.detectGroups), None)
+    if not groupConfig:
+        return None
+    groupParams = {
+        'name': groupConfig[0],
+        'numInstances': groupConfig[1],
+        'counterName': groupConfig[2],
+        'restrictType': groupConfig[3],
+    }
+    logging.warning('GroupConfig %s', groupParams)
+    return groupParams
+
+
 def main():
     optArgs = [
         ["b", "heartbeat", "filename used for heartbeating check"],
@@ -1028,10 +1048,29 @@ def main():
     dbManager = db_manager.DbManager(sqliteFile=settings.db_file,
                                     psqlHost=settings.psqlHost, psqlDb=settings.psqlDb,
                                     psqlUser=settings.psqlUser, psqlPasswd=settings.psqlPasswd)
-    cameras = dbManager.get_sources(activeOnly=True, restrictType=args.restrictType)
+    groupConfig = getGroupConfig()
+    if args.restrictType:
+        restrictType = args.restrictType
+    elif groupConfig:
+        restrictType = groupConfig['restrictType']
+    else:
+        restrictType = None
+    logging.warning('RestrictType %s', restrictType)
+
+    cameras = dbManager.get_sources(activeOnly=True, restrictType=restrictType)
+    logging.warning('Found %d cameras', len(cameras))
+    if len(cameras) == 0:
+        return
     usableRegions = dbManager.get_usable_regions_dict()
-    counterName = args.counterName if args.counterName else 'sources'
+
+    if args.counterName:
+        counterName = args.counterName
+    elif groupConfig:
+        counterName = groupConfig['counterName']
+    else:
+        counterName = 'sources'
     logging.warning('Counter name %s', counterName)
+
     startTimeDT = dateutil.parser.parse(args.startTime) if args.startTime else None
     endTimeDT = dateutil.parser.parse(args.endTime) if args.endTime else None
     timeRangeSeconds = None

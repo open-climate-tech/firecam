@@ -18,18 +18,15 @@ Helper functions for google cloud APIs (auth, GCS, pubsub)
 
 import os, sys
 from firecam.lib import settings
-from firecam.lib import img_archive
 
 import re
-import io
 import shutil
 import pathlib
 import logging
 import time, datetime, dateutil.parser
 import json
+import requests
 
-from googleapiclient.discovery import build
-from httplib2 import Http
 from oauth2client import file, client, tools
 
 from google.cloud import storage
@@ -416,3 +413,19 @@ def publish(data):
     topic_path = pubsubClient.topic_path(settings.gcpProject, settings.pubsubTopic)
     future = pubsubClient.publish(topic_path, json.dumps(data).encode('utf-8'))
     return future.result()
+
+
+def getInstanceGroup():
+    """Get the GCP managed instance group that created this VM instance
+
+    Returns:
+        string ID Of the instance group
+    """
+    metadata_server = "http://metadata/computeMetadata/v1/instance/"
+    metadata_flavor = {'Metadata-Flavor' : 'Google'}
+    groupName = None
+    try:
+        groupName = requests.get(metadata_server + 'attributes/created-by', headers = metadata_flavor).text
+    except Exception as e:
+        logging.warning('Error fetching GCP MIG name. %s', str(e))
+    return groupName
