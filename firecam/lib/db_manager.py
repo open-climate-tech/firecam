@@ -242,6 +242,13 @@ class DbManager(object):
             ('Processed', 'INT'),
         ]
 
+        # ignored_views
+        ignored_views_schema = [
+            ('CameraId', 'TEXT'),
+            ('Heading', 'INT'),
+            ('AngularWidth', 'INT'),
+        ]
+
         # archive
         weather_schema = [
             ('CameraId', 'TEXT'),
@@ -268,6 +275,7 @@ class DbManager(object):
             'user_preferences': user_preferences_schema,
             'notifications': notifications_schema,
             'archive': archive_schema,
+            'ignored_views': ignored_views_schema,
             'weather': weather_schema,
         }
 
@@ -417,6 +425,13 @@ class DbManager(object):
                 'endY': endY
             }
         return dictRes
+
+
+    def get_ignoredViews(self):
+        sqlStr = "SELECT * FROM ignored_views"
+        sqlStr += ' order by cameraid'
+        ignoredViewsList = self.query(sqlStr)
+        return ignoredViewsList
 
 
     def add_url(self, url, urlname):

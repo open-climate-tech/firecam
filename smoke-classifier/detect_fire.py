@@ -658,6 +658,22 @@ def checkWeatherInfo(weatherModel, dbManager, cameraID, timestamp, fireSegment, 
     return prediction
 
 
+def isIgnoredView(ignoredViews, cameraID, heading, fov):
+    camMatches = list(filter(lambda x: x['cameraid'] == cameraID, ignoredViews))
+    minViewHeading = (heading - fov / 2) % 360
+    maxViewHeading = (heading + fov / 2) % 360
+    for entry in camMatches:
+        minIgnoreHeading = (entry['heading'] - entry['angularwidth'] / 2) % 360
+        maxIgnoreHeading = (entry['heading'] + entry['angularwidth'] / 2) % 360
+        if minIgnoreHeading < maxIgnoreHeading and minViewHeading < maxViewHeading: # niether view nor ignore straddle 0
+            return maxViewHeading > minIgnoreHeading and minViewHeading < maxIgnoreHeading
+        elif minIgnoreHeading < maxIgnoreHeading or minViewHeading < maxViewHeading: # one of view or ignore doesn't straddle 0, other does
+            return maxViewHeading > minIgnoreHeading or minViewHeading < maxIgnoreHeading
+        else: #both straddle 0
+            return True
+    return False
+
+
 def updateDetectionsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon, sourcePolygons, imgIDs):
     """Add new entry to detections table
 
@@ -816,6 +832,10 @@ def fireDetected(constants, cameraID, cameraHeading, timestamp, fov, imgPath, fi
     notificationsDateDir = goog_helper.dateSubDir(settings.noticationsDir)
     (mapImgGCS, camLatitude, camLongitude) = dbManager.getCameraMapLocation(cameraID)
     (fireHeading, rangeAngle) = getHeadingRange(cameraHeading, fov, imgPath, fireSegment['MinX'], fireSegment['MaxX'])
+    if isIgnoredView(constants['ignoredViews'], cameraID, fireHeading, rangeAngle):
+        logging.warning('Ignored View %s, %s, %s', cameraID, fireHeading, rangeAngle)
+        return
+
     (croppedID, imgIDs, annotatedID) = genAnnotatedImages(notificationsDateDir, constants, cameraID, cameraHeading, timestamp, imgPath, fireSegment)
     if len(imgIDs) < 2:
         return # ignore events without multiple images
@@ -1062,6 +1082,7 @@ def main():
     if len(cameras) == 0:
         return
     usableRegions = dbManager.get_usable_regions_dict()
+    ignoredViews = dbManager.get_ignoredViews()
 
     if args.counterName:
         counterName = args.counterName
@@ -1102,6 +1123,7 @@ def main():
         'camArchives': camArchives,
         'dbManager': dbManager,
         'weatherModel': weatherModel,
+        'ignoredViews': ignoredViews,
     }
 
     numImages = 0
