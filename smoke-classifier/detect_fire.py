@@ -658,7 +658,7 @@ def checkWeatherInfo(weatherModel, dbManager, cameraID, timestamp, fireSegment, 
     return prediction
 
 
-def isIgnoredView(ignoredViews, cameraID, heading, fov):
+def findIgnoredViewHeading(ignoredViews, cameraID, heading, fov):
     camMatches = list(filter(lambda x: x['cameraid'] == cameraID, ignoredViews))
     minViewHeading = (heading - fov / 2) % 360
     maxViewHeading = (heading + fov / 2) % 360
@@ -666,12 +666,12 @@ def isIgnoredView(ignoredViews, cameraID, heading, fov):
         minIgnoreHeading = (entry['heading'] - entry['angularwidth'] / 2) % 360
         maxIgnoreHeading = (entry['heading'] + entry['angularwidth'] / 2) % 360
         if minIgnoreHeading < maxIgnoreHeading and minViewHeading < maxViewHeading: # niether view nor ignore straddle 0
-            return maxViewHeading > minIgnoreHeading and minViewHeading < maxIgnoreHeading
+            return entry['heading'] if (maxViewHeading > minIgnoreHeading and minViewHeading < maxIgnoreHeading) else None
         elif minIgnoreHeading < maxIgnoreHeading or minViewHeading < maxViewHeading: # one of view or ignore doesn't straddle 0, other does
-            return maxViewHeading > minIgnoreHeading or minViewHeading < maxIgnoreHeading
+            return entry['heading'] if (maxViewHeading > minIgnoreHeading or minViewHeading < maxIgnoreHeading) else None
         else: #both straddle 0
-            return True
-    return False
+            return entry['heading']
+    return None
 
 
 def updateDetectionsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon, sourcePolygons, imgIDs):
@@ -832,8 +832,10 @@ def fireDetected(constants, cameraID, cameraHeading, timestamp, fov, imgPath, fi
     notificationsDateDir = goog_helper.dateSubDir(settings.noticationsDir)
     (mapImgGCS, camLatitude, camLongitude) = dbManager.getCameraMapLocation(cameraID)
     (fireHeading, rangeAngle) = getHeadingRange(cameraHeading, fov, imgPath, fireSegment['MinX'], fireSegment['MaxX'])
-    if isIgnoredView(constants['ignoredViews'], cameraID, fireHeading, rangeAngle):
-        logging.warning('Ignored View %s, %s, %s', cameraID, fireHeading, rangeAngle)
+    ignoredHeading = findIgnoredViewHeading(constants['ignoredViews'], cameraID, fireHeading, rangeAngle)
+    if ignoredHeading != None:
+        logging.warning('Ignored View %s, %s, %s, %s', cameraID, fireHeading, rangeAngle, ignoredHeading)
+        dbManager.incrementIgnoreCounter(cameraID, ignoredHeading)
         return
 
     (croppedID, imgIDs, annotatedID) = genAnnotatedImages(notificationsDateDir, constants, cameraID, cameraHeading, timestamp, imgPath, fireSegment)

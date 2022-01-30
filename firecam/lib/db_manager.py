@@ -247,6 +247,8 @@ class DbManager(object):
             ('CameraId', 'TEXT'),
             ('Heading', 'INT'),
             ('AngularWidth', 'INT'),
+            ('CountIgnored', 'INT'),
+            ('UpdateTimestamp', 'INT'),
         ]
 
         # archive
@@ -525,6 +527,7 @@ class DbManager(object):
         dbResult = self.query(sqlStr)
         return dbResult
 
+
     def getCameraMapLocation(self, cameraID):
         """Return the lat, long, and map surrounding the given camera by check SQL DB
 
@@ -542,3 +545,29 @@ class DbManager(object):
             logging.error('Did not find camera map %s', cameraID)
             return None
         return (dbResult[0]['mapfile'], dbResult[0]['latitude'], dbResult[0]['longitude'])
+
+
+    def incrementIgnoreCounter(self, cameraID, heading):
+        """Increment the countIgnored column in IgnoredViews table for given camera & heading
+
+        Uses a read modify write pattern but doesn't handle conflicts due to rarity of these updates
+
+        Args:
+            cameraID (str): name of the camera
+            heading (int): heading in ignored_views table
+
+        Returns:
+        """
+        sqlTemplate = "SELECT countignored from ignored_views where cameraid='%s' and heading=%s"
+        sqlStr = sqlTemplate % (cameraID, heading)
+        # print(sqlStr)
+        dbResult = self.query(sqlStr)
+        if len(dbResult) == 0:
+            logging.error('Unable to find ignored_views entry')
+            return
+        countIgnored = dbResult[0]['countignored'] or 0
+        timeNow = int(time.time())
+        sqlTemplate = "UPDATE ignored_views set countignored=%d, updatetimestamp=%d where cameraid='%s' and heading=%s"
+        sqlStr = sqlTemplate % (countIgnored+1, timeNow, cameraID, heading)
+        # print(sqlStr)
+        self.execute(sqlStr)
