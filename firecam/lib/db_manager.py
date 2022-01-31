@@ -431,7 +431,7 @@ class DbManager(object):
 
     def get_ignoredViews(self):
         sqlStr = "SELECT * FROM ignored_views"
-        sqlStr += ' order by cameraid'
+        sqlStr += ' order by countignored desc, updatetimestamp'
         ignoredViewsList = self.query(sqlStr)
         return ignoredViewsList
 

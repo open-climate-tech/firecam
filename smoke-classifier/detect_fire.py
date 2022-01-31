@@ -294,37 +294,6 @@ def genAnnotatedImages(notificationsDateDir, constants, cameraID, cameraHeading,
     return (movieID, imgIDs, annotatedID)
 
 
-def getHeadingRange(centralHeading, fov, imgPath, minX, maxX):
-    """Return heading (degrees 0 = North) and range of uncertainty of heading
-       for the potential fire direction from given camera
-
-    Args:
-        centralHeading (int): direction camera is facing
-        imgPath: filepath of the original image
-        minX (int): fire segment minX
-        maxX (int): fire segment maxX
-
-    Returns:
-        Tuple (int, int): heading and uncertainty of heading
-    """
-    degreesInView = fov
-    degreesAlignmentError = 10 # camera directions are not perfectly calibrated to north pole
-
-    # get horizontal pixel width
-    img = Image.open(imgPath)
-    imgSizeX = img.size[0]
-    img.close()
-
-    # calculate heading
-    centerX = (minX + maxX) / 2
-    angleFromCenter = centerX / imgSizeX * degreesInView - degreesInView/2
-    heading = angleFromCenter + centralHeading
-
-    # calculate rangeAngle
-    range = (maxX - minX) / imgSizeX * degreesInView + degreesAlignmentError
-    return (heading, range)
-
-
 def drawPolyPixels(mapImg, coordsPixels, fillColor):
     """Draw translucent polygon on given map image with given pixel coordinates and fill color
 
@@ -658,22 +627,6 @@ def checkWeatherInfo(weatherModel, dbManager, cameraID, timestamp, fireSegment, 
     return prediction
 
 
-def findIgnoredViewHeading(ignoredViews, cameraID, heading, fov):
-    camMatches = list(filter(lambda x: x['cameraid'] == cameraID, ignoredViews))
-    minViewHeading = (heading - fov / 2) % 360
-    maxViewHeading = (heading + fov / 2) % 360
-    for entry in camMatches:
-        minIgnoreHeading = (entry['heading'] - entry['angularwidth'] / 2) % 360
-        maxIgnoreHeading = (entry['heading'] + entry['angularwidth'] / 2) % 360
-        if minIgnoreHeading < maxIgnoreHeading and minViewHeading < maxViewHeading: # niether view nor ignore straddle 0
-            return entry['heading'] if (maxViewHeading > minIgnoreHeading and minViewHeading < maxIgnoreHeading) else None
-        elif minIgnoreHeading < maxIgnoreHeading or minViewHeading < maxViewHeading: # one of view or ignore doesn't straddle 0, other does
-            return entry['heading'] if (maxViewHeading > minIgnoreHeading or minViewHeading < maxIgnoreHeading) else None
-        else: #both straddle 0
-            return entry['heading']
-    return None
-
-
 def updateDetectionsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon, sourcePolygons, imgIDs):
     """Add new entry to detections table
 
@@ -831,8 +784,15 @@ def fireDetected(constants, cameraID, cameraHeading, timestamp, fov, imgPath, fi
     # copy annotated image to publicly accessible settings.noticationsDir
     notificationsDateDir = goog_helper.dateSubDir(settings.noticationsDir)
     (mapImgGCS, camLatitude, camLongitude) = dbManager.getCameraMapLocation(cameraID)
-    (fireHeading, rangeAngle) = getHeadingRange(cameraHeading, fov, imgPath, fireSegment['MinX'], fireSegment['MaxX'])
-    ignoredHeading = findIgnoredViewHeading(constants['ignoredViews'], cameraID, fireHeading, rangeAngle)
+
+    # get horizontal pixel width
+    img = Image.open(imgPath)
+    imgSizeX = img.size[0]
+    img.close()
+
+    # find angular heading, and check if it should be ignored due to frequent false positives
+    (fireHeading, rangeAngle) = img_archive.getHeadingRange(cameraHeading, fov, fireSegment['MinX'], fireSegment['MaxX'], imgSizeX)
+    ignoredHeading = img_archive.findIgnoredViewHeading(constants['ignoredViews'], cameraID, fireHeading, rangeAngle)
     if ignoredHeading != None:
         logging.warning('Ignored View %s, %s, %s, %s', cameraID, fireHeading, rangeAngle, ignoredHeading)
         dbManager.incrementIgnoreCounter(cameraID, ignoredHeading)

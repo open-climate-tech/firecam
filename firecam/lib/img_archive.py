@@ -40,6 +40,10 @@ def getCameraFov(cameraID):
     return 110 # camera horizontal field of view is 110 for most Mobotix cameras
 
 
+def getCameraSizeX(cameraID):
+    return 3072 # camera horizontal pixel size. Most Mobotix are 3072 x 2048
+
+
 def fetchImageAndMeta(dbManager, cameraID, cameraUrl, imgDir):
     """Fetch the image file and metadata for given camera
 
@@ -961,3 +965,82 @@ def diffWithChecks(baseImg, earlierImg):
         logging.warning('Skipping no diffs %s', str(extremas))
         return None
     return diffImg
+
+
+def getHeadingRange(centralHeading, fov, minX, maxX, imgSizeX):
+    """Return heading (degrees 0 = North) and range of uncertainty of heading
+       for the potential fire direction from given camera
+
+    Args:
+        centralHeading (int): direction camera is facing
+        fov (int): degrees in field of view (horizontal)
+        minX (int): fire segment minX
+        maxX (int): fire segment maxX
+        imgSizeX (int): image size in pixels in X (horizontal) dimension
+
+    Returns:
+        Tuple (int, int): heading and uncertainty of heading
+    """
+    degreesInView = fov
+    degreesAlignmentError = 10 # camera directions are not perfectly calibrated to north pole
+
+    # calculate heading
+    centerX = (minX + maxX) / 2
+    angleFromCenter = centerX / imgSizeX * degreesInView - degreesInView/2
+    heading = (angleFromCenter + centralHeading) % 360
+
+    # calculate rangeAngle
+    range = (maxX - minX) / imgSizeX * degreesInView + degreesAlignmentError
+    return (heading, range)
+
+
+def findIgnoredView(ignoredViews, cameraID, heading, fov):
+    camMatches = list(filter(lambda x: x['cameraid'] == cameraID, ignoredViews))
+    minViewHeading = (heading - fov / 2) % 360
+    maxViewHeading = (heading + fov / 2) % 360
+    for entry in camMatches:
+        minIgnoreHeading = (entry['heading'] - entry['angularwidth'] / 2) % 360
+        maxIgnoreHeading = (entry['heading'] + entry['angularwidth'] / 2) % 360
+        if minIgnoreHeading < maxIgnoreHeading and minViewHeading < maxViewHeading: # niether view nor ignore straddle 0
+            if (maxViewHeading > minIgnoreHeading and minViewHeading < maxIgnoreHeading):
+                return entry
+        elif minIgnoreHeading < maxIgnoreHeading or minViewHeading < maxViewHeading: # one of view or ignore doesn't straddle 0, other does
+            if (maxViewHeading > minIgnoreHeading or minViewHeading < maxIgnoreHeading):
+                return entry
+        else: #both straddle 0
+            return entry
+    return None
+
+
+def findIgnoredViewHeading(ignoredViews, cameraID, heading, fov):
+    entry = findIgnoredView(ignoredViews, cameraID, heading, fov)
+    if entry:
+        return entry['heading']
+    return None
+
+
+def unionAngleRanges(heading1, range1, heading2, range2):
+    # assume overlap exists, will be verified later
+    assert range1 > 0
+    assert range2 > 0
+    rotationBase = (heading1 - range1 / 2) % 360
+    # rotate everything by rotationBase so angle1 goes from 0 -> range1 to simplify union logic
+    maxHeading1 = range1
+    minHeading2 = (heading2 - range2 / 2 - rotationBase) % 360
+    maxHeading2 = (heading2 + range2 / 2 - rotationBase) % 360
+    if minHeading2 < maxHeading2:  # angle2 doesn't straddle 0
+        assert minHeading2 < maxHeading1
+        minUnion = 0
+        maxUnion = max(maxHeading1, maxHeading2)
+        heading = round(maxUnion / 2)
+        range = maxUnion
+    else: # angle2 straddles 0
+        minUnion = minHeading2
+        maxUnion = max(maxHeading1, maxHeading2)
+        range = maxUnion + 360 - minUnion
+        heading = round(minUnion + range / 2)
+    # rotate back by rotationBase to get back to original heading basis
+    assert range > 0
+    heading = int(heading + rotationBase) % 360
+    range = int(min(range, 360))
+    return (heading, range)
