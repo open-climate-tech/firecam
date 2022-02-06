@@ -80,6 +80,8 @@ def patchCameraId(cameraID):
         cameraID = 'm' + cameraID
     elif cameraID.startswith('so-'):
         cameraID = 'sojr-' + cameraID[3:]
+    elif cameraID.startswith('sp-'):
+        cameraID = 'stgo-' + cameraID[3:]
     return cameraID
 
 
@@ -134,7 +136,11 @@ def main():
                         sourcePolygonsArr = json.loads(sourcePolygons)
                         numPolys = len(sourcePolygonsArr)
                 cameraID = patchCameraId(cameraID)
-                (mapImgGCS, camLatitude, camLongitude) = dbManager.getCameraMapLocation(cameraID)
+                camInfo = dbManager.getCameraMapLocation(cameraID)
+                if camInfo == None:
+                    logging.warning('Skipping row with camera without meta %s', cameraID)
+                    continue
+                (mapImgGCS, camLatitude, camLongitude) = camInfo
             else:
                 if mode == 'camdir':
                     [cameraID, isoTime, direction] = csvRow[:3]

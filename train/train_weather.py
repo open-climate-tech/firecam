@@ -40,16 +40,19 @@ def main():
     ]
     optArgs = [
         ["m", "maxEpochs", "(optional) max number of epochs (default 1000)", int],
+        ["t", "trainPercentage", "percentage of data to use for training vs. validation (default 70)", int]
     ]
 
     args = collect_args.collectArgs(reqArgs, optionalArgs=optArgs, parentParsers=[goog_helper.getParentParser()])
 
     max_epochs = args.maxEpochs if args.maxEpochs else 1000
+    trainPercentage = int(args.trainPercentage) if args.trainPercentage else 70
+    trainRatio = trainPercentage / 100
 
     (all_features, all_labels) = weather.readWeatherCsv(args.inputCsv)
 
     # train_size=len(raw_dataset)
-    train_size = int(len(all_features)*.8)
+    train_size = int(len(all_features)*trainRatio)
     val_size = len(all_features) - train_size
 
     train_features = all_features.head(train_size)
