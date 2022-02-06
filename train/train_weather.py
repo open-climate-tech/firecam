@@ -39,12 +39,14 @@ def main():
         ["o", "outputDir", "directory to write out checkpoints"],
     ]
     optArgs = [
+        ["l", "levels", "(optional) number of levels (default 1)", int],
         ["m", "maxEpochs", "(optional) max number of epochs (default 1000)", int],
         ["t", "trainPercentage", "percentage of data to use for training vs. validation (default 70)", int]
     ]
 
     args = collect_args.collectArgs(reqArgs, optionalArgs=optArgs, parentParsers=[goog_helper.getParentParser()])
 
+    numLevels = int(args.levels) if args.levels else 1
     max_epochs = args.maxEpochs if args.maxEpochs else 1000
     trainPercentage = int(args.trainPercentage) if args.trainPercentage else 70
     trainRatio = trainPercentage / 100
@@ -61,39 +63,42 @@ def main():
     val_features = all_features.tail(val_size)
     val_labels = np.array(all_labels.tail(val_size))
 
-    # l1
-    weather_model = keras.Sequential([layers.Dense(1,input_dim=20,activation='sigmoid')])
-    # l2
-    # weather_model = tf.keras.Sequential([
-    #     layers.Dense(8,input_dim=20,activation='relu'),
-    #     layers.Dense(1,input_dim=8,activation='sigmoid')
-    #     ])
-    # l3
-    # weather_model = tf.keras.Sequential([
-    #     layers.Dense(10,input_dim=20,activation='relu'),
-    #     layers.Dropout(0.1),
-    #     layers.Dense(4,input_dim=10,activation='relu'),
-    #     layers.Dense(1,input_dim=4,activation='sigmoid')
-    #     ])
-    # l4
-    # weather_model = tf.keras.Sequential([
-    #     layers.Dense(12,input_dim=20,activation='relu'),
-    #     layers.Dropout(0.2),
-    #     layers.Dense(8,input_dim=12,activation='relu'),
-    #     layers.Dropout(0.1),
-    #     layers.Dense(4,input_dim=8,activation='relu'),
-    #     layers.Dense(1,input_dim=4,activation='sigmoid')
-    #     ])
-    # l5
-    # weather_model = tf.keras.Sequential([
-    #     layers.Dense(14,input_dim=20,activation='relu'),
-    #     layers.Dropout(0.2),
-    #     layers.Dense(10,input_dim=14,activation='relu'),
-    #     layers.Dropout(0.1),
-    #     layers.Dense(6,input_dim=10,activation='relu'),
-    #     layers.Dense(4,input_dim=6,activation='relu'),
-    #     layers.Dense(1,input_dim=4,activation='sigmoid')
-    #     ])
+    if numLevels == 1:
+        weather_model = keras.Sequential([layers.Dense(1,input_dim=20,activation='sigmoid')])
+    elif numLevels == 2:
+        weather_model = tf.keras.Sequential([
+            layers.Dense(8,input_dim=20,activation='relu'),
+            layers.Dense(1,input_dim=8,activation='sigmoid')
+            ])
+    elif numLevels == 3:
+        weather_model = tf.keras.Sequential([
+            layers.Dense(10,input_dim=20,activation='relu'),
+            layers.Dropout(0.1),
+            layers.Dense(4,input_dim=10,activation='relu'),
+            layers.Dense(1,input_dim=4,activation='sigmoid')
+            ])
+    elif numLevels == 4:
+        weather_model = tf.keras.Sequential([
+            layers.Dense(12,input_dim=20,activation='relu'),
+            layers.Dropout(0.2),
+            layers.Dense(8,input_dim=12,activation='relu'),
+            layers.Dropout(0.1),
+            layers.Dense(4,input_dim=8,activation='relu'),
+            layers.Dense(1,input_dim=4,activation='sigmoid')
+            ])
+    elif numLevels == 5:
+        weather_model = tf.keras.Sequential([
+            layers.Dense(14,input_dim=20,activation='relu'),
+            layers.Dropout(0.2),
+            layers.Dense(10,input_dim=14,activation='relu'),
+            layers.Dropout(0.1),
+            layers.Dense(6,input_dim=10,activation='relu'),
+            layers.Dense(4,input_dim=6,activation='relu'),
+            layers.Dense(1,input_dim=4,activation='sigmoid')
+            ])
+    else:
+        logging.error('Unsupported levels %s', numLevels)
+        exit(1)
     weather_model.compile(loss = keras.losses.BinaryCrossentropy(), optimizer = tf.optimizers.Adam(), metrics=['accuracy'])
 
     callback = keras.callbacks.ModelCheckpoint(filepath=os.path.join(args.outputDir, 'model_{epoch}'),
