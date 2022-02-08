@@ -1078,6 +1078,7 @@ def main():
     camArchives = img_archive.getHpwrenCameraArchives(settings.hpwrenArchives)
     DetectionPolicyClass = policies.get_policies()[settings.detectionPolicy]
     detectionPolicy = DetectionPolicyClass(args, dbManager, stateless=stateless)
+    logging.warning('weatherModel %s threshold %s', settings.weather_model, settings.weatherThreshold)
     weatherModel = tf_helper.loadModel(settings.weather_model)
     constants = { # dictionary of constants to reduce parameters in various functions
         'args': args,
