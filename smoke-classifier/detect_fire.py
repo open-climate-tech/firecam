@@ -279,8 +279,8 @@ def genAnnotatedImages(notificationsDateDir, constants, cameraID, cameraHeading,
     x1 = fireSegment['MaxX'] if 'MaxX' in fireSegment else img.size[0]
     y1 = fireSegment['MaxY'] if 'MaxY' in fireSegment else img.size[0]
 
-    (cropX0, cropX1) = rect_to_squares.getRangeFromCenter((x0 + x1)/2, 800, 0, img.size[0])
-    (cropY0, cropY1) = rect_to_squares.getRangeFromCenter((y0 + y1)/2, 600, 0, img.size[1])
+    (cropX0, cropX1) = rect_to_squares.getRangeFromCenter((x0 + x1)/2, 700, 0, img.size[0])
+    (cropY0, cropY1) = rect_to_squares.getRangeFromCenter((y0 + y1)/2, 500, 0, img.size[1])
     cropCoords = (cropX0, cropY0, cropX1, cropY1)
     fireBoxCoords = (x0 - cropX0, y0 - cropY0, x1 - cropX0, y1 - cropY0)
     (movieID, imgIDs) = genMovie(notificationsDateDir, constants, cameraID, cameraHeading, timestamp, imgPath, cropCoords, fireBoxCoords)
@@ -767,6 +767,10 @@ def publishAlert(cameraID, weatherScore):
     return (weatherScore > settings.weatherThreshold) and not isProto(cameraID)
 
 
+def getUrlForFile(fileID):
+    return fileID.replace('gs://', 'https://storage.googleapis.com/')
+
+
 def fireDetected(constants, cameraID, cameraHeading, timestamp, fov, imgPath, fireSegment):
     """Update Detections DB and send alerts about given fire through all channels (pubsub, email, and sms)
 
@@ -817,9 +821,9 @@ def fireDetected(constants, cameraID, cameraHeading, timestamp, fov, imgPath, fi
 
     mapID = goog_helper.copyFile(mapPath, notificationsDateDir)
     # convert fileIDs into URLs usable by web UI
-    croppedUrl = croppedID.replace('gs://', 'https://storage.googleapis.com/')
-    annotatedUrl = annotatedID.replace('gs://', 'https://storage.googleapis.com/')
-    mapUrl = mapID.replace('gs://', 'https://storage.googleapis.com/')
+    croppedUrl = getUrlForFile(croppedID)
+    annotatedUrl = getUrlForFile(annotatedID)
+    mapUrl = getUrlForFile(mapID)
 
     updateDetectionsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon, sourcePolygons, imgIDs)
     if publishAlert(cameraID, weatherScore):
