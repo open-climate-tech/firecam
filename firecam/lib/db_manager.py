@@ -401,7 +401,7 @@ class DbManager(object):
     def get_sources(self, activeOnly=True, restrictType=None):
         constraints = []
         if activeOnly:
-            constraints.append('dormant != 1')
+            constraints.append('dormant = 0')
         if restrictType:
             constraints.append("type = '%s'" % restrictType) # PSQL wants single quotes
         sqlStr = "SELECT * FROM %s" % self.sources_table_name
