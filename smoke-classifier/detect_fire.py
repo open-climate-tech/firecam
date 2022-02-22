@@ -256,6 +256,12 @@ def genMovie(notificationsDateDir, constants, cameraID, cameraHeading, timestamp
         )
         movieID = goog_helper.copyFile(moviePath, notificationsDateDir)
         os.remove(moviePath)
+
+        # save mspec for debugging
+        newMspecPath = mspecPath + '_' + cameraID
+        os.rename(mspecPath, newMspecPath)
+        goog_helper.copyFile(newMspecPath, notificationsDateDir)
+
         return (movieID, imgIDs)
 
 
@@ -279,8 +285,8 @@ def genAnnotatedImages(notificationsDateDir, constants, cameraID, cameraHeading,
     x1 = fireSegment['MaxX'] if 'MaxX' in fireSegment else img.size[0]
     y1 = fireSegment['MaxY'] if 'MaxY' in fireSegment else img.size[0]
 
-    (cropX0, cropX1) = rect_to_squares.getRangeFromCenter((x0 + x1)/2, 700, 0, img.size[0])
-    (cropY0, cropY1) = rect_to_squares.getRangeFromCenter((y0 + y1)/2, 500, 0, img.size[1])
+    (cropX0, cropX1) = rect_to_squares.getRangeFromCenter(round((x0 + x1)/2), 640, 0, img.size[0])
+    (cropY0, cropY1) = rect_to_squares.getRangeFromCenter(round((y0 + y1)/2), 460, 0, img.size[1])
     cropCoords = (cropX0, cropY0, cropX1, cropY1)
     fireBoxCoords = (x0 - cropX0, y0 - cropY0, x1 - cropX0, y1 - cropY0)
     (movieID, imgIDs) = genMovie(notificationsDateDir, constants, cameraID, cameraHeading, timestamp, imgPath, cropCoords, fireBoxCoords)
