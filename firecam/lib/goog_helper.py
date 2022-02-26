@@ -319,7 +319,8 @@ def downloadBucketDir(bucketName, dirID, localDirPath):
 
 
 def dateSubDir(parentPath):
-    """Return a directory path under given parentPath with todays date as subdir
+    """Return a directory path under given parentPath with todays date as subdir.
+       Also add a subdir level for year
 
     Args:
         parentPath (str): path under which to add date subdir
@@ -327,7 +328,7 @@ def dateSubDir(parentPath):
     Returns:
         directory path
     """
-    dateSubdir = datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d')
+    dateSubdir = datetime.datetime.fromtimestamp(time.time()).strftime('%Y/%Y-%m-%d')
     if parentPath[-1] == '/':
         fullPath = parentPath + dateSubdir
     else:
