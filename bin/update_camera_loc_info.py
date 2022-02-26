@@ -30,6 +30,7 @@ import logging
 import urllib.parse
 from urllib.request import urlretrieve
 import googlemaps
+import re
 
 def getCameraLocations(dbManager):
     sqlStr = "select locationID, latitude, longitude from cameras where locationID !='' "
@@ -54,6 +55,29 @@ def updateCameraCity(dbManager, locationID, cityName):
     sqlStr = sqlTemplate % (cityName, locationID)
     # print('sqls', sqlStr)
     dbManager.execute(sqlStr)
+
+
+def cityNameFromComp(geoCodeComp):
+    cityInfo = list(filter(lambda x: 'locality' in x['types'], geoCodeComp['address_components']))
+    if len(cityInfo) == 0:
+        cityInfo = list(filter(lambda x: 'political' in x['types'], geoCodeComp['address_components']))
+    if len(cityInfo) == 0:
+        cityInfo = list(filter(lambda x: 'administrative_area_level_2' in x['types'], geoCodeComp['address_components']))
+    if len(cityInfo) == 0:
+        cityInfo = [geoCodeComp['address_components'][0]]
+    if not 'locality' in cityInfo[0]['types']:
+        logging.warning('using type %s', cityInfo[0]['types'])
+    cityName = cityInfo[0]['long_name']
+    return cityName
+
+
+def cityNameFromCode(geoCodeRes):
+    cityName = ''
+    for geoCodeComp in geoCodeRes:
+        cityName = cityNameFromComp(geoCodeComp)
+        if cityName and re.findall('^[A-Za-z ]+$', cityName): # contains only alphabet and spaces
+            break
+    return cityName
 
 
 def main():
@@ -92,16 +116,10 @@ def main():
             updateCameraMap(dbManager, location['locationid'], mapFileGS)
         elif args.mode == 'city':
             geoCodeRes = gmaps.reverse_geocode((location['latitude'], location['longitude']))
-            cityInfo = list(filter(lambda x: 'locality' in x['types'], geoCodeRes[0]['address_components']))
-            if len(cityInfo) == 0:
-                cityInfo = list(filter(lambda x: 'political' in x['types'], geoCodeRes[0]['address_components']))
-            if len(cityInfo) == 0:
-                cityInfo = list(filter(lambda x: 'administrative_area_level_2' in x['types'], geoCodeRes[0]['address_components']))
-            if len(cityInfo) == 0:
-                cityInfo = [geoCodeRes[0]['address_components'][0]]
-            if not 'locality' in cityInfo[0]['types']:
-                logging.warning('using type %s', cityInfo[0]['types'])
-            cityName = cityInfo[0]['long_name']
+            for geoCodeComp in geoCodeRes:
+                cityName = cityNameFromComp(geoCodeComp)
+                if re.findall('^[A-Za-z ]+$', cityName): # contains only alphabet and spaces
+                    break
             logging.warning('city for %s is %s', location['locationid'], cityName)
             updateCameraCity(dbManager, location['locationid'], cityName)
 
