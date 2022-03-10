@@ -35,6 +35,7 @@ from firecam.lib import db_manager
 from firecam.lib import email_helper
 from firecam.lib import sms_helper
 from firecam.lib import weather
+from firecam.lib import rx_burns
 from firecam.detection_policies import policies
 
 import logging
@@ -321,30 +322,6 @@ def drawPolyPixels(mapImg, coordsPixels, fillColor):
     return mapImgAlpha.convert('RGB')
 
 
-def convertLatLongToPixels(mapImg, leftLongitude, rightLongitude, topLatitude, bottomLatitude, latLong):
-    """Convert given lat/long coordinates into pixel X/Y coordinates given map and its borders
-
-    Args:
-        mapImg (Image): map image
-        left/right/top/bottom: borders of map
-        latlong (list): (lat, long)
-
-    Returns:
-        (x, y) pixel values of cooressponding pixel in image
-    """
-    latitude = min(max(latLong[0], bottomLatitude), topLatitude)
-    longitude = min(max(latLong[1], leftLongitude), rightLongitude)
-
-    diffLat = topLatitude - bottomLatitude
-    diffLong = rightLongitude - leftLongitude
-
-    pixelX = (longitude - leftLongitude)/diffLong*mapImg.size[0]
-    pixelX = max(min(pixelX, mapImg.size[0] - 1), 0)
-    pixelY = mapImg.size[1] - (latitude - bottomLatitude)/diffLat*mapImg.size[1]
-    pixelY = max(min(pixelY, mapImg.size[1] - 1), 0)
-    return (pixelX, pixelY)
-
-
 def drawPolyLatLong(mapImg, leftLongitude, rightLongitude, topLatitude, bottomLatitude, coords, fillColor):
     """Draw translucent polygon on given map image with given lat/long coordinates and fill color
 
@@ -360,7 +337,7 @@ def drawPolyLatLong(mapImg, leftLongitude, rightLongitude, topLatitude, bottomLa
     coordsPixels = []
     # logging.warning('coords latLong %s', str(coords))
     for point in coords:
-        pixels = convertLatLongToPixels(mapImg, leftLongitude, rightLongitude, topLatitude, bottomLatitude, point)
+        pixels = img_archive.convertLatLongToPixels(mapImg, leftLongitude, rightLongitude, topLatitude, bottomLatitude, point)
         coordsPixels.append(pixels)
     # logging.warning('coords pixels %s', str(coordsPixels))
     return drawPolyPixels(mapImg, coordsPixels, fillColor)
@@ -383,14 +360,14 @@ def cropCentered(mapImg, leftLongitude, rightLongitude, topLatitude, bottomLatit
         Cropped Image object
     """
     centerLatLong = getCentroid(polygonCoords)
-    centerXY = convertLatLongToPixels(mapImg, leftLongitude, rightLongitude, topLatitude, bottomLatitude, centerLatLong)
+    centerXY = img_archive.convertLatLongToPixels(mapImg, leftLongitude, rightLongitude, topLatitude, bottomLatitude, centerLatLong)
     centerX = min(max(centerXY[0], mapImg.size[0]/4), mapImg.size[0]*3/4)
     centerY = min(max(centerXY[1], mapImg.size[1]/4), mapImg.size[1]*3/4)
     coords = (centerX - mapImg.size[0]/4, centerY - mapImg.size[1]/4, centerX + mapImg.size[0]/4, centerY + mapImg.size[1]/4)
     return mapImg.crop(coords)
 
 
-def genAnnotatedMap(mapImgGCS, camLatitude, camLongitude, imgPath, polygon, sourcePolygons):
+def genAnnotatedMap(mapImgGCS, camLatitude, camLongitude, imgPath, polygon, sourcePolygons, rxBurns):
     """Generate annotated map highlighting potential fire area
 
     Args:
@@ -427,6 +404,11 @@ def genAnnotatedMap(mapImgGCS, camLatitude, camLongitude, imgPath, polygon, sour
     if len(sourcePolygons) > 1:
         lightBlue = (0,0,255, 75)
         mapImg = drawPolyLatLong(mapImg, leftLongitude, rightLongitude, topLatitude, bottomLatitude, polygon, lightBlue)
+    # draw any prescribed burns
+    for burn in rxBurns:
+        if not img_archive.pointInArea(leftLongitude, rightLongitude, topLatitude, bottomLatitude, (burn['latitude'], burn['longitude'])):
+            continue
+        mapImg = rx_burns.drawRxBurn(mapImg, leftLongitude, rightLongitude, topLatitude, bottomLatitude, (burn['latitude'], burn['longitude']))
     # crop to smaller map centered around fire area
     mapImgCropped = cropCentered(mapImg, leftLongitude, rightLongitude, topLatitude, bottomLatitude, polygon)
     mapCroppedPath = filePathParts[0] + '_map.jpg'
@@ -823,7 +805,8 @@ def fireDetected(constants, cameraID, cameraHeading, timestamp, fov, imgPath, fi
     weatherScore = checkWeatherInfo(weatherModel, dbManager, cameraID, timestamp, fireSegment, polygon, sourcePolygons, (camLatitude, camLongitude))
     fireSegment['weatherScore'] = round(weatherScore, 4)
 
-    mapPath = genAnnotatedMap(mapImgGCS, camLatitude, camLongitude, imgPath, polygon, sourcePolygons)
+    rxBurns = rx_burns.getCurrentBurns(dbManager)
+    mapPath = genAnnotatedMap(mapImgGCS, camLatitude, camLongitude, imgPath, polygon, sourcePolygons, rxBurns)
 
     mapID = goog_helper.copyFile(mapPath, notificationsDateDir)
     # convert fileIDs into URLs usable by web UI

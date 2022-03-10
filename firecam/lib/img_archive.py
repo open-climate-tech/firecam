@@ -1044,3 +1044,33 @@ def unionAngleRanges(heading1, range1, heading2, range2):
     heading = int(heading + rotationBase) % 360
     range = int(min(range, 360))
     return (heading, range)
+
+
+def pointInArea(leftLongitude, rightLongitude, topLatitude, bottomLatitude, latLong):
+    vertexInRegion = (latLong[0] >= bottomLatitude) and (latLong[0] <= topLatitude) and \
+                        (latLong[1] >= leftLongitude) and (latLong[1] <= rightLongitude)
+    return vertexInRegion
+
+
+def convertLatLongToPixels(mapImg, leftLongitude, rightLongitude, topLatitude, bottomLatitude, latLong):
+    """Convert given lat/long coordinates into pixel X/Y coordinates given map and its borders
+
+    Args:
+        mapImg (Image): map image
+        left/right/top/bottom: borders of map
+        latlong (list): (lat, long)
+
+    Returns:
+        (x, y) pixel values of cooressponding pixel in image
+    """
+    latitude = min(max(latLong[0], bottomLatitude), topLatitude)
+    longitude = min(max(latLong[1], leftLongitude), rightLongitude)
+
+    diffLat = topLatitude - bottomLatitude
+    diffLong = rightLongitude - leftLongitude
+
+    pixelX = (longitude - leftLongitude)/diffLong*mapImg.size[0]
+    pixelX = max(min(pixelX, mapImg.size[0] - 1), 0)
+    pixelY = mapImg.size[1] - (latitude - bottomLatitude)/diffLat*mapImg.size[1]
+    pixelY = max(min(pixelY, mapImg.size[1] - 1), 0)
+    return (pixelX, pixelY)

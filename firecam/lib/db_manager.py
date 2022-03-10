@@ -251,7 +251,7 @@ class DbManager(object):
             ('UpdateTimestamp', 'INT'),
         ]
 
-        # archive
+        # weather
         weather_schema = [
             ('CameraId', 'TEXT'),
             ('Timestamp', 'INT'),
@@ -259,6 +259,13 @@ class DbManager(object):
             ('Source', 'TEXT'),
             ('WeatherCamera', 'TEXT'),
             ('SourceCamera', 'TEXT'),
+        ]
+
+        # rx_burns
+        rx_burns_schema = [
+            ('Source', 'TEXT'),
+            ('Timestamp', 'INT'),
+            ('Info', 'TEXT'),
         ]
 
         self.tables = {
@@ -279,6 +286,7 @@ class DbManager(object):
             'archive': archive_schema,
             'ignored_views': ignored_views_schema,
             'weather': weather_schema,
+            'rx_burns': rx_burns_schema,
         }
 
         self.sources_table_name = 'sources'
