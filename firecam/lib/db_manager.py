@@ -411,7 +411,8 @@ class DbManager(object):
         if activeOnly:
             constraints.append('dormant = 0')
         if restrictType:
-            constraints.append("type = '%s'" % restrictType) # PSQL wants single quotes
+            typesArr = list(map(lambda x: "type='%s'" % x, restrictType.split(','))) # PSQL wants single quotes
+            constraints.append('(' + ' or '.join(typesArr)  + ')')
         sqlStr = "SELECT * FROM %s" % self.sources_table_name
         if constraints:
             sqlStr += ' where ' + ' and '.join(constraints)
