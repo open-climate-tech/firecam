@@ -30,12 +30,7 @@ import csv
 from PIL import Image, ImageDraw
 
 
-def drawRxBurn(mapImg, leftLongitude, rightLongitude, topLatitude, bottomLatitude, latLong):
-    pixelCenter = img_archive.convertLatLongToPixels(mapImg, leftLongitude, rightLongitude, topLatitude, bottomLatitude, latLong)
-    flamePath = os.path.join(str(pathlib.Path(os.path.realpath(__file__)).parent.parent), 'data/flame32.bmp')
-    flame = Image.open(flamePath)
-    crossPath = os.path.join(str(pathlib.Path(os.path.realpath(__file__)).parent.parent), 'data/plus.bmp')
-    cross = Image.open(crossPath)
+def drawRxBurnInt(mapImg, flame, cross, pixelCenter):
     mapImgAlpha = mapImg.convert('RGBA')
     burnImgA = Image.new('RGBA', mapImgAlpha.size)
     burnDraw = ImageDraw.Draw(burnImgA)
@@ -44,9 +39,19 @@ def drawRxBurn(mapImg, leftLongitude, rightLongitude, topLatitude, bottomLatitud
     mapImgAlpha.paste(burnImgA, mask=burnImgA)
     del burnDraw
     burnImgA.close()
+    return mapImgAlpha.convert('RGB')
+
+
+def drawRxBurn(mapImg, leftLongitude, rightLongitude, topLatitude, bottomLatitude, latLong):
+    pixelCenter = img_archive.convertLatLongToPixels(mapImg, leftLongitude, rightLongitude, topLatitude, bottomLatitude, latLong)
+    flamePath = os.path.join(str(pathlib.Path(os.path.realpath(__file__)).parent.parent), 'data/flame32.bmp')
+    flame = Image.open(flamePath)
+    crossPath = os.path.join(str(pathlib.Path(os.path.realpath(__file__)).parent.parent), 'data/plus.bmp')
+    cross = Image.open(crossPath)
+    newMap = drawRxBurnInt(mapImg, flame, cross, pixelCenter)
     flame.close()
     cross.close()
-    return mapImgAlpha.convert('RGB')
+    return newMap
 
 
 def getBurnsDataUrl():
