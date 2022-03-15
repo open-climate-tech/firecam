@@ -65,15 +65,10 @@ def readSettingsFile():
 logging.getLogger('googleapiclient.discovery_cache').setLevel(logging.ERROR) # silence googleapiclient logs
 logging.basicConfig(format='%(asctime)s.%(msecs)03d: %(process)d: %(message)s', datefmt='%F %T')
 
-# MAP_ZOOM_MIN = 7
-# MAP_ZOOM_MAX = 10
-# MAP_LAT_DIFF = 5.6 # at MAP_ZOOM_MIN
-# MAP_LONG_DIFF = 7 # at MAP_ZOOM_MIN
-
-MAP_ZOOM_MIN = 9
-MAP_ZOOM_MAX = 9
-MAP_LAT_DIFF = 1.4 # at MAP_ZOOM_MIN
-MAP_LONG_DIFF = 1.75 # at MAP_ZOOM_MIN
+MAP_ZOOM_MIN = 7
+MAP_ZOOM_MAX = 10
+MAP_LAT_DIFF = 5.6 # at MAP_ZOOM_MIN
+MAP_LONG_DIFF = 7 # at MAP_ZOOM_MIN
 
 # set module attributes based on json file data
 settingsJson = readSettingsFile()
