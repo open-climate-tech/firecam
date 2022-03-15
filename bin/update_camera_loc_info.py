@@ -43,9 +43,9 @@ def getCameraLocations(dbManager):
     return dbResult
 
 
-def updateCameraMap(dbManager, locationID, mapFile):
+def updateCameraMaps(dbManager, locationID, mapFiles):
     sqlTemplate = "UPDATE cameras SET mapFile = '%s' where locationID='%s'"
-    sqlStr = sqlTemplate % (mapFile, locationID)
+    sqlStr = sqlTemplate % (','.join(mapFiles), locationID)
     # print('sqls', sqlStr)
     dbManager.execute(sqlStr)
 
@@ -80,6 +80,29 @@ def cityNameFromCode(geoCodeRes):
     return cityName
 
 
+def getMapLocal(latitude, longitude, locationid, zoom):
+    params = {
+        'center': str(latitude) + ',' + str(longitude),
+        'zoom': zoom,
+        'size': '640x640',
+        'format': 'jpg',
+        'key': settings.mapsKey
+    }
+    # print('params', params)
+    url = 'http://maps.googleapis.com/maps/api/staticmap?' + urllib.parse.urlencode(params)
+    imgPath = locationid + ('-map640z%s.jpg' % zoom)
+    urlretrieve(url, imgPath)
+    return imgPath
+
+
+def uploadMapGCS(latitude, longitude, locationid, zoom):
+    imgPath = getMapLocal(latitude, longitude, locationid, zoom)
+    logging.warning('uploading %s', imgPath)
+    mapFileGCS = goog_helper.copyFile(imgPath, settings.mapsDir)
+    os.remove(imgPath)
+    return mapFileGCS
+
+
 def main():
     reqArgs = [
         ["m", "mode", "basemaps, city"],
@@ -98,22 +121,13 @@ def main():
     for location in locations:
         logging.warning('loc %s', location)
         if args.mode == 'basemaps':
-            params = {
-                'center': str(location['latitude']) + ',' + str(location['longitude']),
-                'zoom': 9,
-                'size': '640x640',
-                'format': 'jpg',
-                'key': settings.mapsKey
-            }
-            # print('params', params)
-            url = 'http://maps.googleapis.com/maps/api/staticmap?' + urllib.parse.urlencode(params)
-            imgPath = location['locationid'] + '-map640z9.jpg'
-            urlretrieve(url, imgPath)
-            logging.warning('uploading %s', imgPath)
-            mapFileGS = goog_helper.copyFile(imgPath, settings.mapsDir)
-            os.remove(imgPath)
-            logging.warning('updating DB %s', location['locationid'])
-            updateCameraMap(dbManager, location['locationid'], mapFileGS)
+            mapFiles = []
+            for zoom in range(settings.MAP_ZOOM_MIN, settings.MAP_ZOOM_MAX + 1):
+                mapFileGCS = uploadMapGCS(location['latitude'], location['longitude'], location['locationid'], zoom)
+                mapFiles.append(mapFileGCS)
+            if len(mapFiles) > 0:
+                logging.warning('updating DB %s', location['locationid'])
+                updateCameraMaps(dbManager, location['locationid'], mapFiles)
         elif args.mode == 'city':
             geoCodeRes = gmaps.reverse_geocode((location['latitude'], location['longitude']))
             for geoCodeComp in geoCodeRes:

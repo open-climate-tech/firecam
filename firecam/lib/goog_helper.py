@@ -130,6 +130,10 @@ def getParentParser():
 
 
 
+def getUrlForFile(fileID):
+    return fileID.replace('gs://', 'https://storage.googleapis.com/')
+
+
 GS_URL_REGEXP = '^gs://([a-z0-9_.-]+)/(.+)$'
 def parseGCSPath(path):
     """Parse GCS bucket and path names out of given gs:// style full path
