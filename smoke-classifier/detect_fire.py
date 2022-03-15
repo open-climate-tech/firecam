@@ -367,6 +367,24 @@ def cropCentered(mapImg, leftLongitude, rightLongitude, topLatitude, bottomLatit
     return mapImg.crop(coords)
 
 
+def getMapSize(mapImgGCS):
+    zoomRegex = 'map640z([0-9]+)\.jpg$'
+    matches = re.findall(zoomRegex, mapImgGCS)
+    if len(matches) != 1:
+        return (None, None, None)
+    zoom = int(matches[0])
+    if (zoom < settings.MAP_ZOOM_MIN) or (zoom > settings.MAP_ZOOM_MAX):
+        return (None, None, None)
+    # latDiff and longDiff for MAP_ZOOM_MIN
+    latDiff = settings.MAP_LAT_DIFF
+    longDiff = settings.MAP_LONG_DIFF
+    zoomDiff = zoom - settings.MAP_ZOOM_MIN
+    if zoomDiff:
+        latDiff = latDiff/2**zoomDiff
+        longDiff = longDiff/2**zoomDiff
+    return (latDiff, longDiff, zoom)
+
+
 def genAnnotatedMap(mapImgGCS, camLatitude, camLongitude, imgPath, polygon, sourcePolygons, rxBurns):
     """Generate annotated map highlighting potential fire area
 
@@ -387,8 +405,9 @@ def genAnnotatedMap(mapImgGCS, camLatitude, camLongitude, imgPath, polygon, sour
     mapOrig = filePathParts[0] + '_mapOrig.jpg'
     goog_helper.downloadBucketFile(parsedPath['bucket'], parsedPath['name'], mapOrig)
 
-    mapWidthLong = 1.757 # all maps have span this many longitidues
-    mapHeightLat = 1.466 # all maps have span this many latitudes
+    (mapHeightLat, mapWidthLong, zoom) = getMapSize(mapImgGCS)
+    if not mapHeightLat or not mapWidthLong or not zoom:
+        return ''
     leftLongitude = camLongitude - mapWidthLong/2
     rightLongitude = camLongitude + mapWidthLong/2
     bottomLatitude = camLatitude - mapHeightLat/2
@@ -411,12 +430,36 @@ def genAnnotatedMap(mapImgGCS, camLatitude, camLongitude, imgPath, polygon, sour
         mapImg = rx_burns.drawRxBurn(mapImg, leftLongitude, rightLongitude, topLatitude, bottomLatitude, (burn['latitude'], burn['longitude']))
     # crop to smaller map centered around fire area
     mapImgCropped = cropCentered(mapImg, leftLongitude, rightLongitude, topLatitude, bottomLatitude, polygon)
-    mapCroppedPath = filePathParts[0] + '_map.jpg'
+    mapCroppedPath = filePathParts[0] + ('_map_z%s.jpg' % zoom)
     mapImgCropped.save(mapCroppedPath, quality=95)
     mapImgCropped.close()
     mapImg.close()
     os.remove(mapOrig)
     return mapCroppedPath
+
+
+def genAnnotatedMaps(notificationsDateDir, mapFiles, camLatitude, camLongitude, imgPath, polygon, sourcePolygons, rxBurns):
+    """Generate annotated map highlighting potential fire area
+
+    Args:
+        mapImgGCS (str): GCS path to map around camera
+        camLatitude (float): latitude of camera
+        camLongitude (float): longitude of camera
+        imgPath (str): filepath of the image
+        polygon (list): list of vertices of polygon of potential fire location
+        sourcePolygons (list): list of polygons from individual cameras contributing to the polygon
+
+    Returns:
+        Comma separated URLs for annotated maps
+    """
+    mapUrls=[]
+    for mapImgGCS in mapFiles.split(','):
+        mapPath = genAnnotatedMap(mapImgGCS, camLatitude, camLongitude, imgPath, polygon, sourcePolygons, rxBurns)
+        mapID = goog_helper.copyFile(mapPath, notificationsDateDir)
+        mapUrl = goog_helper.getUrlForFile(mapID)
+        os.remove(mapPath)
+        mapUrls.append(mapUrl)
+    return ','.join(mapUrls)
 
 
 def getTriangleVertices(latitude, longitude, heading, rangeAngle):
@@ -755,10 +798,6 @@ def publishAlert(cameraID, weatherScore):
     return (weatherScore > settings.weatherThreshold) and not isProto(cameraID)
 
 
-def getUrlForFile(fileID):
-    return fileID.replace('gs://', 'https://storage.googleapis.com/')
-
-
 def fireDetected(constants, cameraID, cameraHeading, timestamp, fov, imgPath, fireSegment):
     """Update Detections DB and send alerts about given fire through all channels (pubsub, email, and sms)
 
@@ -775,7 +814,7 @@ def fireDetected(constants, cameraID, cameraHeading, timestamp, fov, imgPath, fi
 
     # copy annotated image to publicly accessible settings.noticationsDir
     notificationsDateDir = goog_helper.dateSubDir(settings.noticationsDir)
-    (mapImgGCS, camLatitude, camLongitude) = dbManager.getCameraMapLocation(cameraID)
+    (mapFiles, camLatitude, camLongitude) = dbManager.getCameraMapLocation(cameraID)
 
     # get horizontal pixel width
     img = Image.open(imgPath)
@@ -806,13 +845,11 @@ def fireDetected(constants, cameraID, cameraHeading, timestamp, fov, imgPath, fi
     fireSegment['weatherScore'] = round(weatherScore, 4)
 
     rxBurns = rx_burns.getCurrentBurns(dbManager)
-    mapPath = genAnnotatedMap(mapImgGCS, camLatitude, camLongitude, imgPath, polygon, sourcePolygons, rxBurns)
+    mapUrl = genAnnotatedMaps(notificationsDateDir, mapFiles, camLatitude, camLongitude, imgPath, polygon, sourcePolygons, rxBurns)
 
-    mapID = goog_helper.copyFile(mapPath, notificationsDateDir)
     # convert fileIDs into URLs usable by web UI
-    croppedUrl = getUrlForFile(croppedID)
-    annotatedUrl = getUrlForFile(annotatedID)
-    mapUrl = getUrlForFile(mapID)
+    croppedUrl = goog_helper.getUrlForFile(croppedID)
+    annotatedUrl = goog_helper.getUrlForFile(annotatedID)
 
     updateDetectionsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon, sourcePolygons, imgIDs)
     if publishAlert(cameraID, weatherScore):
@@ -820,9 +857,6 @@ def fireDetected(constants, cameraID, cameraHeading, timestamp, fov, imgPath, fi
         pubsubFireNotification(cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon)
         emailFireNotification(constants, cameraID, timestamp, imgPath, annotatedUrl, fireSegment)
         smsFireNotification(dbManager, cameraID)
-
-    # remove temporary files
-    os.remove(mapPath)
 
 
 def deleteImageFiles(imgPath, origImgPath):
