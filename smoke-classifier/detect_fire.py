@@ -336,7 +336,10 @@ def drawPolyLatLong(mapImg, leftLongitude, rightLongitude, topLatitude, bottomLa
     """
     coordsPixels = []
     # logging.warning('coords latLong %s', str(coords))
-    for point in coords:
+    # first intersect the polygon with map edges to avoid distortions when coverting each point to pixel coordinates
+    mapRectangle = [[topLatitude, leftLongitude], [topLatitude, rightLongitude], [bottomLatitude, rightLongitude], [bottomLatitude, leftLongitude]]
+    newCoords = getPolygonIntersection(coords, mapRectangle)
+    for point in newCoords:
         pixels = img_archive.convertLatLongToPixels(mapImg, leftLongitude, rightLongitude, topLatitude, bottomLatitude, point)
         coordsPixels.append(pixels)
     # logging.warning('coords pixels %s', str(coordsPixels))
@@ -455,6 +458,8 @@ def genAnnotatedMaps(notificationsDateDir, mapFiles, camLatitude, camLongitude, 
     mapUrls=[]
     for mapImgGCS in mapFiles.split(','):
         mapPath = genAnnotatedMap(mapImgGCS, camLatitude, camLongitude, imgPath, polygon, sourcePolygons, rxBurns)
+        if not mapPath:
+            continue
         mapID = goog_helper.copyFile(mapPath, notificationsDateDir)
         mapUrl = goog_helper.getUrlForFile(mapID)
         os.remove(mapPath)
