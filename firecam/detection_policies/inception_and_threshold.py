@@ -203,7 +203,7 @@ class InceptionV3AndHistoricalThreshold:
 
         dt = datetime.datetime.fromtimestamp(timestamp)
         secondsInDay = (dt.hour * 60 + dt.minute) * 60 + dt.second
-        sqlStr = sqlTemplate % (cameraID, heading, timestamp - 60*60*int(24*3.5), timestamp - 60*60*12, secondsInDay - 60*60, secondsInDay + 60*60, self.modelId)
+        sqlStr = sqlTemplate % (cameraID, heading, timestamp - 60*60*int(24*7.5), timestamp - 60*60*12, secondsInDay - 60*60, secondsInDay + 60*60, self.modelId)
         # print('sql', sqlStr, timestamp)
         dbResult = self.dbManager.query(sqlStr)
         # if len(dbResult) > 0:
