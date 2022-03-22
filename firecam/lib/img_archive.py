@@ -28,6 +28,7 @@ from html.parser import HTMLParser
 import requests
 import re
 import pathlib
+import math
 from PIL import Image, ImageMath, ImageStat
 import numpy as np
 import cv2
@@ -991,16 +992,16 @@ def getHeadingRange(centralHeading, fov, minX, maxX, imgSizeX):
 
     # calculate rangeAngle
     range = (maxX - minX) / imgSizeX * degreesInView + degreesAlignmentError
-    return (heading, range)
+    return (round(heading), math.ceil(range))
 
 
 def findIgnoredView(ignoredViews, cameraID, heading, fov):
     camMatches = list(filter(lambda x: x['cameraid'] == cameraID, ignoredViews))
-    minViewHeading = (heading - fov / 2) % 360
-    maxViewHeading = (heading + fov / 2) % 360
+    minViewHeading = int(heading - fov / 2) % 360
+    maxViewHeading = math.ceil(heading + fov / 2) % 360
     for entry in camMatches:
-        minIgnoreHeading = (entry['heading'] - entry['angularwidth'] / 2) % 360
-        maxIgnoreHeading = (entry['heading'] + entry['angularwidth'] / 2) % 360
+        minIgnoreHeading = int(entry['heading'] - entry['angularwidth'] / 2) % 360
+        maxIgnoreHeading = math.ceil(entry['heading'] + entry['angularwidth'] / 2) % 360
         if minIgnoreHeading < maxIgnoreHeading and minViewHeading < maxViewHeading: # niether view nor ignore straddle 0
             if (maxViewHeading > minIgnoreHeading and minViewHeading < maxIgnoreHeading):
                 return entry
@@ -1026,8 +1027,8 @@ def unionAngleRanges(heading1, range1, heading2, range2):
     rotationBase = (heading1 - range1 / 2) % 360
     # rotate everything by rotationBase so angle1 goes from 0 -> range1 to simplify union logic
     maxHeading1 = range1
-    minHeading2 = (heading2 - range2 / 2 - rotationBase) % 360
-    maxHeading2 = (heading2 + range2 / 2 - rotationBase) % 360
+    minHeading2 = int(heading2 - range2 / 2 - rotationBase) % 360
+    maxHeading2 = math.ceil(heading2 + range2 / 2 - rotationBase) % 360
     if minHeading2 < maxHeading2:  # angle2 doesn't straddle 0
         assert minHeading2 < maxHeading1
         minUnion = 0
@@ -1041,8 +1042,8 @@ def unionAngleRanges(heading1, range1, heading2, range2):
         heading = round(minUnion + range / 2)
     # rotate back by rotationBase to get back to original heading basis
     assert range > 0
-    heading = int(heading + rotationBase) % 360
-    range = int(min(range, 360))
+    heading = round(heading + rotationBase) % 360
+    range = math.ceil(min(range, 360))
     return (heading, range)
 
 
