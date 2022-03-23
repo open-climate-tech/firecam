@@ -268,6 +268,17 @@ class DbManager(object):
             ('Info', 'TEXT'),
         ]
 
+        # stats
+        stats_schema = [
+            ('Date', 'TEXT'),
+            ('Images', 'INT'),
+            ('AllSegments', 'INT'),
+            ('PositiveSegments', 'INT'),
+            ('Probables', 'INT'),
+            ('Detections', 'INT'),
+            ('Alerts', 'INT'),
+        ]
+
         self.tables = {
             'sources': sources_schema,
             'counters': counters_schema,
@@ -287,6 +298,7 @@ class DbManager(object):
             'ignored_views': ignored_views_schema,
             'weather': weather_schema,
             'rx_burns': rx_burns_schema,
+            'stats': stats_schema,
         }
 
         self.sources_table_name = 'sources'
@@ -322,10 +334,18 @@ class DbManager(object):
 
         """
         cursor = self._getCursor()
-        cursor.execute(sqlCmd)
-        if commit:
+        try:
+            cursor.execute(sqlCmd)
+            if commit:
+                self.conn.commit()
+            cursor.close()
+        except Exception as e:
+            logging.error('Error in db.execute %s', str(e))
+            # cleanup so future db commands will work
             self.conn.commit()
-        cursor.close()
+            cursor.close()
+            # rethrow excpetion after cleanup
+            raise e
 
 
     def add_data(self, tableName, keyValues, commit=True):
@@ -580,3 +600,14 @@ class DbManager(object):
         sqlStr = sqlTemplate % (countIgnored+1, timeNow, cameraID, heading)
         # print(sqlStr)
         self.execute(sqlStr)
+
+
+    def vacuum(self, tableName):
+        # vacuum requires autocommint true, so change connection status temporarily
+        # NOTE: any parallel threads using same connection may get confused, so use carefully
+        self.conn.set_session(autocommit=True)
+        cursor = self._getCursor()
+        sqlCmd = "VACUUM(FULL, ANALYZE, VERBOSE) %s" % tableName
+        cursor.execute(sqlCmd)
+        cursor.close()
+        self.conn.set_session(autocommit=False)
