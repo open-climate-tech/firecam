@@ -69,6 +69,7 @@ def main():
                                     psqlHost=settings.psqlHost, psqlDb=settings.psqlDb,
                                     psqlUser=settings.psqlUser, psqlPasswd=settings.psqlPasswd)
     locations = getCameraLocations(dbManager)
+    logging.warning('Found %d locations', len(locations))
     mapImg = Image.open(args.mapFile)
     assert args.leftLongitude < args.rightLongitude
     assert args.topLatitude > args.bottomLatitude
@@ -78,7 +79,7 @@ def main():
 
     for location in locations:
         numNearby = len(list(filter(lambda x: ((x['longitude'] - location['longitude'])**2 + (x['latitude'] - location['latitude'])**2) < radiusDegrees**2, locations)))
-        logging.warning('loc %s, %s', location, numNearby)
+        # logging.warning('loc %s, %s', location, numNearby)
         centerX = (location['longitude'] - args.leftLongitude)/diffLong*mapImg.size[0]
         centerY = mapImg.size[1] - (location['latitude'] - args.bottomLatitude)/diffLat*mapImg.size[1]
         opacityRatio = min(4/numNearby, 1)
