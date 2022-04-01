@@ -250,11 +250,14 @@ def genMovie(notificationsDateDir, constants, cameraID, cameraHeading, timestamp
         mspecFile.close()
         # now make movie from this sequence of cropped images
         moviePath = filePathParts[0] + '_AnnCrop_' + 'x'.join(list(map(lambda x: str(x), cropCoords))) + '.mp4'
-        (
-            ffmpeg.input(mspecPath, format='concat', safe=0)
-                .filter('fps', fps=25, round='up')
-                .output(moviePath, pix_fmt='yuv420p').run()
-        )
+        try:
+            (
+                ffmpeg.input(mspecPath, format='concat', safe=0)
+                    .filter('fps', fps=25, round='up')
+                    .output(moviePath, pix_fmt='yuv420p').run()
+            )
+        except Exception as e:
+            logging.error('Error making movie %s', str(e))
         movieID = goog_helper.copyFile(moviePath, notificationsDateDir)
         os.remove(moviePath)
 
