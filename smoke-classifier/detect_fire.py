@@ -261,11 +261,6 @@ def genMovie(notificationsDateDir, constants, cameraID, cameraHeading, timestamp
         movieID = goog_helper.copyFile(moviePath, notificationsDateDir)
         os.remove(moviePath)
 
-        # save mspec for debugging
-        newMspecPath = mspecPath + '_' + cameraID
-        os.rename(mspecPath, newMspecPath)
-        goog_helper.copyFile(newMspecPath, notificationsDateDir)
-
         return (movieID, imgIDs)
 
 
