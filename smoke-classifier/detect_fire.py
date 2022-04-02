@@ -125,8 +125,22 @@ getNextImage.queueCamera = None
 # getNextImage.tmpDir = Tdir('c:/tmp/dftest')
 
 
-def isProto(cameraID):
-    return img_archive.isPTZ(cameraID)
+def isProto(cameraID, sources=None):
+    if not isProto.prodTypesArr:
+        isProto.prodTypesArr = settings.prodTypes.split(',')
+    if sources and not isProto.sourcesDict:
+        sourcesDict = {}
+        for entry in sources:
+            sourcesDict[entry['name']] = entry
+        isProto.sourcesDict = sourcesDict
+    type = None
+    if isProto.sourcesDict and cameraID in isProto.sourcesDict:
+        type = isProto.sourcesDict[cameraID]['type']
+    isProd = type and isProto.prodTypesArr and (type in isProto.prodTypesArr)
+    # logging.warning('isProd %s: %s, %s, %s', isProd, cameraID, type, isProto.prodTypesArr)
+    return isProd
+isProto.sourcesDict = None
+isProto.prodTypesArr = None
 
 
 def drawRect(imgDraw, x0, y0, x1, y1, width, color):
@@ -1073,6 +1087,7 @@ def main():
     logging.warning('Found %d cameras', len(cameras))
     if len(cameras) == 0:
         return
+    isProto(None, sources=cameras)
     usableRegions = dbManager.get_usable_regions_dict()
     ignoredViews = dbManager.get_ignoredViews()
 
