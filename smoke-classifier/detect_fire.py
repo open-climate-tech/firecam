@@ -138,7 +138,7 @@ def isProto(cameraID, sources=None):
         type = isProto.sourcesDict[cameraID]['type']
     isProd = type and isProto.prodTypesArr and (type in isProto.prodTypesArr)
     # logging.warning('isProd %s: %s, %s, %s', isProd, cameraID, type, isProto.prodTypesArr)
-    return isProd
+    return not isProd
 isProto.sourcesDict = None
 isProto.prodTypesArr = None
 
