@@ -30,9 +30,10 @@ from urllib.request import urlretrieve
 from PIL import Image, ImageDraw
 
 def getCameraLocations(dbManager):
-    # sqlStr = "select latitude,longitude from cameras where locationID in (select distinct locationID from sources where dormant=0) and network='HPWREN'"
-    sqlStr = "select latitude,longitude from cameras where locationID in (select distinct locationID from sources where dormant=0)"
-
+    typesArr = list(map(lambda x: "type='%s'" % x, settings.prodTypes.split(','))) # PSQL wants single quotes
+    typesConstraint = '(' + ' or '.join(typesArr)  + ')'
+    sqlTemplate = "select latitude,longitude from cameras where locationID in (select distinct locationID from sources where dormant=0 and %s)"
+    sqlStr = sqlTemplate % typesConstraint
     dbResult = dbManager.query(sqlStr)
     # print('dbr', len(dbResult), dbResult)
     if len(dbResult) == 0:
@@ -47,7 +48,7 @@ def drawCircle(mapImg, centerX, centerY, radius, opacityRatio):
     circleDraw = ImageDraw.Draw(circle)
     opacity = max(round(opacityRatio*12), 2)
     circleDraw.ellipse((centerX - radius, centerY - radius, centerX + radius, centerY + radius), fill=(255,0,0,opacity))
-    circleDraw.ellipse((centerX - 3, centerY - 3, centerX + 3, centerY + 3), fill=(255,0,0,64))
+    circleDraw.ellipse((centerX - 3, centerY - 3, centerX + 3, centerY + 3), fill=(255,0,0,128))
     mapImgAlpha.paste(circle, mask=circle)
     del circleDraw
     circle.close()
