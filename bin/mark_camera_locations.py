@@ -30,8 +30,7 @@ from urllib.request import urlretrieve
 from PIL import Image, ImageDraw
 
 def getCameraLocations(dbManager):
-    typesArr = list(map(lambda x: "type='%s'" % x, settings.prodTypes.split(','))) # PSQL wants single quotes
-    typesConstraint = '(' + ' or '.join(typesArr)  + ')'
+    typesConstraint = dbManager.restrictTypeClause(settings.prodTypes)
     sqlTemplate = "select latitude,longitude from cameras where locationID in (select distinct locationID from sources where dormant=0 and %s)"
     sqlStr = sqlTemplate % typesConstraint
     dbResult = dbManager.query(sqlStr)

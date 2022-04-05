@@ -18,9 +18,7 @@ add, update, and stats for ignored_views
 
 """
 
-import dbm
 import os, sys
-from tabnanny import check
 from firecam.lib import settings
 from firecam.lib import collect_args
 from firecam.lib import db_manager
@@ -41,17 +39,22 @@ def execCameraSql(dbManager, sqlTemplate, cameraID, isQuery):
     return dbResult
 
 
-def getRecentFalse(dbManager, numFalse, startTimeStr=None):
+def getRecentFalse(dbManager, numFalse, startTimeStr=None, restrictType=None):
     if startTimeStr:
         startTime = time.mktime(dateutil.parser.parse(startTimeStr).timetuple())
     else:
         startTime = int(time.time()-3600*24*30) # one month ago
+    typesConstraint = dbManager.restrictTypeClause(restrictType)
+    if typesConstraint:
+        typesConstraint = 'WHERE %s' % typesConstraint
     sqlTemplate = """SELECT v0.cameraname as cameraname,heading as camheading,minx,maxx,count(*) as ct FROM
                         (SELECT cameraname,timestamp FROM votes WHERE timestamp > %s and isrealfire=0) as v0
                         JOIN probables on v0.cameraname=probables.cameraname and v0.timestamp=probables.timestamp
+                        JOIN sources on v0.cameraname=sources.name
+                        %s
                         GROUP BY v0.cameraname,heading,minx,maxx
-                        ORDER BY ct desc limit %d"""
-    sqlStr = sqlTemplate % (startTime, numFalse)
+                        ORDER BY ct desc,v0.cameraname limit %d"""
+    sqlStr = sqlTemplate % (startTime, typesConstraint, numFalse)
     print(sqlStr)
     dbResult = dbManager.query(sqlStr)
     if len(dbResult) == 0:
@@ -84,7 +87,7 @@ def addNew(dbManager, ignoredViews, cameraID, heading, angularWidth):
 
 def main():
     reqArgs = [
-        ["m", "mode", "add, delete, enable, disable, stats, or list"],
+        ["m", "mode", "list, add, checkdb"],
     ]
     optArgs = [
         ["s", "startTime", "starting date and time in ISO format (e.g., 2019-02-22T14:34:56 in Pacific time zone)"],
@@ -93,6 +96,7 @@ def main():
         ["w", "angularWidth", "ignored view width", int],
         ["n", "noState", "(optional) no changes to state"],
         ["f", "maxFalse", "(optional) maximum false positives to check (default 10)", int],
+        ["r", "restrictType", "Only process images from cameras of given type"],
     ]
     args = collect_args.collectArgs(reqArgs, optionalArgs=optArgs)
     dbManager = db_manager.DbManager(sqliteFile=settings.db_file,
@@ -106,7 +110,7 @@ def main():
     elif args.mode == 'add':
         addNew(dbManager, ignoredViews, args.cameraID, args.heading, args.angularWidth)
     elif args.mode == 'checkdb':
-        recents = getRecentFalse(dbManager, numFalse, args.startTime)
+        recents = getRecentFalse(dbManager, numFalse, startTimeStr=args.startTime, restrictType=args.restrictType)
         for entry in recents:
             logging.warning('count %d: cam %s, camHead %s, min %s, max %s', entry['ct'], entry['cameraname'], entry['camheading'], entry['minx'], entry['maxx'])
             fov = img_archive.getCameraFov(entry['cameraname'])
