@@ -81,7 +81,7 @@ def getRawBurnsDataCached(dbManager):
         return dbResult[0]['info'].replace('\\n','\n') # DB seems to add extra '\'
 
     logging.warning('No compatible data.  Fetching new rx_burns data')
-    rawData = getBurnsDataUrl()
+    rawData = getBurnsDataUrl().replace("'","") # remove any single quotas as they interfere with string termination and escape
 
     # delete all old DB cache entries for given source
     sqlTemplate = """DELETE FROM rx_burns where source = '%s' """
