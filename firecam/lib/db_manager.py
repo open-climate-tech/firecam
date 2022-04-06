@@ -163,6 +163,7 @@ class DbManager(object):
             ('ImageID', 'TEXT'),
             ('ModelId', 'TEXT'),
             ('Heading', 'REAL'),
+            ('Hostname', 'TEXT'),
         ]
 
         # detections are subset of probables likely to be new fires

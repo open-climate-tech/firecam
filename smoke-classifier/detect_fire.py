@@ -49,6 +49,7 @@ import re
 import json
 import hashlib
 import gc
+import socket
 from urllib.request import urlretrieve
 import tensorflow as tf
 from PIL import Image, ImageFile, ImageDraw, ImageFont
@@ -543,7 +544,8 @@ def recordProbables(dbManager, cameraID, heading, timestamp, imgPath, fireSegmen
             'MaxY': fireSegment['MaxY'],
             'Score': fireSegment['score'],
             'ImageID': fileID,
-            'ModelId': modelId
+            'ModelId': modelId,
+            'Hostname': socket.gethostname()
         }
         dbManager.add_data('probables', dbRow)
     return fileID
