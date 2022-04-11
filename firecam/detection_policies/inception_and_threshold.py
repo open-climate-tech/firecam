@@ -48,7 +48,13 @@ class InceptionV3AndHistoricalThreshold:
         self.args = args
         self.minusMinutes = 0
         self.stateless = stateless
-        if not modelLocation:
+        self.collectPositivesRatio = 1
+        if modelLocation:
+            argParts = modelLocation.split(',')
+            modelLocation = argParts[0]
+            if len(argParts) > 1:
+                self.collectPositivesRatio = float(argParts[1])
+        else:
             modelLocation = settings.model_file
         self.modelId = '/'.join(modelLocation.split('/')[-2:]) # the last two dirpath components
         logging.warning('InceptionV3 init %s', self.modelId)
@@ -109,6 +115,8 @@ class InceptionV3AndHistoricalThreshold:
             imgPath (str): path name for main image
             segments (list): List of dictionary containing information on each segment
         """
+        if random.random() > self.collectPositivesRatio:
+            return
         positiveSegments = 0
         ppath = pathlib.PurePath(imgPath)
         imgNameNoExt = str(os.path.splitext(ppath.name)[0])
@@ -129,6 +137,8 @@ class InceptionV3AndHistoricalThreshold:
                     goog_helper.copyFile(cropImgPath, postivesDateDir)
                     os.remove(cropImgPath)
                 positiveSegments += 1
+            else:
+                break # segments are sorted by score decreasing
 
         if positiveSegments > 0:
             logging.warning('Found %d positives in image %s', positiveSegments, ppath.name)
