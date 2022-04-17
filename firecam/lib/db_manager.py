@@ -179,6 +179,7 @@ class DbManager(object):
             ('IsProto', 'INT'),
             ('WeatherScore', 'REAL'),
             ('ImgSequence', 'TEXT'),
+            ('SortId', 'INT'),
         ]
 
         # alerts are notifications sent out via various means
@@ -193,6 +194,7 @@ class DbManager(object):
             ('sourcePolygons', 'TEXT'),
             ('IsProto', 'INT'),
             ('WeatherScore', 'REAL'),
+            ('SortId', 'INT'),
         ]
 
         # votes regarding alerts

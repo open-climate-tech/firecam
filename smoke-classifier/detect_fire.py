@@ -677,7 +677,7 @@ def checkWeatherInfo(weatherModel, dbManager, cameraID, timestamp, fireSegment, 
     return prediction
 
 
-def updateDetectionsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon, sourcePolygons, imgIDs):
+def updateDetectionsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon, sourcePolygons, imgIDs, sortId):
     """Add new entry to detections table
 
     Args:
@@ -703,11 +703,12 @@ def updateDetectionsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl,
         'IsProto': int(isProto(cameraID)),
         'WeatherScore': fireSegment['weatherScore'],
         'ImgSequence': ','.join(imgIDs),
+        'SortId': sortId,
     }
     dbManager.add_data('detections', dbRow)
 
 
-def updateAlertsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon, sourcePolygons):
+def updateAlertsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon, sourcePolygons, sortId):
     """Add new entry to alerts table
 
     Args:
@@ -732,11 +733,12 @@ def updateAlertsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, map
         'sourcePolygons': str(sourcePolygons),
         'IsProto': int(isProto(cameraID)),
         'WeatherScore': fireSegment['weatherScore'],
+        'SortId': sortId,
     }
     dbManager.add_data('alerts', dbRow)
 
 
-def pubsubFireNotification(cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon):
+def pubsubFireNotification(cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon, sortId):
     """Send a pubsub notification for a potential new fire
 
     Sends pubsub message with information about the camera and fire score includeing
@@ -761,6 +763,7 @@ def pubsubFireNotification(cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl
         'polygon': str(polygon),
         'isProto': isProto(cameraID),
         'weatherScore': str(fireSegment['weatherScore']),
+        'sortId': sortId,
     }
     goog_helper.publish(message)
 
@@ -870,10 +873,15 @@ def fireDetected(constants, cameraID, cameraHeading, timestamp, fov, imgPath, fi
     croppedUrl = goog_helper.getUrlForFile(croppedID)
     annotatedUrl = goog_helper.getUrlForFile(annotatedID)
 
-    updateDetectionsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon, sourcePolygons, imgIDs)
+    # sortID makes an impact when the image timestamp order is different than processing time order
+    # E.g. (older image processed more recently by multiple seconds)
+    # Although processing time is not perfect eigher, it seems slightly better because 1) map intersections will show in increasing order
+    # and 2) UI results (and notifications) will be more intuitive
+    sortId = int(time.time())
+    updateDetectionsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon, sourcePolygons, imgIDs, sortId)
     if publishAlert(cameraID, weatherScore):
-        updateAlertsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon, sourcePolygons)
-        pubsubFireNotification(cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon)
+        updateAlertsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon, sourcePolygons, sortId)
+        pubsubFireNotification(cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon, sortId)
         emailFireNotification(constants, cameraID, timestamp, imgPath, annotatedUrl, fireSegment)
         smsFireNotification(dbManager, cameraID)
 
