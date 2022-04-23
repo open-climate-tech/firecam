@@ -34,7 +34,12 @@ const FfmpegCommand = require('fluent-ffmpeg');
 FfmpegCommand.setFfmpegPath(ffmpegPath);
 
 function getHpwrenUrl(hostName, cameraID, yearDir, dateDir, qNum) {
-    var hpwrenUrl = 'http://' + encodeURIComponent(hostName) + '.hpwren.ucsd.edu/archive/';
+    let hpwrenUrl;
+    if (hostName) {
+        hpwrenUrl = 'http://' + encodeURIComponent(hostName) + '.hpwren.ucsd.edu/archive/';
+    } else {
+        hpwrenUrl = 'https://hpwren.ucsd.edu/archive/';
+    }
     hpwrenUrl += encodeURIComponent(cameraID) + '/large/';
     if (yearDir) {
         hpwrenUrl += encodeURIComponent(yearDir) + '/';

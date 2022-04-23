@@ -568,8 +568,10 @@ def downloadFilesHpwren(googleServices, settings, outputDir, hpwrenSource, gapMi
         return None
     match = matches[0]
     (server, subdir) = match
-    hpwrenBase = 'http://{server}.hpwren.ucsd.edu/archive'.format(server=server)
-    hpwrenSource['server'] = server
+    # hpwrenBase = 'http://{server}.hpwren.ucsd.edu/archive'.format(server=server)
+    # hpwrenSource['server'] = server
+    hpwrenBase = 'https://hpwren.ucsd.edu/cameras/archive'
+    hpwrenSource['server'] = ''
     urlParts = [hpwrenBase, subdir, 'large']
     hpwrenSource['urlParts'] = urlParts
 
