@@ -149,7 +149,7 @@ def drawRect(imgDraw, x0, y0, x1, y1, width, color):
         imgDraw.rectangle((x0 + i, y0 + i, x1 - i, y1 -i), outline=color)
 
 
-def drawFireBox(img, destPath, fireBoxCoords, timestamp=None, fireSegment=None, color='red'):
+def drawFireBox(img, destPath, fireBoxCoords, timestamp=None, fireSegment=None, color='red', message=''):
     """Draw bounding box with fire detection and optionally write scores
 
     Also watermarks the image and stores the resulting annotated image as new file
@@ -186,17 +186,19 @@ def drawFireBox(img, destPath, fireBoxCoords, timestamp=None, fireSegment=None, 
 
     if timestamp:
         fontSize=24
+        margin = int(fontSize/2)
         font = ImageFont.truetype(fontPath, size=fontSize)
-        timeStr = datetime.datetime.fromtimestamp(timestamp).isoformat()
+        timeStr = datetime.datetime.fromtimestamp(timestamp).strftime('%H:%M:%S')
+        fullStr = timeStr + ' ' + message
         # first little bit of black outline
         color = "black"
         for i in range(0,5):
             for j in range(0,5):
-                imgDraw.text((i, j), timeStr, font=font, fill=color)
+                imgDraw.text((margin + i, j), fullStr, font=font, fill=color)
 
         # now actual data in orange
         color = "orange"
-        imgDraw.text((2, 2), timeStr, font=font, fill=color)
+        imgDraw.text((margin + 2, 2), fullStr, font=font, fill=color)
 
     # "watermark" the image
     color = "orange"
@@ -250,11 +252,11 @@ def genMovie(notificationsDateDir, constants, cameraID, cameraHeading, timestamp
             croppedImg = imgSeq.crop(cropCoords)
             if imgParsed['unixTime'] < timestamp:
                 color = 'yellow'
-            elif imgParsed['unixTime'] == timestamp:
+                message = ''
+            elif imgParsed['unixTime'] >= timestamp:
                 color = 'red'
-            else:
-                color = 'orange'
-            drawFireBox(croppedImg, croppedPath, fireBoxCoords, timestamp=imgParsed['unixTime'], color=color)
+                message = 'Potential fire'
+            drawFireBox(croppedImg, croppedPath, fireBoxCoords, timestamp=imgParsed['unixTime'], color=color, message=message)
             imgSeq.close()
             croppedImg.close()
             mspecFile.write("file '" + croppedPath + "'\n")
