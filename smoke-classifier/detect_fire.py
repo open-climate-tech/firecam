@@ -185,7 +185,7 @@ def drawFireBox(img, destPath, fireBoxCoords, timestamp=None, fireSegment=None, 
         imgDraw.text((x1 - textSize[0], y0 - textSize[1]), scoreStr, font=font, fill=color)
 
     if timestamp:
-        fontSize=32
+        fontSize=24
         font = ImageFont.truetype(fontPath, size=fontSize)
         timeStr = datetime.datetime.fromtimestamp(timestamp).isoformat()
         # first little bit of black outline
@@ -200,9 +200,10 @@ def drawFireBox(img, destPath, fireBoxCoords, timestamp=None, fireSegment=None, 
 
     # "watermark" the image
     color = "orange"
-    fontSize=32
+    fontSize=20
     font = ImageFont.truetype(fontPath, size=fontSize)
-    imgDraw.text((20, img.size[1] - fontSize - 20), "Open Climate Tech - Wildfire", font=font, fill=color)
+    margin = int(fontSize/2)
+    imgDraw.text((margin, img.size[1] - fontSize - margin), "Open Climate Tech - WildfireCheck", font=font, fill=color)
 
     img.save(destPath, format="JPEG", quality=95)
     del imgDraw
@@ -300,7 +301,8 @@ def genAnnotatedImages(notificationsDateDir, constants, cameraID, cameraHeading,
     y1 = fireSegment['MaxY'] if 'MaxY' in fireSegment else img.size[0]
 
     (cropX0, cropX1) = rect_to_squares.getRangeFromCenter(round((x0 + x1)/2), 640, 0, img.size[0])
-    (cropY0, cropY1) = rect_to_squares.getRangeFromCenter(round((y0 + y1)/2), 460, 0, img.size[1])
+    # 412 pixels because that is minimum pixel height in landscape mode for most mobile phones
+    (cropY0, cropY1) = rect_to_squares.getRangeFromCenter(round((y0 + y1)/2), 412, 0, img.size[1])
     cropCoords = (cropX0, cropY0, cropX1, cropY1)
     fireBoxCoords = (x0 - cropX0, y0 - cropY0, x1 - cropX0, y1 - cropY0)
     (movieID, imgIDs) = genMovie(notificationsDateDir, constants, cameraID, cameraHeading, timestamp, imgPath, cropCoords, fireBoxCoords)
