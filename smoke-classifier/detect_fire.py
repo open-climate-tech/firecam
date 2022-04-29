@@ -316,7 +316,7 @@ def genAnnotatedImages(notificationsDateDir, constants, cameraID, cameraHeading,
     return (movieID, imgIDs, annotatedID)
 
 
-def drawPolyPixels(mapImg, coordsPixels, fillColor):
+def drawPolyPixels(mapImg, coordsPixels, fillColor, outlineColor=None):
     """Draw translucent polygon on given map image with given pixel coordinates and fill color
 
     Args:
@@ -330,14 +330,14 @@ def drawPolyPixels(mapImg, coordsPixels, fillColor):
     mapImgAlpha = mapImg.convert('RGBA')
     polyImg = Image.new('RGBA', mapImgAlpha.size)
     polyDraw = ImageDraw.Draw(polyImg)
-    polyDraw.polygon(coordsPixels, fill=fillColor)
+    polyDraw.polygon(coordsPixels, fill=fillColor, outline=outlineColor)
     mapImgAlpha.paste(polyImg, mask=polyImg)
     del polyDraw
     polyImg.close()
     return mapImgAlpha.convert('RGB')
 
 
-def drawPolyLatLong(mapImg, leftLongitude, rightLongitude, topLatitude, bottomLatitude, coords, fillColor):
+def drawPolyLatLong(mapImg, leftLongitude, rightLongitude, topLatitude, bottomLatitude, coords, fillColor, outlineColor=None):
     """Draw translucent polygon on given map image with given lat/long coordinates and fill color
 
     Args:
@@ -358,7 +358,7 @@ def drawPolyLatLong(mapImg, leftLongitude, rightLongitude, topLatitude, bottomLa
         pixels = img_archive.convertLatLongToPixels(mapImg, leftLongitude, rightLongitude, topLatitude, bottomLatitude, point)
         coordsPixels.append(pixels)
     # logging.warning('coords pixels %s', str(coordsPixels))
-    return drawPolyPixels(mapImg, coordsPixels, fillColor)
+    return drawPolyPixels(mapImg, coordsPixels, fillColor, outlineColor=outlineColor)
 
 
 def getCentroid(polygonCoords):
@@ -434,9 +434,11 @@ def genAnnotatedMap(mapImgGCS, camLatitude, camLongitude, imgPath, polygon, sour
     # markup map to show fire area
     mapImg = Image.open(mapOrig)
     # first draw all source polygons (in light red) that contributed to this fire area
-    for sourcePolygon in sourcePolygons:
+    for (i, sourcePolygon) in enumerate(sourcePolygons):
         lightRed = (255,0,0, 50)
-        mapImg = drawPolyLatLong(mapImg, leftLongitude, rightLongitude, topLatitude, bottomLatitude, sourcePolygon, lightRed)
+        solidRed = (255,0,0, 255)
+        outline = solidRed if i == (len(sourcePolygons) - 1) else None # final polygon is from current detection, and outline it
+        mapImg = drawPolyLatLong(mapImg, leftLongitude, rightLongitude, topLatitude, bottomLatitude, sourcePolygon, lightRed, outlineColor=outline)
     # if there were multiple source polygons, highlight the fire area in light blue
     if len(sourcePolygons) > 1:
         lightBlue = (0,0,255, 75)
