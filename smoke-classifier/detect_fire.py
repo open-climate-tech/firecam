@@ -163,7 +163,7 @@ def drawFireBox(img, destPath, fireBoxCoords, timestamp=None, fireSegment=None, 
     imgDraw = ImageDraw.Draw(img)
 
     (x0, y0, x1, y1) = fireBoxCoords
-    lineWidth=3
+    lineWidth=2
     drawRect(imgDraw, x0, y0, x1, y1, lineWidth, color)
 
     fontPath = os.path.join(str(pathlib.Path(os.path.realpath(__file__)).parent.parent), 'firecam/data/Roboto-Regular.ttf')
@@ -211,7 +211,15 @@ def drawFireBox(img, destPath, fireBoxCoords, timestamp=None, fireSegment=None, 
     del imgDraw
 
 
-def genMovie(notificationsDateDir, constants, cameraID, cameraHeading, timestamp, imgPath, cropCoords, fireBoxCoords):
+def firePixelCoords(img, fireSegment):
+    x0 = fireSegment['MinX'] if 'MinX' in fireSegment else 0
+    y0 = fireSegment['MinY'] if 'MinY' in fireSegment else 0
+    x1 = fireSegment['MaxX'] if 'MaxX' in fireSegment else img.size[0]
+    y1 = fireSegment['MaxY'] if 'MaxY' in fireSegment else img.size[0]
+    return (x0, y0, x1, y1)
+
+
+def genMovie(notificationsDateDir, constants, cameraID, cameraHeading, timestamp, img, imgPath, fireSegment, saveFullImages=True):
     """Generate cropped movie by fetching old images from archive
 
     Args:
@@ -226,16 +234,40 @@ def genMovie(notificationsDateDir, constants, cameraID, cameraHeading, timestamp
     Returns:
         Filepath of cropped movie
     """
+    (x0, y0, x1, y1) = firePixelCoords(img, fireSegment)
+    (cropX0, cropX1) = rect_to_squares.getRangeFromCenter(round((x0 + x1)/2), 640, 0, img.size[0])
+    # 412 pixels because that is minimum pixel height in landscape mode for most mobile phones
+    (cropY0, cropY1) = rect_to_squares.getRangeFromCenter(round((y0 + y1)/2), 412, 0, img.size[1])
+    cropCoords = (cropX0, cropY0, cropX1, cropY1)
+    fireBoxCoords = (x0 - cropX0, y0 - cropY0, x1 - cropX0, y1 - cropY0)
+
     filePathParts = os.path.splitext(imgPath)
     # get images spanning a few minutes so reviewers can evaluate based on progression
-    startTimeDT = datetime.datetime.fromtimestamp(timestamp - 4*60)
-    endTimeDT = datetime.datetime.fromtimestamp(timestamp + 4*60)  # check "future" in case new image arrived during processing
+    startTimeDT = datetime.datetime.fromtimestamp(timestamp - 4*60) # upto 4 minutes before
+    endTimeDT = datetime.datetime.fromtimestamp(timestamp + 5*60)  # upto 5 minute after
+    finalTimestamp = timestamp
 
     with tempfile.TemporaryDirectory() as tmpDirName:
-        oldImages = img_archive.getArchiveImages(constants['googleServices'], settings, constants['dbManager'], tmpDirName,
-                                                 constants['camArchives'], cameraID, cameraHeading, startTimeDT, endTimeDT, 1)
-        imgSequence = oldImages or []
-        imgSequence = imgSequence[-5:] # max 5 total images
+        imgSequence = img_archive.getArchiveImages(constants['googleServices'], settings, constants['dbManager'], tmpDirName,
+                                                    constants['camArchives'], cameraID, cameraHeading, startTimeDT, endTimeDT, 1)
+        imgSequence = imgSequence or []
+        preImages = []
+        detectImage = None
+        postImages = []
+        for (i, imgFile) in enumerate(imgSequence):
+            imgParsed = img_archive.parseFilename(imgFile)
+            if imgParsed['unixTime'] < timestamp:
+                preImages.append(imgFile)
+            elif imgParsed['unixTime'] == timestamp:
+                detectImage = imgFile
+            else:
+                postImages.append(imgFile)
+            if (i == len(imgSequence) - 1):
+                finalTimestamp = imgParsed['unixTime']
+        imgSequence = preImages[-4:] # max 4 most recent images before detection
+        imgSequence += [detectImage or imgPath]
+        imgSequence += postImages[:4] # max 4 earliest images after detection
+
         imgIDs = []
         mspecPath = os.path.join(tmpDirName, 'mspec.txt')
         mspecFile = open(mspecPath, 'w')
@@ -245,7 +277,8 @@ def genMovie(notificationsDateDir, constants, cameraID, cameraHeading, timestamp
                 algined = img_archive.alignImage(imgFile, imgPath)
                 if not algined:
                     continue # skip this image
-            imgIDs.append(goog_helper.copyFile(imgFile, notificationsDateDir))
+            if saveFullImages:
+                imgIDs.append(goog_helper.copyFile(imgFile, notificationsDateDir))
             cropName = 'img' + ("%03d" % i) + filePathParts[1]
             croppedPath = os.path.join(tmpDirName, cropName)
             imgSeq = Image.open(imgFile)
@@ -267,7 +300,7 @@ def genMovie(notificationsDateDir, constants, cameraID, cameraHeading, timestamp
         os.fsync(mspecFile.fileno())
         mspecFile.close()
         # now make movie from this sequence of cropped images
-        moviePath = filePathParts[0] + '_AnnCrop_' + 'x'.join(list(map(lambda x: str(x), cropCoords))) + '.mp4'
+        moviePath = filePathParts[0] + '_' + str(finalTimestamp)[-4:] + '_AnnCrop_' + 'x'.join(list(map(lambda x: str(x), cropCoords))) + '.mp4'
         try:
             (
                 ffmpeg.input(mspecPath, format='concat', safe=0)
@@ -279,7 +312,7 @@ def genMovie(notificationsDateDir, constants, cameraID, cameraHeading, timestamp
         movieID = goog_helper.copyFile(moviePath, notificationsDateDir)
         os.remove(moviePath)
 
-        return (movieID, imgIDs)
+        return (movieID, imgIDs, finalTimestamp)
 
 
 def genAnnotatedImages(notificationsDateDir, constants, cameraID, cameraHeading, timestamp, imgPath, fireSegment):
@@ -295,27 +328,18 @@ def genAnnotatedImages(notificationsDateDir, constants, cameraID, cameraHeading,
     Returns:
         Tuple (str, str): filepaths of cropped and full size annotated iamges
     """
-    filePathParts = os.path.splitext(imgPath)
     img = Image.open(imgPath)
-    x0 = fireSegment['MinX'] if 'MinX' in fireSegment else 0
-    y0 = fireSegment['MinY'] if 'MinY' in fireSegment else 0
-    x1 = fireSegment['MaxX'] if 'MaxX' in fireSegment else img.size[0]
-    y1 = fireSegment['MaxY'] if 'MaxY' in fireSegment else img.size[0]
+    (movieID, imgIDs, finalTimestamp) = genMovie(notificationsDateDir, constants, cameraID, cameraHeading, timestamp, img, imgPath, fireSegment)
 
-    (cropX0, cropX1) = rect_to_squares.getRangeFromCenter(round((x0 + x1)/2), 640, 0, img.size[0])
-    # 412 pixels because that is minimum pixel height in landscape mode for most mobile phones
-    (cropY0, cropY1) = rect_to_squares.getRangeFromCenter(round((y0 + y1)/2), 412, 0, img.size[1])
-    cropCoords = (cropX0, cropY0, cropX1, cropY1)
-    fireBoxCoords = (x0 - cropX0, y0 - cropY0, x1 - cropX0, y1 - cropY0)
-    (movieID, imgIDs) = genMovie(notificationsDateDir, constants, cameraID, cameraHeading, timestamp, imgPath, cropCoords, fireBoxCoords)
-
+    (x0, y0, x1, y1) = firePixelCoords(img, fireSegment)
+    filePathParts = os.path.splitext(imgPath)
     annotatedPath = filePathParts[0] + '_Ann' + filePathParts[1]
     drawFireBox(img, annotatedPath, (x0, y0, x1, y1))
     img.close()
     annotatedID = goog_helper.copyFile(annotatedPath, notificationsDateDir)
     os.remove(annotatedPath)
 
-    return (movieID, imgIDs, annotatedID)
+    return (movieID, imgIDs, annotatedID, finalTimestamp)
 
 
 def drawPolyPixels(mapImg, coordsPixels, fillColor, outlineColor=None):
@@ -683,7 +707,7 @@ def checkWeatherInfo(weatherModel, dbManager, cameraID, timestamp, fireSegment, 
     return prediction
 
 
-def updateDetectionsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon, sourcePolygons, imgIDs, sortId):
+def insertDetectionsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon, sourcePolygons, imgIDs, sortId):
     """Add new entry to detections table
 
     Args:
@@ -714,7 +738,43 @@ def updateDetectionsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl,
     dbManager.add_data('detections', dbRow)
 
 
-def updateAlertsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon, sourcePolygons, sortId):
+def updateDBMovie(dbManager, tableName, cameraID, timestamp, croppedUrl):
+    logging.warning('updateDBMovie %s %s', tableName, cameraID)
+    sqlTemplate = "SELECT * FROM %s WHERE CameraName='%s' and timestamp = %s"
+    sqlStr = sqlTemplate % (tableName, cameraID, timestamp)
+
+    dbResult = dbManager.query(sqlStr)
+    if len(dbResult) != 1:
+        logging.error('updateDBMovie: Unexpected %s entries found in table %s', len(dbResult), tableName)
+        return
+
+    sqlTemplate = "UPDATE %s SET CroppedID = '%s' WHERE CameraName='%s' and timestamp = %s"
+    sqlStr = sqlTemplate % (tableName, croppedUrl, cameraID, timestamp)
+    dbManager.execute(sqlStr)
+
+
+def queryDetections(dbManager, cameraID, timestamp):
+    sqlTemplate = "SELECT * FROM detections WHERE CameraName='%s' and timestamp = %s"
+    sqlStr = sqlTemplate % (cameraID, timestamp)
+
+    dbResult = dbManager.query(sqlStr)
+    if len(dbResult) == 0:
+        logging.error('queryDetections: Missing data')
+        return None
+    detectEntry = dbResult[0]
+    return {
+        "adjScore": detectEntry['adjscore'],
+        'annotatedUrl': detectEntry['imageid'],
+        'croppedUrl': detectEntry['croppedid'],
+        'mapUrl': detectEntry['mapid'],
+        'polygon': detectEntry['polygon'],
+        'isProto': detectEntry['isproto'],
+        'weatherScore': detectEntry['weatherscore'],
+        'sortId': detectEntry['sortid'],
+    }
+
+
+def insertAlertsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon, sourcePolygons, sortId):
     """Add new entry to alerts table
 
     Args:
@@ -857,7 +917,7 @@ def fireDetected(constants, cameraID, cameraHeading, timestamp, fov, imgPath, fi
         dbManager.incrementIgnoreCounter(cameraID, ignoredHeading)
         return
 
-    (croppedID, imgIDs, annotatedID) = genAnnotatedImages(notificationsDateDir, constants, cameraID, cameraHeading, timestamp, imgPath, fireSegment)
+    (croppedID, imgIDs, annotatedID, finalTimestamp) = genAnnotatedImages(notificationsDateDir, constants, cameraID, cameraHeading, timestamp, imgPath, fireSegment)
     if len(imgIDs) < 2:
         return # ignore events without multiple images
     triangle = getTriangleVertices(camLatitude, camLongitude, fireHeading, rangeAngle)
@@ -884,12 +944,105 @@ def fireDetected(constants, cameraID, cameraHeading, timestamp, fov, imgPath, fi
     # Although processing time is not perfect eigher, it seems slightly better because 1) map intersections will show in increasing order
     # and 2) UI results (and notifications) will be more intuitive
     sortId = int(time.time())
-    updateDetectionsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon, sourcePolygons, imgIDs, sortId)
+    insertDetectionsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon, sourcePolygons, imgIDs, sortId)
+    enqueueFireUpdate(constants, cameraID, cameraHeading, timestamp, finalTimestamp, fireSegment)
     if publishAlert(cameraID, weatherScore):
-        updateAlertsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon, sourcePolygons, sortId)
+        insertAlertsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon, sourcePolygons, sortId)
         pubsubFireNotification(cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon, sortId)
         emailFireNotification(constants, cameraID, timestamp, imgPath, annotatedUrl, fireSegment)
         smsFireNotification(dbManager, cameraID)
+
+
+def enqueueFireUpdate(constants, cameraID, cameraHeading, timestamp, finalTimestamp, fireSegment):
+    fireUpdateQueue = constants['fireUpdateQueue']
+    # assert not already in queue already
+    filtered = list(filter(lambda x: (x['cameraID'] == cameraID) and (x['timestamp'] == timestamp), fireUpdateQueue))
+    assert len(filtered) == 0
+    if time.time() > timestamp + 5*60: # discard if already 5 minutes post detection time
+        logging.warning('enqueueFireUpdate timed out %s', cameraID)
+        return
+    fireUpdateQueue.append({
+        'cameraID': cameraID,
+        'cameraHeading': cameraHeading,
+        'timestamp': timestamp,
+        'finalTimestamp': finalTimestamp,
+        'fireSegment': fireSegment,
+    })
+    # resort by finalTimestamp after append
+    constants['fireUpdateQueue'] = sorted(fireUpdateQueue, key=lambda x: x['finalTimestamp'])
+    logging.warning('enqueueFireUpdate %s', cameraID)
+
+
+def popFireUpdate(fireUpdateQueue):
+    if len(fireUpdateQueue) > 0:
+        if time.time() > fireUpdateQueue[0]['finalTimestamp'] + 60: # one minute after final
+            fireEvent = fireUpdateQueue.pop(0)
+            return (fireEvent['cameraID'], fireEvent['cameraHeading'], fireEvent['timestamp'], fireEvent['finalTimestamp'], fireEvent['fireSegment'])
+    return None
+
+
+def checkNewImage(constants, cameraID, cameraHeading, timestamp, finalTimestamp):
+    logging.warning('checkNewImage %s', cameraID)
+    # is there a new image after finalTimestamp?
+    startTimeDT = datetime.datetime.fromtimestamp(finalTimestamp + 31) # at least half a minute after most recent image
+    endTimeDT = datetime.datetime.fromtimestamp(timestamp + 5*60)
+    newImages = False
+    with tempfile.TemporaryDirectory() as tmpDirName:
+        images = img_archive.getArchiveImages(constants['googleServices'], settings, constants['dbManager'], tmpDirName,
+                                                 constants['camArchives'], cameraID, cameraHeading, startTimeDT, endTimeDT, 1)
+        if len(images) == 0:
+            return None
+        lastImage = images[-1]
+        imgParsed = img_archive.parseFilename(lastImage)
+        if imgParsed['unixTime'] > finalTimestamp:
+            newImages = True
+    return newImages
+
+
+def updateMovie(constants, cameraID, cameraHeading, timestamp, fireSegment):
+    logging.warning('updateMovie %s', cameraID)
+    # need local image from detection time for alignment and sizing coordinates from archive
+    timeDT = datetime.datetime.fromtimestamp(timestamp)
+    with tempfile.TemporaryDirectory() as tmpDirName:
+        imgPath = img_archive.getArchiveImages(constants['googleServices'], settings, constants['dbManager'], tmpDirName,
+                                                constants['camArchives'], cameraID, cameraHeading, timeDT, timeDT, 1)
+        if not imgPath:
+            return (None, None)
+        imgPath = imgPath[0]
+        img = Image.open(imgPath)
+        notificationsDateDir = goog_helper.dateSubDir(settings.noticationsDir)
+        (movieID, imgIDs, finalTimestamp) = genMovie(notificationsDateDir, constants, cameraID, cameraHeading, timestamp, img, imgPath, fireSegment, saveFullImages=False)
+        img.close()
+    return (movieID, finalTimestamp)
+
+
+def processEnqueuedUpdates(constants):
+    fireUpdateQueue = constants['fireUpdateQueue']
+    dbManager = constants['dbManager']
+    fireEvent = popFireUpdate(fireUpdateQueue)
+    if not fireEvent:
+        return
+    (cameraID, cameraHeading, timestamp, finalTimestamp, fireSegment) = fireEvent
+    logging.warning('processEnqueuedUpdates %s', cameraID)
+    detectData = queryDetections(dbManager, cameraID, timestamp)
+    if detectData and checkNewImage(constants, cameraID, cameraHeading, timestamp, finalTimestamp):
+        # XXXXX TODO: score new images for smoke
+        (movieID, finalTimestamp) = updateMovie(constants, cameraID, cameraHeading, timestamp, fireSegment)
+        if movieID and finalTimestamp:
+            movieUrl = goog_helper.getUrlForFile(movieID)
+            movieUrls = movieUrl + ',' + detectData['croppedUrl']
+            updateDBMovie(dbManager, 'detections', cameraID, timestamp, movieUrls)
+            if publishAlert(cameraID, detectData['weatherScore']):
+                updateDBMovie(dbManager, 'alerts', cameraID, timestamp, movieUrls)
+                pubsubFireNotification(cameraID, timestamp, movieUrls, detectData['annotatedUrl'], detectData['mapUrl'], fireSegment, detectData['polygon'], detectData['sortId'])
+        else:
+            fireEvent['errorCount'] = fireEvent['errorCount'] if 'errorCount' in fireEvent else 0
+            fireEvent['errorCount'] += 1
+            if fireEvent['errorCount'] > 3:
+                logging.error('processEnqueuedUpdates: too many errors for %s,%s', cameraID, timestamp)
+                return # don't requeue
+    # XXXX TODO: should timestamp change for requeue depending of result of checkNewImage
+    enqueueFireUpdate(constants, cameraID, cameraHeading, timestamp, finalTimestamp, fireSegment)
 
 
 def deleteImageFiles(imgPath, origImgPath):
@@ -1141,6 +1294,7 @@ def main():
     detectionPolicy = DetectionPolicyClass(args, dbManager, stateless=stateless)
     logging.warning('weatherModel %s threshold %s', settings.weather_model, settings.weatherThreshold)
     weatherModel = tf_helper.loadModel(settings.weather_model)
+    fireUpdateQueue = []
     constants = { # dictionary of constants to reduce parameters in various functions
         'args': args,
         'googleServices': googleServices,
@@ -1148,6 +1302,7 @@ def main():
         'dbManager': dbManager,
         'weatherModel': weatherModel,
         'ignoredViews': ignoredViews,
+        'fireUpdateQueue': fireUpdateQueue,
     }
 
     numImages = 0
@@ -1155,6 +1310,7 @@ def main():
     numAlerts = 0
     processingTimeTracker = initializeTimeTracker()
     while True:
+        processEnqueuedUpdates(constants)
         classifyImgPath = None
         timeStart = time.time()
         if useArchivedImages:
