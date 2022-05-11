@@ -22,6 +22,7 @@ from firecam.lib import goog_helper
 
 import os
 import logging
+import socket
 import urllib.request
 import time, datetime, dateutil.parser
 from html.parser import HTMLParser
@@ -32,6 +33,8 @@ import math
 from PIL import Image, ImageMath, ImageStat
 import numpy as np
 import cv2
+import json
+import shutil
 
 def isPTZ(cameraID):
     return False
@@ -45,20 +48,7 @@ def getCameraSizeX(cameraID):
     return 3072 # camera horizontal pixel size. Most Mobotix are 3072 x 2048
 
 
-def fetchImageAndMeta(dbManager, cameraID, cameraUrl, imgDir):
-    """Fetch the image file and metadata for given camera
-
-    Args:
-        cameraID (str): ID of camera
-        cameraUrl (str): URL with image and metadata
-        imgDir (str): Output directory to store iamge
-
-    Returns:
-        Tuple containing filepath of the image, current heading and timestamp
-    """
-    fov = getCameraFov(cameraID)
-    timestamp = int(time.time())
-    imgPath = getImgPath(imgDir, cameraID, timestamp)
+def fetchUrlHPWren(cameraID, cameraUrl, imgDir, timestamp, imgPath):
     urllib.request.urlretrieve(cameraUrl, imgPath)
     heading = getHeading(cameraID)
     # read EXIF header for original timestamp and rename file
@@ -73,11 +63,78 @@ def fetchImageAndMeta(dbManager, cameraID, cameraUrl, imgDir):
             timestamp = newTimestamp
             os.rename(imgPath, newImgPath)
             imgPath = newImgPath
-    return (imgPath, heading, timestamp, fov)
+    return (imgPath, heading, timestamp)
+
+
+def fetchCurrentFromDB(dbManager, cameraID, imgDir, timestamp):
+    sqlTemplate = """SELECT heading, max(timestamp) as maxts, max(fieldofview) as fov, max(imagepath) as maxpath
+                        FROM archive
+                        WHERE CameraID='%s' and imagepath != '' and timestamp >= %s and timestamp <= %s and processed = 0
+                        group by heading order by maxts"""
+    sqlStr = sqlTemplate % (cameraID, timestamp - 5*60, timestamp)
+    dbResult = dbManager.query(sqlStr)
+    result = []
+    for imgInfo in dbResult:
+        srcFilePP = pathlib.PurePath(imgInfo['maxpath'])
+        destPath = os.path.join(imgDir, srcFilePP.name)
+        shutil.copy(imgInfo['maxpath'], destPath)
+        result.append((destPath, imgInfo['heading'], imgInfo['maxts'], imgInfo['fov']))
+    if len(result) > 0:
+        return result
+    else:
+        return None
+
+
+def fetchImageAndMeta(dbManager, cameraID, cameraUrl, imgDir, newOnly=False):
+    """Fetch the image file and metadata for given camera
+
+    Args:
+        cameraID (str): ID of camera
+        cameraUrl (str): URL with image and metadata
+        imgDir (str): Output directory to store iamge
+
+    Returns:
+        Tuple containing filepath of the image, current heading and timestamp
+    """
+    fov = getCameraFov(cameraID)
+    timestamp = int(time.time())
+    imgPath = getImgPath(imgDir, cameraID, timestamp)
+    # logging.warning('Fetching camera %s', cameraID)
+    if newOnly:
+        (imgPath, heading, timestamp) = fetchUrlHPWren(cameraID, cameraUrl, imgDir, timestamp, imgPath)
+        return (imgPath, heading, timestamp, fov)
+    else:
+        result = fetchCurrentFromDB(dbManager, cameraID, imgDir, timestamp)
+        if result:
+            return result
+        # try newOnly=True
+        return fetchImageAndMeta(dbManager, cameraID, cameraUrl, imgDir, newOnly=True)
+
+
+def getDBImages(dbManager, outputDir, cameraID, heading, startTimeDT, endTimeDT, gapMinutes):
+    sqlTemplate = """SELECT timestamp, imagepath FROM archive
+        where CameraID='%s' and heading=%s and timestamp >= %s and timestamp <= %s order by timestamp"""
+    startTime = int(time.mktime(startTimeDT.timetuple()))
+    endTime = int(time.mktime(endTimeDT.timetuple()))
+    sqlStr = sqlTemplate % (cameraID, heading, startTime, endTime)
+    # logging.warning('getDBImages camera %s query %s', cameraID, sqlStr)
+    dbResult = dbManager.query(sqlStr)
+    # logging.warning('getDBImages camera %s, reslen %s res %s', cameraID, len(dbResult), len(dbResult) and str(dbResult))
+    result = []
+    for imgInfo in dbResult:
+        srcPath = imgInfo['imagepath']
+        srcFilePP = pathlib.PurePath(srcPath)
+        destPath = os.path.join(outputDir, srcFilePP.name)
+        shutil.copy(srcPath, destPath)
+        result.append(destPath)
+    return result
 
 
 def markImageProcessed(dbManager, cameraID, heading, timestamp):
-    return
+    sqlTemplate = """UPDATE archive SET processed = 1
+                        WHERE CameraID='%s' and heading=%s and timestamp = %s"""
+    sqlStr = sqlTemplate % (cameraID, heading, timestamp)
+    dbManager.execute(sqlStr)
 
 
 def getImgPath(outputDir, cameraID, timestamp, cropCoords=None, diffMinutes=0):
@@ -713,6 +770,9 @@ def getHpwrenImages(googleServices, settings, outputDir, camArchives, cameraID, 
 
 
 def getArchiveImages(googleServices, settings, dbManager, outputDir, camArchives, cameraID, heading, startTimeDT, endTimeDT, gapMinutes):
+    dbImages = getDBImages(dbManager, outputDir, cameraID, heading, startTimeDT, endTimeDT, gapMinutes)
+    if dbImages:
+        return dbImages
     return getHpwrenImages(googleServices, settings, outputDir, camArchives, cameraID, startTimeDT, endTimeDT, gapMinutes)
 
 
