@@ -991,7 +991,7 @@ def checkNewImage(constants, cameraID, cameraHeading, timestamp, finalTimestamp)
         images = img_archive.getArchiveImages(constants['googleServices'], settings, constants['dbManager'], tmpDirName,
                                                  constants['camArchives'], cameraID, cameraHeading, startTimeDT, endTimeDT, 1)
         if len(images) == 0:
-            return None
+            return False
         lastImage = images[-1]
         imgParsed = img_archive.parseFilename(lastImage)
         if imgParsed['unixTime'] > finalTimestamp:
@@ -1008,7 +1008,7 @@ def updateMovie(constants, cameraID, cameraHeading, timestamp, fireSegment):
                                                 constants['camArchives'], cameraID, cameraHeading, timeDT, timeDT, 1)
         if not imgPath:
             return (None, None)
-        imgPath = imgPath[0]
+        imgPath = imgPath[-1]
         img = Image.open(imgPath)
         notificationsDateDir = goog_helper.dateSubDir(settings.noticationsDir)
         (movieID, imgIDs, finalTimestamp) = genMovie(notificationsDateDir, constants, cameraID, cameraHeading, timestamp, img, imgPath, fireSegment, saveFullImages=False)
