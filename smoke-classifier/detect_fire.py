@@ -1169,23 +1169,29 @@ getArchivedImages.cache = None
 
 def fetchPriorAligned(constants, cameraID, heading, timestamp, baseImgPath, outputDirName):
     imgDT = datetime.datetime.fromtimestamp(timestamp)
-    dt = imgDT - datetime.timedelta(seconds = 60)
+    # target 1 minute (60 seconds) prior by setting range from 1.5 to 0.5 minutes prior
+    startDT = imgDT - datetime.timedelta(seconds = 90)
+    endDT = imgDT - datetime.timedelta(seconds = 31)
     oldImages = img_archive.getArchiveImages(constants['googleServices'], settings, constants['dbManager'], outputDirName,
-                    constants['camArchives'], cameraID, heading, dt, dt, 1)
+                    constants['camArchives'], cameraID, heading, startDT, endDT, 1)
     if not oldImages:
         return None
     priorImg = None
     if len(oldImages) >= 1:
         # find the most recent aligned image
         oldImages.reverse()
-        if img_archive.isPTZ(cameraID): # PTZ iamges require alignment
-            for filePath in oldImages:
+        for filePath in oldImages:
+            imgParsed = img_archive.parseFilename(filePath)
+            if imgParsed['unixTime'] == timestamp:  # skip current image if somehow that sneaks in
+                continue
+            if img_archive.isPTZ(cameraID): # PTZ iamges require alignment
                 img = img_archive.alignImageObj(filePath, baseImgPath)
                 if img:
                     priorImg = img
                     break
-        else:
-            priorImg = Image.open(oldImages[0])
+            else:
+                priorImg = Image.open(oldImages[0])
+                break
     if priorImg:
         priorImg.load() # force load to allow remove below to succeed on Windows
     for filePath in oldImages:
