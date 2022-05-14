@@ -180,6 +180,8 @@ class DbManager(object):
             ('WeatherScore', 'REAL'),
             ('ImgSequence', 'TEXT'),
             ('SortId', 'INT'),
+            ('FireHeading', 'INT'),
+            ('AngularWidth', 'INT'),
         ]
 
         # alerts are notifications sent out via various means
@@ -195,6 +197,8 @@ class DbManager(object):
             ('IsProto', 'INT'),
             ('WeatherScore', 'REAL'),
             ('SortId', 'INT'),
+            ('FireHeading', 'INT'),
+            ('AngularWidth', 'INT'),
         ]
 
         # votes regarding alerts

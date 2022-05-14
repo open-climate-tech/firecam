@@ -1057,20 +1057,26 @@ def getHeadingRange(centralHeading, fov, minX, maxX, imgSizeX):
     return (round(heading), math.ceil(range))
 
 
+def intersectsAngleRange(heading1, range1, heading2, range2):
+    minHeading1 = int(heading1 - range1 / 2) % 360
+    maxHeading1 = math.ceil(heading1 + range1 / 2) % 360
+    minHeading2 = int(heading2 - range2 / 2) % 360
+    maxHeading2 = math.ceil(heading2 + range2 / 2) % 360
+    if minHeading1 < maxHeading1 and minHeading2 < maxHeading2: # niether range straddle 0
+        if (maxHeading2 > minHeading1 and minHeading2 < maxHeading1):
+            return True
+    elif minHeading1 < maxHeading1 or minHeading2 < maxHeading2: # one of the ranges doesn't straddle 0, other does
+        if (maxHeading2 > minHeading1 or minHeading2 < maxHeading1):
+            return True
+    else: #both straddle 0
+        return True
+    return False
+
+
 def findIgnoredView(ignoredViews, cameraID, heading, fov):
     camMatches = list(filter(lambda x: x['cameraid'] == cameraID, ignoredViews))
-    minViewHeading = int(heading - fov / 2) % 360
-    maxViewHeading = math.ceil(heading + fov / 2) % 360
     for entry in camMatches:
-        minIgnoreHeading = int(entry['heading'] - entry['angularwidth'] / 2) % 360
-        maxIgnoreHeading = math.ceil(entry['heading'] + entry['angularwidth'] / 2) % 360
-        if minIgnoreHeading < maxIgnoreHeading and minViewHeading < maxViewHeading: # niether view nor ignore straddle 0
-            if (maxViewHeading > minIgnoreHeading and minViewHeading < maxIgnoreHeading):
-                return entry
-        elif minIgnoreHeading < maxIgnoreHeading or minViewHeading < maxViewHeading: # one of view or ignore doesn't straddle 0, other does
-            if (maxViewHeading > minIgnoreHeading or minViewHeading < maxIgnoreHeading):
-                return entry
-        else: #both straddle 0
+        if intersectsAngleRange(heading, fov, entry['heading'], entry['angularwidth']):
             return entry
     return None
 

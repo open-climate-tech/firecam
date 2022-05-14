@@ -622,6 +622,34 @@ def getRecentDetections(dbManager, timestamp):
     return dbResult
 
 
+def isRecentAlert(dbManager, cameraID, fireHeading, rangeAngle, timestamp):
+    """Check if the location and heading for this event has been recently (last two hours) alerted
+
+    Args:
+        dbManager (DbManager):
+        cameraID (str): camera ID
+        heading (int): direction camera is facing
+        timestamp (int): time.time() value when image was taken
+
+    Returns:
+        True if recently alerted, False otherwise
+    """
+    sqlTemplate = """SELECT fireheading, angularwidth FROM alerts
+                        WHERE timestamp > %s and CameraName in (
+                            SELECT name FROM sources WHERE locationid = (SELECT locationid FROM sources WHERE name='%s')
+                            )"""
+    sqlStr = sqlTemplate % (timestamp - 2*60*60, cameraID)
+
+    dbResult = dbManager.query(sqlStr)
+    if len(dbResult) == 0:
+        return False
+    for entry in dbResult:
+        if img_archive.intersectsAngleRange(entry['fireheading'], entry['angularwidth'], fireHeading, rangeAngle):
+            logging.warning('Supressing due to recent alert')
+            return True
+    return False
+
+
 def getPolygonIntersection(coords1, coords2):
     """Find the area intersection of the two given polygons
 
@@ -707,7 +735,7 @@ def checkWeatherInfo(weatherModel, dbManager, cameraID, timestamp, fireSegment, 
     return prediction
 
 
-def insertDetectionsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon, sourcePolygons, imgIDs, sortId):
+def insertDetectionsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon, sourcePolygons, imgIDs, sortId, fireHeading, rangeAngle):
     """Add new entry to detections table
 
     Args:
@@ -734,6 +762,8 @@ def insertDetectionsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl,
         'WeatherScore': fireSegment['weatherScore'],
         'ImgSequence': ','.join(imgIDs),
         'SortId': sortId,
+        'FireHeading': fireHeading,
+        'AngularWidth': rangeAngle,
     }
     dbManager.add_data('detections', dbRow)
 
@@ -771,10 +801,12 @@ def queryDetections(dbManager, cameraID, timestamp):
         'isProto': detectEntry['isproto'],
         'weatherScore': detectEntry['weatherscore'],
         'sortId': detectEntry['sortid'],
+        'fireHeading': detectEntry['fireheading'],
+        'angularWidth': detectEntry['angularwidth'],
     }
 
 
-def insertAlertsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon, sourcePolygons, sortId):
+def insertAlertsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon, sourcePolygons, sortId, fireHeading, rangeAngle):
     """Add new entry to alerts table
 
     Args:
@@ -800,6 +832,8 @@ def insertAlertsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, map
         'IsProto': int(isProto(cameraID)),
         'WeatherScore': fireSegment['weatherScore'],
         'SortId': sortId,
+        'FireHeading': fireHeading,
+        'AngularWidth': rangeAngle,
     }
     dbManager.add_data('alerts', dbRow)
 
@@ -881,9 +915,14 @@ def smsFireNotification(dbManager, cameraID):
         for phone in phones:
             sms_helper.sendSms(settings, phone, message)
 
-
-def publishAlert(cameraID, weatherScore):
-    return (weatherScore > settings.weatherThreshold) and not isProto(cameraID)
+def publishAlert(dbManager, cameraID, fireHeading, rangeAngle, timestamp, weatherScore):
+    if isProto(cameraID):
+        return False
+    if weatherScore < settings.weatherThreshold:
+        return False
+    if isRecentAlert(dbManager, cameraID, fireHeading, rangeAngle, timestamp):
+        return False
+    return True
 
 
 def fireDetected(constants, cameraID, cameraHeading, timestamp, fov, imgPath, fireSegment):
@@ -944,10 +983,10 @@ def fireDetected(constants, cameraID, cameraHeading, timestamp, fov, imgPath, fi
     # Although processing time is not perfect eigher, it seems slightly better because 1) map intersections will show in increasing order
     # and 2) UI results (and notifications) will be more intuitive
     sortId = int(time.time())
-    insertDetectionsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon, sourcePolygons, imgIDs, sortId)
+    insertDetectionsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon, sourcePolygons, imgIDs, sortId, fireHeading, rangeAngle)
     enqueueFireUpdate(constants, cameraID, cameraHeading, timestamp, finalTimestamp, fireSegment)
-    if publishAlert(cameraID, weatherScore):
-        insertAlertsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon, sourcePolygons, sortId)
+    if publishAlert(dbManager, cameraID, fireHeading, rangeAngle, timestamp, weatherScore):
+        insertAlertsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon, sourcePolygons, sortId, fireHeading, rangeAngle)
         pubsubFireNotification(cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon, sortId)
         emailFireNotification(constants, cameraID, timestamp, imgPath, annotatedUrl, fireSegment)
         smsFireNotification(dbManager, cameraID)
@@ -1032,7 +1071,7 @@ def processEnqueuedUpdates(constants):
             movieUrl = goog_helper.getUrlForFile(movieID)
             movieUrls = movieUrl + ',' + detectData['croppedUrl']
             updateDBMovie(dbManager, 'detections', cameraID, timestamp, movieUrls)
-            if publishAlert(cameraID, detectData['weatherScore']):
+            if publishAlert(dbManager, cameraID, detectData['fireHeading'], detectData['angularWidth'], timestamp, detectData['weatherScore']):
                 updateDBMovie(dbManager, 'alerts', cameraID, timestamp, movieUrls)
                 pubsubFireNotification(cameraID, timestamp, movieUrls, detectData['annotatedUrl'], detectData['mapUrl'], fireSegment, detectData['polygon'], detectData['sortId'])
         else:

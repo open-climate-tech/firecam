@@ -31,10 +31,10 @@ class DetectAlways:
         detectionResult = {
             'fireSegment': {
                 'score': 0.9,
-                'MinX': 3,
-                'MinY': 13,
-                'MaxX': 7,
-                'MaxY': 17,
+                'MinX': 30,
+                'MinY': 130,
+                'MaxX': 70,
+                'MaxY': 170,
             },
             'timeMid': time.time()
         }
