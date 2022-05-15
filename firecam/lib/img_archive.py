@@ -773,7 +773,9 @@ def getArchiveImages(googleServices, settings, dbManager, outputDir, camArchives
     dbImages = getDBImages(dbManager, outputDir, cameraID, heading, startTimeDT, endTimeDT, gapMinutes)
     if dbImages:
         return dbImages
-    return getHpwrenImages(googleServices, settings, outputDir, camArchives, cameraID, startTimeDT, endTimeDT, gapMinutes)
+    result = getHpwrenImages(googleServices, settings, outputDir, camArchives, cameraID, startTimeDT, endTimeDT, gapMinutes)
+    result = result or []
+    return result
 
 
 def cacheInsert(cache, fileName):
