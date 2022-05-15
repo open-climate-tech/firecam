@@ -635,10 +635,10 @@ def isRecentAlert(dbManager, cameraID, fireHeading, rangeAngle, timestamp):
         True if recently alerted, False otherwise
     """
     sqlTemplate = """SELECT fireheading, angularwidth FROM alerts
-                        WHERE timestamp > %s and CameraName in (
+                        WHERE timestamp > %s and timestamp < %s and CameraName in (
                             SELECT name FROM sources WHERE locationid = (SELECT locationid FROM sources WHERE name='%s')
                             )"""
-    sqlStr = sqlTemplate % (timestamp - 2*60*60, cameraID)
+    sqlStr = sqlTemplate % (timestamp - 2*60*60, timestamp, cameraID)
 
     dbResult = dbManager.query(sqlStr)
     if len(dbResult) == 0:
@@ -914,6 +914,7 @@ def smsFireNotification(dbManager, cameraID):
     if len(phones) > 0:
         for phone in phones:
             sms_helper.sendSms(settings, phone, message)
+
 
 def publishAlert(dbManager, cameraID, fireHeading, rangeAngle, timestamp, weatherScore):
     if isProto(cameraID):
