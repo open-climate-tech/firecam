@@ -244,7 +244,7 @@ def genMovie(notificationsDateDir, constants, cameraID, cameraHeading, timestamp
     filePathParts = os.path.splitext(imgPath)
     # get images spanning a few minutes so reviewers can evaluate based on progression
     startTimeDT = datetime.datetime.fromtimestamp(timestamp - 4*60) # upto 4 minutes before
-    endTimeDT = datetime.datetime.fromtimestamp(timestamp + 6*60)  # upto 6 minute after
+    endTimeDT = datetime.datetime.fromtimestamp(timestamp + 7*60)  # upto 7 minute after
     finalTimestamp = timestamp
 
     with tempfile.TemporaryDirectory() as tmpDirName:
@@ -1006,7 +1006,7 @@ def enqueueFireUpdate(constants, cameraID, cameraHeading, timestamp, finalTimest
     # assert not already in queue already
     filtered = list(filter(lambda x: (x['cameraID'] == cameraID) and (x['timestamp'] == timestamp), fireUpdateQueue))
     assert len(filtered) == 0
-    if time.time() > timestamp + 6*60: # discard if already 6 minutes post detection time
+    if time.time() > timestamp + 7*60: # discard if already 7 minutes post detection time
         logging.warning('enqueueFireUpdate timed out %s', cameraID)
         return
     fireUpdateQueue.append({
