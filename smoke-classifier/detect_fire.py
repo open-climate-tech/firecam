@@ -244,7 +244,7 @@ def genMovie(notificationsDateDir, constants, cameraID, cameraHeading, timestamp
     filePathParts = os.path.splitext(imgPath)
     # get images spanning a few minutes so reviewers can evaluate based on progression
     startTimeDT = datetime.datetime.fromtimestamp(timestamp - 4*60) # upto 4 minutes before
-    endTimeDT = datetime.datetime.fromtimestamp(timestamp + 5*60)  # upto 5 minute after
+    endTimeDT = datetime.datetime.fromtimestamp(timestamp + 6*60)  # upto 6 minute after
     finalTimestamp = timestamp
 
     with tempfile.TemporaryDirectory() as tmpDirName:
@@ -266,7 +266,8 @@ def genMovie(notificationsDateDir, constants, cameraID, cameraHeading, timestamp
                 finalTimestamp = imgParsed['unixTime']
         imgSequence = preImages[-4:] # max 4 most recent images before detection
         imgSequence += [detectImage or imgPath]
-        imgSequence += postImages[:4] # max 4 earliest images after detection
+        postImages = postImages[:3] # max 3 earliest images after detection
+        imgSequence += postImages
 
         imgIDs = []
         mspecPath = os.path.join(tmpDirName, 'mspec.txt')
@@ -299,6 +300,10 @@ def genMovie(notificationsDateDir, constants, cameraID, cameraHeading, timestamp
         mspecFile.flush()
         os.fsync(mspecFile.fileno())
         mspecFile.close()
+        if saveFullImages and len(imgIDs) < 2: # ignore events without multiple images
+            logging.warning('genMovie not enough frames %s, %s, %s, %s', cameraID, len(imgIDs), len(preImages), len(postImages))
+            return ('', imgIDs, finalTimestamp, len(postImages))
+
         # now make movie from this sequence of cropped images
         moviePath = filePathParts[0] + '_' + str(finalTimestamp)[-4:] + '_AnnCrop_' + 'x'.join(list(map(lambda x: str(x), cropCoords))) + '.mp4'
         try:
@@ -312,7 +317,7 @@ def genMovie(notificationsDateDir, constants, cameraID, cameraHeading, timestamp
         movieID = goog_helper.copyFile(moviePath, notificationsDateDir)
         os.remove(moviePath)
 
-        return (movieID, imgIDs, finalTimestamp)
+        return (movieID, imgIDs, finalTimestamp, len(postImages))
 
 
 def genAnnotatedImages(notificationsDateDir, constants, cameraID, cameraHeading, timestamp, imgPath, fireSegment):
@@ -329,7 +334,9 @@ def genAnnotatedImages(notificationsDateDir, constants, cameraID, cameraHeading,
         Tuple (str, str): filepaths of cropped and full size annotated iamges
     """
     img = Image.open(imgPath)
-    (movieID, imgIDs, finalTimestamp) = genMovie(notificationsDateDir, constants, cameraID, cameraHeading, timestamp, img, imgPath, fireSegment)
+    (movieID, imgIDs, finalTimestamp, x) = genMovie(notificationsDateDir, constants, cameraID, cameraHeading, timestamp, img, imgPath, fireSegment)
+    if not movieID:
+        return (movieID, imgIDs, '', finalTimestamp)
 
     (x0, y0, x1, y1) = firePixelCoords(img, fireSegment)
     filePathParts = os.path.splitext(imgPath)
@@ -958,8 +965,9 @@ def fireDetected(constants, cameraID, cameraHeading, timestamp, fov, imgPath, fi
         return
 
     (croppedID, imgIDs, annotatedID, finalTimestamp) = genAnnotatedImages(notificationsDateDir, constants, cameraID, cameraHeading, timestamp, imgPath, fireSegment)
-    if len(imgIDs) < 2:
-        return # ignore events without multiple images
+    if not croppedID:
+        return
+
     triangle = getTriangleVertices(camLatitude, camLongitude, fireHeading, rangeAngle)
     currentViewShed = intersectLand(triangle)
     intersectionInfo = intersectRecentDetections(dbManager, timestamp, currentViewShed)
@@ -998,7 +1006,7 @@ def enqueueFireUpdate(constants, cameraID, cameraHeading, timestamp, finalTimest
     # assert not already in queue already
     filtered = list(filter(lambda x: (x['cameraID'] == cameraID) and (x['timestamp'] == timestamp), fireUpdateQueue))
     assert len(filtered) == 0
-    if time.time() > timestamp + 5*60: # discard if already 5 minutes post detection time
+    if time.time() > timestamp + 6*60: # discard if already 6 minutes post detection time
         logging.warning('enqueueFireUpdate timed out %s', cameraID)
         return
     fireUpdateQueue.append({
@@ -1043,6 +1051,7 @@ def updateMovie(constants, cameraID, cameraHeading, timestamp, fireSegment):
     logging.warning('updateMovie %s', cameraID)
     # need local image from detection time for alignment and sizing coordinates from archive
     timeDT = datetime.datetime.fromtimestamp(timestamp)
+    isFinalMovie = False
     with tempfile.TemporaryDirectory() as tmpDirName:
         imgPath = img_archive.getArchiveImages(constants['googleServices'], settings, constants['dbManager'], tmpDirName,
                                                 constants['camArchives'], cameraID, cameraHeading, timeDT, timeDT, 1)
@@ -1051,9 +1060,10 @@ def updateMovie(constants, cameraID, cameraHeading, timestamp, fireSegment):
         imgPath = imgPath[-1]
         img = Image.open(imgPath)
         notificationsDateDir = goog_helper.dateSubDir(settings.noticationsDir)
-        (movieID, imgIDs, finalTimestamp) = genMovie(notificationsDateDir, constants, cameraID, cameraHeading, timestamp, img, imgPath, fireSegment, saveFullImages=False)
+        (movieID, imgIDs, finalTimestamp, postCount) = genMovie(notificationsDateDir, constants, cameraID, cameraHeading, timestamp, img, imgPath, fireSegment, saveFullImages=False)
+        isFinalMovie = postCount > 2
         img.close()
-    return (movieID, finalTimestamp)
+    return (movieID, finalTimestamp, isFinalMovie)
 
 
 def processEnqueuedUpdates(constants):
@@ -1064,10 +1074,12 @@ def processEnqueuedUpdates(constants):
         return
     (cameraID, cameraHeading, timestamp, finalTimestamp, fireSegment) = fireEvent
     logging.warning('processEnqueuedUpdates %s', cameraID)
+    reQueue = True
     detectData = queryDetections(dbManager, cameraID, timestamp)
     if detectData and checkNewImage(constants, cameraID, cameraHeading, timestamp, finalTimestamp):
         # XXXXX TODO: score new images for smoke
-        (movieID, finalTimestamp) = updateMovie(constants, cameraID, cameraHeading, timestamp, fireSegment)
+        (movieID, finalTimestamp, isFinalMovie) = updateMovie(constants, cameraID, cameraHeading, timestamp, fireSegment)
+        reQueue = not isFinalMovie
         if movieID and finalTimestamp:
             movieUrl = goog_helper.getUrlForFile(movieID)
             movieUrls = movieUrl + ',' + detectData['croppedUrl']
@@ -1076,13 +1088,13 @@ def processEnqueuedUpdates(constants):
                 updateDBMovie(dbManager, 'alerts', cameraID, timestamp, movieUrls)
                 pubsubFireNotification(cameraID, timestamp, movieUrls, detectData['annotatedUrl'], detectData['mapUrl'], fireSegment, detectData['polygon'], detectData['sortId'])
         else:
-            fireEvent['errorCount'] = fireEvent['errorCount'] if 'errorCount' in fireEvent else 0
-            fireEvent['errorCount'] += 1
-            if fireEvent['errorCount'] > 3:
-                logging.error('processEnqueuedUpdates: too many errors for %s,%s', cameraID, timestamp)
-                return # don't requeue
+            logging.error('processEnqueuedUpdates: failure %s: %s, %s', cameraID, movieID, finalTimestamp)
+            return # don't requeue
     # XXXX TODO: should timestamp change for requeue depending of result of checkNewImage
-    enqueueFireUpdate(constants, cameraID, cameraHeading, timestamp, finalTimestamp, fireSegment)
+    if reQueue:
+        enqueueFireUpdate(constants, cameraID, cameraHeading, timestamp, finalTimestamp, fireSegment)
+    else:
+        logging.warning('processEnqueuedUpdates finalMovie %s', cameraID)
 
 
 def deleteImageFiles(imgPath, origImgPath):

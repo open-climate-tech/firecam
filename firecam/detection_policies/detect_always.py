@@ -19,7 +19,9 @@ This detection policy always returns a detection.  Meant for testing the code
 """
 
 import os, sys
+import random
 import time
+from PIL import Image
 
 class DetectAlways:
 
@@ -28,14 +30,20 @@ class DetectAlways:
 
 
     def detect(self, image_spec, checkShifts=False, silent=False, fetchDiff=None):
+        last_image_spec = image_spec[-1]
+        imgPath = last_image_spec['path']
+        img = Image.open(imgPath)
+        centerX = int((random.random()*img.size[0]*0.5) + img.size[0]*0.25)
+        centerY = int((random.random()*img.size[1]*0.5) + img.size[1]*0.25)
         detectionResult = {
             'fireSegment': {
                 'score': 0.9,
-                'MinX': 30,
-                'MinY': 130,
-                'MaxX': 70,
-                'MaxY': 170,
+                'MinX': centerX - 50,
+                'MinY': centerY - 50,
+                'MaxX': centerX + 50,
+                'MaxY': centerY + 50,
             },
             'timeMid': time.time()
         }
+        img.close()
         return detectionResult
