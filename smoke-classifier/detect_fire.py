@@ -271,6 +271,7 @@ def genMovie(notificationsDateDir, constants, cameraID, cameraHeading, timestamp
         postImages = postImages[:3] # max 3 earliest images after detection
         imgSequence += postImages
 
+        croppedPath = ''
         imgIDs = []
         mspecPath = os.path.join(tmpDirName, 'mspec.txt')
         mspecFile = open(mspecPath, 'w')
@@ -297,8 +298,7 @@ def genMovie(notificationsDateDir, constants, cameraID, cameraHeading, timestamp
             croppedImg.close()
             mspecFile.write("file '" + croppedPath + "'\n")
             mspecFile.write('duration 1\n')
-            if (i == len(imgSequence) - 1): # final image has to be repeated for ffmpeg
-                mspecFile.write("file '" + croppedPath + "'\n")
+        mspecFile.write("file '" + croppedPath + "'\n")
         mspecFile.flush()
         os.fsync(mspecFile.fileno())
         mspecFile.close()
