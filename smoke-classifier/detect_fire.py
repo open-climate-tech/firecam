@@ -58,6 +58,8 @@ import ffmpeg
 from shapely.geometry import Polygon
 
 
+POST_DETECTION_UPDATE_MINS = 7 # minutes after detection to keep searching for new image frames for updated videos
+
 def getNextImage(dbManager, cameras, stateless, counterName):
     """Gets the next image to check for smoke
 
@@ -244,7 +246,7 @@ def genMovie(notificationsDateDir, constants, cameraID, cameraHeading, timestamp
     filePathParts = os.path.splitext(imgPath)
     # get images spanning a few minutes so reviewers can evaluate based on progression
     startTimeDT = datetime.datetime.fromtimestamp(timestamp - 4*60) # upto 4 minutes before
-    endTimeDT = datetime.datetime.fromtimestamp(timestamp + 7*60)  # upto 7 minute after
+    endTimeDT = datetime.datetime.fromtimestamp(timestamp + POST_DETECTION_UPDATE_MINS*60)  # upto POST_DETECTION_UPDATE_MINS minute after
     finalTimestamp = timestamp
 
     with tempfile.TemporaryDirectory() as tmpDirName:
@@ -1006,7 +1008,7 @@ def enqueueFireUpdate(constants, cameraID, cameraHeading, timestamp, finalTimest
     # assert not already in queue already
     filtered = list(filter(lambda x: (x['cameraID'] == cameraID) and (x['timestamp'] == timestamp), fireUpdateQueue))
     assert len(filtered) == 0
-    if time.time() > timestamp + 7*60: # discard if already 7 minutes post detection time
+    if time.time() > timestamp + POST_DETECTION_UPDATE_MINS*60: # discard if already POST_DETECTION_UPDATE_MINS minutes post detection time
         logging.warning('enqueueFireUpdate timed out %s', cameraID)
         return
     fireUpdateQueue.append({
@@ -1033,7 +1035,7 @@ def checkNewImage(constants, cameraID, cameraHeading, timestamp, finalTimestamp)
     logging.warning('checkNewImage %s', cameraID)
     # is there a new image after finalTimestamp?
     startTimeDT = datetime.datetime.fromtimestamp(finalTimestamp + 31) # at least half a minute after most recent image
-    endTimeDT = datetime.datetime.fromtimestamp(timestamp + 5*60)
+    endTimeDT = datetime.datetime.fromtimestamp(timestamp + POST_DETECTION_UPDATE_MINS*60)
     newImages = False
     with tempfile.TemporaryDirectory() as tmpDirName:
         images = img_archive.getArchiveImages(constants['googleServices'], settings, constants['dbManager'], tmpDirName,
