@@ -55,7 +55,7 @@ import tensorflow as tf
 from PIL import Image, ImageFile, ImageDraw, ImageFont
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 import ffmpeg
-from shapely.geometry import Polygon
+from shapely.geometry import Polygon,Point
 
 
 POST_DETECTION_UPDATE_MINS = 7 # minutes after detection to keep searching for new image frames for updated videos
@@ -806,7 +806,8 @@ def queryDetections(dbManager, cameraID, timestamp):
         'annotatedUrl': detectEntry['imageid'],
         'croppedUrl': detectEntry['croppedid'],
         'mapUrl': detectEntry['mapid'],
-        'polygon': detectEntry['polygon'],
+        'polygon': json.loads(detectEntry['polygon']),
+        'sourcePolygons': json.loads(detectEntry['sourcepolygons']),
         'isProto': detectEntry['isproto'],
         'weatherScore': detectEntry['weatherscore'],
         'sortId': detectEntry['sortid'],
@@ -925,13 +926,19 @@ def smsFireNotification(dbManager, cameraID):
             sms_helper.sendSms(settings, phone, message)
 
 
-def publishAlert(dbManager, cameraID, fireHeading, rangeAngle, timestamp, weatherScore):
+def publishAlert(dbManager, cameraID, fireHeading, rangeAngle, timestamp, weatherScore, cameraViewPoly, rxBurns):
     if isProto(cameraID):
         return False
     if weatherScore < settings.weatherThreshold:
         return False
     if isDuplicateDetection(dbManager, cameraID, fireHeading, rangeAngle, timestamp):
         return False
+    # don't publish if rxBurn inside cameraViewPoly
+    viewPolygon = Polygon(cameraViewPoly)
+    for burn in rxBurns:
+        burnPoint = Point(burn['latitude'], burn['longitude'])
+        if viewPolygon.intersects(burnPoint):
+            return False
     return True
 
 
@@ -971,14 +978,14 @@ def fireDetected(constants, cameraID, cameraHeading, timestamp, fov, imgPath, fi
         return
 
     triangle = getTriangleVertices(camLatitude, camLongitude, fireHeading, rangeAngle)
-    currentViewShed = intersectLand(triangle)
-    intersectionInfo = intersectRecentDetections(dbManager, timestamp, currentViewShed)
+    cameraViewPoly = intersectLand(triangle)
+    intersectionInfo = intersectRecentDetections(dbManager, timestamp, cameraViewPoly)
     if intersectionInfo:
         polygon = intersectionInfo[0]
-        sourcePolygons = intersectionInfo[1] + [currentViewShed]
+        sourcePolygons = intersectionInfo[1] + [cameraViewPoly]
     else:
-        polygon = currentViewShed
-        sourcePolygons = [currentViewShed]
+        polygon = cameraViewPoly
+        sourcePolygons = [cameraViewPoly]
     weatherScore = checkWeatherInfo(weatherModel, dbManager, cameraID, timestamp, fireSegment, polygon, sourcePolygons, (camLatitude, camLongitude))
     fireSegment['weatherScore'] = round(weatherScore, 4)
 
@@ -996,7 +1003,7 @@ def fireDetected(constants, cameraID, cameraHeading, timestamp, fov, imgPath, fi
     sortId = int(time.time())
     insertDetectionsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon, sourcePolygons, imgIDs, sortId, fireHeading, rangeAngle)
     enqueueFireUpdate(constants, cameraID, cameraHeading, timestamp, finalTimestamp, fireSegment)
-    if publishAlert(dbManager, cameraID, fireHeading, rangeAngle, timestamp, weatherScore):
+    if publishAlert(dbManager, cameraID, fireHeading, rangeAngle, timestamp, weatherScore, cameraViewPoly, rxBurns):
         insertAlertsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon, sourcePolygons, sortId, fireHeading, rangeAngle)
         pubsubFireNotification(cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon, sortId)
         emailFireNotification(constants, cameraID, timestamp, imgPath, annotatedUrl, fireSegment)
@@ -1086,7 +1093,10 @@ def processEnqueuedUpdates(constants):
             movieUrl = goog_helper.getUrlForFile(movieID)
             movieUrls = movieUrl + ',' + detectData['croppedUrl']
             updateDBMovie(dbManager, 'detections', cameraID, timestamp, movieUrls)
-            if publishAlert(dbManager, cameraID, detectData['fireHeading'], detectData['angularWidth'], timestamp, detectData['weatherScore']):
+            sourcePolygons = detectData['sourcePolygons']
+            cameraViewPoly = sourcePolygons[-1]
+            rxBurns = rx_burns.getCurrentBurns(dbManager)
+            if publishAlert(dbManager, cameraID, detectData['fireHeading'], detectData['angularWidth'], timestamp, detectData['weatherScore'], cameraViewPoly, rxBurns):
                 updateDBMovie(dbManager, 'alerts', cameraID, timestamp, movieUrls)
                 pubsubFireNotification(cameraID, timestamp, movieUrls, detectData['annotatedUrl'], detectData['mapUrl'], fireSegment, detectData['polygon'], detectData['sortId'])
         else:
