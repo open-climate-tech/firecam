@@ -631,8 +631,8 @@ def getRecentDetections(dbManager, timestamp):
     return dbResult
 
 
-def isRecentAlert(dbManager, cameraID, fireHeading, rangeAngle, timestamp):
-    """Check if the location and heading for this event has been recently (last two hours) alerted
+def isDuplicateDetection(dbManager, cameraID, fireHeading, rangeAngle, timestamp):
+    """Check if the location and heading for this event has been recently (last two hours) detected
 
     Args:
         dbManager (DbManager):
@@ -643,7 +643,7 @@ def isRecentAlert(dbManager, cameraID, fireHeading, rangeAngle, timestamp):
     Returns:
         True if recently alerted, False otherwise
     """
-    sqlTemplate = """SELECT fireheading, angularwidth FROM alerts
+    sqlTemplate = """SELECT fireheading, angularwidth FROM detections
                         WHERE timestamp > %s and timestamp < %s and CameraName in (
                             SELECT name FROM sources WHERE locationid = (SELECT locationid FROM sources WHERE name='%s')
                             )"""
@@ -930,7 +930,7 @@ def publishAlert(dbManager, cameraID, fireHeading, rangeAngle, timestamp, weathe
         return False
     if weatherScore < settings.weatherThreshold:
         return False
-    if isRecentAlert(dbManager, cameraID, fireHeading, rangeAngle, timestamp):
+    if isDuplicateDetection(dbManager, cameraID, fireHeading, rangeAngle, timestamp):
         return False
     return True
 
