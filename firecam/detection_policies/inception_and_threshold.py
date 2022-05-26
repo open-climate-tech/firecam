@@ -268,6 +268,8 @@ class InceptionV3AndHistoricalThreshold:
         if self.stateless:
             if segments[0]['score'] > 0.5:
                 fireSegment = segments[0]
+                threshold = 0.5
+                fireSegment['AdjScore'] = (fireSegment['score'] - threshold) / (1 - threshold)
         else:
             self._recordScores(cameraID, heading, timestamp, segments)
             fireSegment = self._postFilter(cameraID, heading, timestamp, segments)

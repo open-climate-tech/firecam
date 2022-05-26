@@ -124,7 +124,7 @@ def main():
         ["y", "startY", "(optional) startY override", int],
         ["z", "endY", "(optional) endY override", int],
         ["x", "startX", "(optional) startY override", int],
-        ["e", "endX", "(optional) endY override", int],
+        ["e", "endX", "(optional) endX override", int],
         ["d", "display", "(optional) specify any value to display image and boxes"]
     ]
     args = collect_args.collectArgs(reqArgs, optionalArgs=optArgs)

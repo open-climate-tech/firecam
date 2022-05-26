@@ -48,7 +48,7 @@ class DetectMulti:
 
 
     def detect(self, image_spec, checkShifts=False, silent=False, fetchDiff=None):
-        mainDetectionResult = self.mainPolicy.detect(image_spec, checkShifts=True, fetchDiff=fetchDiff)
+        mainDetectionResult = self.mainPolicy.detect(image_spec, checkShifts=checkShifts, fetchDiff=fetchDiff)
         mainFireSegment = mainDetectionResult['fireSegment']
         if not mainFireSegment:
             return mainDetectionResult
@@ -69,10 +69,15 @@ class DetectMulti:
         # ensure all the confirmation policies also detect fire
         for counter, confirmationPolicy in enumerate(self.confirmationPolicies):
             # no need to check shifts as these are already double checking confirmation policies
-            detectionResult = confirmationPolicy.detect(image_spec, checkShifts=False, fetchDiff=fetchDiff)
+            detectionResult = confirmationPolicy.detect(image_spec, checkShifts=checkShifts, fetchDiff=fetchDiff)
             # logging.warning('Multi confirm %s res %s', counter, detectionResult['fireSegment'])
             if not detectionResult['fireSegment']:
                 # return result as is if last policy or no fire detected
                 return detectionResult
-
+            else:
+                # overwrite location with confirmationModel's location
+                mainFireSegment['MinX'] = detectionResult['fireSegment']['MinX']
+                mainFireSegment['MinY'] = detectionResult['fireSegment']['MinY']
+                mainFireSegment['MaxX'] = detectionResult['fireSegment']['MaxX']
+                mainFireSegment['MaxY'] = detectionResult['fireSegment']['MaxY']
         return mainDetectionResult
