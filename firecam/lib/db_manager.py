@@ -284,6 +284,8 @@ class DbManager(object):
             ('Probables', 'INT'),
             ('Detections', 'INT'),
             ('Alerts', 'INT'),
+            ('ProdCamsCount', 'INT'),
+            ('ProdAlerts', 'INT'),
         ]
 
         self.tables = {

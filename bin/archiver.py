@@ -230,9 +230,17 @@ def updateStats(dbManager):
     sqlTemplate = "SELECT count(*) as ct FROM detections WHERE timestamp > %s"
     detections = queryCount(dbManager, sqlTemplate % fromTimestamp)
 
-    # alerts (currently detections > threshold)
+    # proxy total alerts (currently detections > threshold)
     sqlTemplate = "SELECT count(*) as ct FROM detections WHERE timestamp > %s and weatherscore > %s"
     alerts = queryCount(dbManager, sqlTemplate % (fromTimestamp, settings.weatherThreshold))
+
+    # prod alerts
+    sqlTemplate = "SELECT count(*) as ct FROM alerts WHERE timestamp > %s"
+    prodAlerts = queryCount(dbManager, sqlTemplate % fromTimestamp)
+
+    # prod cams
+    prodCams = dbManager.get_sources(activeOnly=True, restrictType=settings.prodTypes)
+    prodCamsCount = len(prodCams)
 
     dbRow = {
         'Date': todayStr,
@@ -242,6 +250,8 @@ def updateStats(dbManager):
         'Probables': probables,
         'Detections': detections,
         'Alerts': alerts,
+        'ProdCamsCount': prodCamsCount,
+        'ProdAlerts': prodAlerts,
     }
     dbManager.add_data('stats', dbRow)
     logging.warning('Stats inserted for %s: %s', todayStr, dbRow)
