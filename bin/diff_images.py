@@ -14,8 +14,7 @@
 # ==============================================================================
 """
 
-Diff two images with offset to avoid negative numbers
-result = (128 + a/2) - b/2
+Diff two images
 
 """
 
@@ -49,28 +48,31 @@ def main():
 
     args = collect_args.collectArgs(reqArgs, optionalArgs=optArgs, parentParsers=[goog_helper.getParentParser()])
 
-    cvImgA = cv2.imread(args.imgA)
-    cvImgB = cv2.imread(args.imgB)
-    maxIterations = args.maxIterations if args.maxIterations else 40
-    eps = args.eps if args.eps else 1e-6
-    (algined, dx, dy) = img_archive.findTranslationOffset(cvImgA, cvImgB, maxIterations, eps)
-    if algined:
-        logging.warning('final dx, dy: %s, %s', round(dx), round(dy))
-        pImgA = Image.open(args.imgA)
-        pImgB = Image.open(args.imgB)
-        shiftedImg = pImgB.transform(pImgB.size, Image.AFFINE, (1, 0, dx, 0, 1, dy))
-        safeRemove('shiftedB.jpg')
-        shiftedImg.save('shiftedB.jpg', format='JPEG', quality=95)
-        diffImg = img_archive.diffSmoothImages(pImgA, shiftedImg)
-
-        safeRemove(args.imgOutput)
-        diffImg.save(args.imgOutput, format='JPEG', quality=95)
-        diffImg.close()
-        shiftedImg.close()
-        pImgA.close()
-        pImgB.close()
-    else:
-        logging.warning('too different to diff')
+    imgA = Image.open(args.imgA)
+    imgB = Image.open(args.imgB)
+    diffImg = img_archive.diffWithChecks(imgA, imgB)
+    diffImg.save(args.imgOutput, format='JPEG', quality=95)
+    # cvImgA = cv2.imread(args.imgA)
+    # cvImgB = cv2.imread(args.imgB)
+    # maxIterations = args.maxIterations if args.maxIterations else 40
+    # eps = args.eps if args.eps else 1e-6
+    # (algined, dx, dy) = img_archive.findTranslationOffset(cvImgA, cvImgB, maxIterations, eps)
+    # if algined:
+    #     logging.warning('final dx, dy: %s, %s', round(dx), round(dy))
+    #     pImgA = Image.open(args.imgA)
+    #     pImgB = Image.open(args.imgB)
+    #     shiftedImg = pImgB.transform(pImgB.size, Image.AFFINE, (1, 0, dx, 0, 1, dy))
+    #     safeRemove('shiftedB.jpg')
+    #     shiftedImg.save('shiftedB.jpg', format='JPEG', quality=95)
+    #     diffImg = img_archive.diffSmoothImages(pImgA, shiftedImg)
+    #     safeRemove(args.imgOutput)
+    #     diffImg.save(args.imgOutput, format='JPEG', quality=95)
+    #     diffImg.close()
+    #     shiftedImg.close()
+    #     pImgA.close()
+    #     pImgB.close()
+    # else:
+    #     logging.warning('too different to diff')
 
 
 if __name__=="__main__":
