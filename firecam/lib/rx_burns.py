@@ -27,6 +27,7 @@ import pathlib
 import time, datetime
 import urllib.request
 import csv
+import json
 from PIL import Image, ImageDraw
 
 
@@ -70,31 +71,43 @@ def getBurnsDataUrl():
     return rxBurnsStr
 
 
-def getRawBurnsDataCached(dbManager):
+def readBurnsDB(dbManager, source):
     minTimestamp = int(time.time()) - 60*60 # 1 hour before current time
     sqlTemplate = """SELECT timestamp,info FROM rx_burns where timestamp > %s and source = '%s' order by timestamp desc limit 1"""
-    sqlStr = sqlTemplate % (minTimestamp, settings.rxBurnsSource)
-
+    sqlStr = sqlTemplate % (minTimestamp, source)
     dbResult = dbManager.query(sqlStr)
     if len(dbResult) == 1:
-        logging.warning('Found recent rx_burns data')
+        logging.warning('Found recent rx_burns data for source %s', source)
         return dbResult[0]['info'].replace('\\n','\n') # DB seems to add extra '\'
+    return ''
+
+
+def deleteBurnsDB(dbManager, source):
+    # delete all old DB cache entries for given source
+    sqlTemplate = """DELETE FROM rx_burns where source = '%s' """
+    sqlStr = sqlTemplate % (source)
+    dbManager.execute(sqlStr)
+
+
+def writeBurnsDB(dbManager, source, data):
+    # insert new data into DB cache
+    dbRow = {
+        'Source': source,
+        'Timestamp': int(time.time()),
+        'Info': data
+    }
+    dbManager.add_data('rx_burns', dbRow)
+
+
+def getRawBurnsDataCached(dbManager):
+    rawData = readBurnsDB(dbManager, settings.rxBurnsSource)
+    if rawData:
+        return rawData
 
     logging.warning('No compatible data.  Fetching new rx_burns data')
     rawData = getBurnsDataUrl().replace("'","") # remove any single quotas as they interfere with string termination and escape
-
-    # delete all old DB cache entries for given source
-    sqlTemplate = """DELETE FROM rx_burns where source = '%s' """
-    sqlStr = sqlTemplate % (settings.rxBurnsSource)
-    dbManager.execute(sqlStr)
-
-    # insert new rawData into DB cache
-    dbRow = {
-        'Source': settings.rxBurnsSource,
-        'Timestamp':  int(time.time()),
-        'Info': rawData
-    }
-    dbManager.add_data('rx_burns', dbRow)
+    deleteBurnsDB(dbManager, settings.rxBurnsSource)
+    writeBurnsDB(dbManager, settings.rxBurnsSource, rawData)
 
     return rawData
 
@@ -118,8 +131,16 @@ def filterActiveBurns(burnsStr):
 
 
 def getCurrentBurns(dbManager):
+    sourceActive = 'Active'
+    activeStr = readBurnsDB(dbManager, sourceActive)
+    if activeStr:
+        return json.loads(activeStr)
+
+    logging.warning('Fetching new rx_burns Active data')
     rawData = getRawBurnsDataCached(dbManager)
     activeBurnLocations = filterActiveBurns(rawData)
+
+    deleteBurnsDB(dbManager, sourceActive)
+    writeBurnsDB(dbManager, sourceActive, json.dumps(activeBurnLocations))
+
     return activeBurnLocations
-
-
