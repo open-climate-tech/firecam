@@ -848,7 +848,7 @@ def insertAlertsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, map
     dbManager.add_data('alerts', dbRow)
 
 
-def pubsubFireNotification(cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon, sortId):
+def pubsubFireNotification(cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon, sourcePolygons, sortId, fireHeading):
     """Send a pubsub notification for a potential new fire
 
     Sends pubsub message with information about the camera and fire score includeing
@@ -871,9 +871,11 @@ def pubsubFireNotification(cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl
         'croppedUrl': croppedUrl,
         'mapUrl': mapUrl,
         'polygon': str(polygon),
+        'sourcePolygons': str(sourcePolygons),
         'isProto': isProto(cameraID),
         'weatherScore': str(fireSegment['weatherScore']),
         'sortId': sortId,
+        'fireHeading': fireHeading,
     }
     goog_helper.publish(message)
 
@@ -1005,7 +1007,7 @@ def fireDetected(constants, cameraID, cameraHeading, timestamp, fov, imgPath, fi
     enqueueFireUpdate(constants, cameraID, cameraHeading, timestamp, finalTimestamp, fireSegment)
     if publishAlert(dbManager, cameraID, fireHeading, rangeAngle, timestamp, weatherScore, cameraViewPoly, rxBurns):
         insertAlertsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon, sourcePolygons, sortId, fireHeading, rangeAngle)
-        pubsubFireNotification(cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon, sortId)
+        pubsubFireNotification(cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon, sourcePolygons, sortId, fireHeading)
         emailFireNotification(constants, cameraID, timestamp, imgPath, annotatedUrl, fireSegment)
         smsFireNotification(dbManager, cameraID)
 
@@ -1098,7 +1100,7 @@ def processEnqueuedUpdates(constants):
             rxBurns = rx_burns.getCurrentBurns(dbManager)
             if publishAlert(dbManager, cameraID, detectData['fireHeading'], detectData['angularWidth'], timestamp, detectData['weatherScore'], cameraViewPoly, rxBurns):
                 updateDBMovie(dbManager, 'alerts', cameraID, timestamp, movieUrls)
-                pubsubFireNotification(cameraID, timestamp, movieUrls, detectData['annotatedUrl'], detectData['mapUrl'], fireSegment, detectData['polygon'], detectData['sortId'])
+                pubsubFireNotification(cameraID, timestamp, movieUrls, detectData['annotatedUrl'], detectData['mapUrl'], fireSegment, detectData['polygon'], detectData['sourcePolygons'], detectData['sortId'], detectData['fireHeading'])
         else:
             logging.error('processEnqueuedUpdates: failure %s: %s, %s', cameraID, movieID, finalTimestamp)
             return # don't requeue
