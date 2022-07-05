@@ -288,6 +288,16 @@ class DbManager(object):
             ('ProdAlerts', 'INT'),
         ]
 
+        # auth
+        auth_schema = [
+            ('UserID', 'TEXT'),
+            ('Type', 'TEXT'),
+            ('HashedPassword', 'TEXT'),
+            ('Salt', 'TEXT'),
+            ('Email', 'TEXT'),
+            ('EmailVerified', 'INT'),
+        ]
+
         self.tables = {
             'sources': sources_schema,
             'counters': counters_schema,
@@ -308,6 +318,7 @@ class DbManager(object):
             'weather': weather_schema,
             'rx_burns': rx_burns_schema,
             'stats': stats_schema,
+            'auth': auth_schema,
         }
 
         self.sources_table_name = 'sources'
