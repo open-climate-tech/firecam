@@ -65,11 +65,15 @@ def fetchUrlHPWren(cameraID, cameraUrl, imgDir, timestamp, imgPath):
 
 
 def fetchCurrentFromDB(dbManager, cameraID, imgDir, timestamp):
-    sqlTemplate = """SELECT heading, max(timestamp) as maxts, max(fieldofview) as fov, max(imagepath) as maxpath, processed
-                        FROM archive
-                        WHERE CameraID='%s' and imagepath != '' and timestamp >= %s and timestamp <= %s
-                        group by heading order by maxts"""
-    sqlStr = sqlTemplate % (cameraID, timestamp - 5*60, timestamp)
+    sqlTemplate = """SELECT i.heading as heading, i.maxts as maxts, o.fieldofview as fov, o.imagepath as maxpath, o.processed as processed
+                       FROM archive o
+                       INNER JOIN (SELECT heading, max(timestamp) as maxts
+                                     FROM archive
+                                     WHERE CameraID='%s' and imagepath != '' and timestamp >= %s and timestamp <= %s
+                                     GROUP by heading) i
+                       ON o.heading=i.heading and o.timestamp=i.maxts
+                       WHERE o.CameraID='%s'"""
+    sqlStr = sqlTemplate % (cameraID, timestamp - 5*60, timestamp, cameraID)
     dbResult = dbManager.query(sqlStr)
     result = []
     for imgInfo in dbResult:
