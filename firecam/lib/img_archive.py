@@ -72,7 +72,8 @@ def fetchCurrentFromDB(dbManager, cameraID, imgDir, timestamp):
                                      WHERE CameraID='%s' and imagepath != '' and timestamp >= %s and timestamp <= %s
                                      GROUP by heading) i
                        ON o.heading=i.heading and o.timestamp=i.maxts
-                       WHERE o.CameraID='%s'"""
+                       WHERE o.CameraID='%s'
+                       ORDER by i.maxts"""
     sqlStr = sqlTemplate % (cameraID, timestamp - 5*60, timestamp, cameraID)
     dbResult = dbManager.query(sqlStr)
     result = []
