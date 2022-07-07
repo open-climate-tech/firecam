@@ -22,7 +22,6 @@ from firecam.lib import goog_helper
 
 import os
 import logging
-import socket
 import urllib.request
 import time, datetime, dateutil.parser
 from html.parser import HTMLParser
@@ -33,7 +32,6 @@ import math
 from PIL import Image, ImageMath, ImageStat
 import numpy as np
 import cv2
-import json
 import shutil
 
 def isPTZ(cameraID):
@@ -67,14 +65,16 @@ def fetchUrlHPWren(cameraID, cameraUrl, imgDir, timestamp, imgPath):
 
 
 def fetchCurrentFromDB(dbManager, cameraID, imgDir, timestamp):
-    sqlTemplate = """SELECT heading, max(timestamp) as maxts, max(fieldofview) as fov, max(imagepath) as maxpath
+    sqlTemplate = """SELECT heading, max(timestamp) as maxts, max(fieldofview) as fov, max(imagepath) as maxpath, processed
                         FROM archive
-                        WHERE CameraID='%s' and imagepath != '' and timestamp >= %s and timestamp <= %s and processed = 0
+                        WHERE CameraID='%s' and imagepath != '' and timestamp >= %s and timestamp <= %s
                         group by heading order by maxts"""
     sqlStr = sqlTemplate % (cameraID, timestamp - 5*60, timestamp)
     dbResult = dbManager.query(sqlStr)
     result = []
     for imgInfo in dbResult:
+        if imgInfo['processed']: # skip already processed images
+            continue
         srcFilePP = pathlib.PurePath(imgInfo['maxpath'])
         destPath = os.path.join(imgDir, srcFilePP.name)
         shutil.copy(imgInfo['maxpath'], destPath)
