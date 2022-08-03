@@ -924,8 +924,8 @@ def alignImage(imgFileName, baseImgFileName):
 
 
 def diffImages(imgA, imgB):
-    """Subtract two images (r-r, g-g, b-b).  Also add 128 to reduce negative values
-       If a pixel is exactly same in both images, then the result will be 128,128,128 gray
+    """Subtract two images (r-r, g-g, b-b), and add the absolute value of that difference
+       in the red band while removing from green and blue to maintain same brightness level
        Out of range values (<0 and > 255) are moved to 0 and 255 by the convert('L') function
 
     Args:
@@ -937,11 +937,16 @@ def diffImages(imgA, imgB):
     """
     bandsImgA = imgA.split()
     bandsImgB = imgB.split()
-    bandsImgOut = []
 
-    for bandNum in range(len(bandsImgA)):
-        out = ImageMath.eval("convert(128+a-b,'L')", a=bandsImgA[bandNum], b=bandsImgB[bandNum])
-        bandsImgOut.append(out)
+    absDiff = ImageMath.eval("convert(abs(a0-b0) + abs(a1-b1) + abs(a2-b2), 'L')",
+        a0 = bandsImgA[0], b0 = bandsImgB[0],
+        a1 = bandsImgA[1], b1 = bandsImgB[1],
+        a2 = bandsImgA[2], b2 = bandsImgB[2])
+    bandsImgOut = [
+        ImageMath.eval("convert(a + 2*diff, 'L')", a = bandsImgA[0], diff = absDiff),
+        ImageMath.eval("convert(a - diff, 'L')", a = bandsImgA[1], diff = absDiff),
+        ImageMath.eval("convert(a - diff, 'L')", a = bandsImgA[2], diff = absDiff),
+    ]
 
     return Image.merge('RGB', bandsImgOut)
 
