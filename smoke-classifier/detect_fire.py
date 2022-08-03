@@ -777,14 +777,29 @@ def insertDetectionsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl,
     dbManager.add_data('detections', dbRow)
 
 
+def updateDetectionsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, imgIDs):
+    logging.warning('updateDetectionsDB %s', cameraID)
+    sqlTemplate = "SELECT * FROM detections WHERE CameraName='%s' and timestamp = %s"
+    sqlStr = sqlTemplate % (cameraID, timestamp)
+
+    dbResult = dbManager.query(sqlStr)
+    if len(dbResult) == 0:
+        logging.error('updateDetectionsDB: Unexpected no entries')
+        return
+
+    sqlTemplate = "UPDATE detections SET CroppedID = '%s', ImageID = '%s', MapID = '%s', ImgSequence = '%s' WHERE CameraName='%s' and timestamp = %s"
+    sqlStr = sqlTemplate % (croppedUrl, annotatedUrl, mapUrl, ','.join(imgIDs), cameraID, timestamp)
+    dbManager.execute(sqlStr)
+
+
 def updateDBMovie(dbManager, tableName, cameraID, timestamp, croppedUrl):
     logging.warning('updateDBMovie %s %s', tableName, cameraID)
     sqlTemplate = "SELECT * FROM %s WHERE CameraName='%s' and timestamp = %s"
     sqlStr = sqlTemplate % (tableName, cameraID, timestamp)
 
     dbResult = dbManager.query(sqlStr)
-    if len(dbResult) != 1:
-        logging.error('updateDBMovie: Unexpected %s entries found in table %s', len(dbResult), tableName)
+    if len(dbResult) == 0:
+        logging.error('updateDBMovie: Unexpected no entries found in table %s', tableName)
         return
 
     sqlTemplate = "UPDATE %s SET CroppedID = '%s' WHERE CameraName='%s' and timestamp = %s"
@@ -975,10 +990,6 @@ def fireDetected(constants, cameraID, cameraHeading, timestamp, fov, imgPath, fi
         dbManager.incrementIgnoreCounter(cameraID, ignoredHeading)
         return
 
-    (croppedID, imgIDs, annotatedID, finalTimestamp) = genAnnotatedImages(notificationsDateDir, constants, cameraID, cameraHeading, timestamp, imgPath, fireSegment)
-    if not croppedID:
-        return
-
     triangle = getTriangleVertices(camLatitude, camLongitude, fireHeading, rangeAngle)
     cameraViewPoly = intersectLand(triangle)
     intersectionInfo = intersectRecentDetections(dbManager, timestamp, cameraViewPoly)
@@ -991,19 +1002,26 @@ def fireDetected(constants, cameraID, cameraHeading, timestamp, fov, imgPath, fi
     weatherScore = checkWeatherInfo(weatherModel, dbManager, cameraID, timestamp, fireSegment, polygon, sourcePolygons, (camLatitude, camLongitude))
     fireSegment['weatherScore'] = round(weatherScore, 4)
 
-    rxBurns = rx_burns.getCurrentBurns(dbManager)
-    mapUrl = genAnnotatedMaps(notificationsDateDir, mapFiles, camLatitude, camLongitude, imgPath, polygon, sourcePolygons, rxBurns)
-
-    # convert fileIDs into URLs usable by web UI
-    croppedUrl = goog_helper.getUrlForFile(croppedID)
-    annotatedUrl = goog_helper.getUrlForFile(annotatedID)
-
     # sortID makes an impact when the image timestamp order is different than processing time order
     # E.g. (older image processed more recently by multiple seconds)
     # Although processing time is not perfect eigher, it seems slightly better because 1) map intersections will show in increasing order
     # and 2) UI results (and notifications) will be more intuitive
     sortId = int(time.time())
-    insertDetectionsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon, sourcePolygons, imgIDs, sortId, fireHeading, rangeAngle)
+    # insert into detections ASAP so other detections can find the sourcePolygons even before maps and movie are generated and written to DB
+    insertDetectionsDB(dbManager, cameraID, timestamp, "", "", "", fireSegment, polygon, sourcePolygons, "", sortId, fireHeading, rangeAngle)
+
+    rxBurns = rx_burns.getCurrentBurns(dbManager)
+    mapUrl = genAnnotatedMaps(notificationsDateDir, mapFiles, camLatitude, camLongitude, imgPath, polygon, sourcePolygons, rxBurns)
+
+    (croppedID, imgIDs, annotatedID, finalTimestamp) = genAnnotatedImages(notificationsDateDir, constants, cameraID, cameraHeading, timestamp, imgPath, fireSegment)
+    if not croppedID:
+        return
+
+    # convert fileIDs into URLs usable by web UI
+    croppedUrl = goog_helper.getUrlForFile(croppedID)
+    annotatedUrl = goog_helper.getUrlForFile(annotatedID)
+
+    updateDetectionsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, imgIDs)
     enqueueFireUpdate(constants, cameraID, cameraHeading, timestamp, finalTimestamp, fireSegment)
     if publishAlert(dbManager, cameraID, fireHeading, rangeAngle, timestamp, weatherScore, cameraViewPoly, rxBurns):
         insertAlertsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon, sourcePolygons, sortId, fireHeading, rangeAngle)
