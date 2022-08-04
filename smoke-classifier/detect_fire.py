@@ -624,7 +624,8 @@ def getRecentDetections(dbManager, timestamp):
     Returns:
         List of alerts
     """
-    sqlTemplate = """SELECT * FROM detections where timestamp > %s order by timestamp desc"""
+    # order by sortId, otherwise a newer timestamp with older sortID (with fewer sourcePolygons) could be ahead
+    sqlTemplate = """SELECT * FROM detections where timestamp > %s order by sortid desc"""
     sqlStr = sqlTemplate % (timestamp - 15*60)
 
     dbResult = dbManager.query(sqlStr)
