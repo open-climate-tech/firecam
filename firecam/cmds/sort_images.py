@@ -62,7 +62,7 @@ def uploadCoords(coords, newPath, googleServices, notes):
         raise ValueError('Failed to upload to cloud (%s, %s).  Please retry' % (response, rawResponse))
 
 
-def processFolder(imgDirectory, googleServices, notes):
+def processFolder(imgDirectory, googleServices, notes, sortByName=False):
     temporaryDir = tempfile.TemporaryDirectory()
     imageFileNames = os.listdir(imgDirectory)
     # print('images', len(imageFileNames), imageFileNames)
@@ -71,7 +71,8 @@ def processFolder(imgDirectory, googleServices, notes):
     # print('images2', len(imageFileNames), imageFileNames)
     # we want to process in time order, so first create tuples with associated time
     tuples=list(map(lambda x: (x,img_archive.parseFilename(x)['unixTime']), imageFileNames))
-    for tuple in sorted(tuples, key=lambda x: x[1]):
+    sortKey = 0 if sortByName else 1
+    for tuple in sorted(tuples, key=lambda x: x[sortKey]):
         imgName=tuple[0]
         imgPath = os.path.join(imgDirectory, imgName)
         nameParsed = img_archive.parseFilename(imgName)
@@ -86,6 +87,7 @@ def main():
     reqArgs = [
     ]
     optArgs = [
+        ["s", "sortBy", "time (default) | name"],
         ["n", "notes", "(optional) notes/comments (e.g., test) to associate with data"],
         ["z", "zipFile", "Name of the zip file containing the images"],
         ["d", "imgDirectory", "Name of the directory containing the images or ask:dir"],
@@ -105,7 +107,8 @@ def main():
         exit(1)
 
     googleServices = goog_helper.getGoogleServices(settings, args)
-    processFolder(imgDirectory, googleServices, args.notes)
+    sortByName = (args.sortBy == "name")
+    processFolder(imgDirectory, googleServices, args.notes, sortByName)
 
 
 if __name__=="__main__":
