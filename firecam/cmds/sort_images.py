@@ -71,8 +71,7 @@ def processFolder(imgDirectory, googleServices, notes, sortByName=False):
     # print('images2', len(imageFileNames), imageFileNames)
     # we want to process in time order, so first create tuples with associated time
     tuples=list(map(lambda x: (x,img_archive.parseFilename(x)['unixTime']), imageFileNames))
-    sortKey = 0 if sortByName else 1
-    for tuple in sorted(tuples, key=lambda x: x[sortKey]):
+    for tuple in sorted(tuples, key=lambda x: str.casefold(x[0]) if sortByName else x[1]):
         imgName=tuple[0]
         imgPath = os.path.join(imgDirectory, imgName)
         nameParsed = img_archive.parseFilename(imgName)
