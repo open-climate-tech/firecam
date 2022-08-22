@@ -286,8 +286,11 @@ def main():
                 continue
 
             # find coordinates for cropping
+            coordsForExtrema = None
             if recropType == 'raw':
                 cropCoords = [oldCoords]
+                # use "center" for coords for extra calculation otherwise region may be too small for proper evaluation
+                coordsForExtrema = getCropCoords((minX, minY, maxX, maxY), minSizeX, minSizeY, growRatio, (imgOrig.size[0], imgOrig.size[1]), 'center')
             elif recropType == 'full': # useful for generating full diffs
                 cropCoords = [(0, 0, imgOrig.size[0], imgOrig.size[1])]
             else:
@@ -299,8 +302,9 @@ def main():
                 fullImage = True
             assert fullImage or ('minX' not in nameParsed) # disallow crops of crops
             # find extrema (min/max) crop coordinates to crop the original image to speed up processing
-            extremaCoords = list(cropCoords[0])
-            for coords in cropCoords:
+            coordsForExtrema = coordsForExtrema if coordsForExtrema else cropCoords
+            extremaCoords = list(coordsForExtrema[0])
+            for coords in coordsForExtrema:
                 extremaCoords[0] = min(extremaCoords[0], coords[0])
                 extremaCoords[1] = min(extremaCoords[1], coords[1])
                 extremaCoords[2] = max(extremaCoords[2], coords[2])
