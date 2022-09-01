@@ -115,15 +115,15 @@ def randomInRange(borders, avoidCenter, size):
     return (randX, randY)
 
 
-def appendIfDifferent(array, newItem):
+def appendIfDifferent(array, newItem, augmentPercentage):
     # print('aid', newItem)
-    hasAlready = list(filter(lambda x: x==newItem, array))
-    if not hasAlready:
-        array.append(newItem)
+    if random.random()*100 < augmentPercentage:
+        hasAlready = list(filter(lambda x: x==newItem, array))
+        if not hasAlready:
+            array.append(newItem)
 
 
-def getCropCoords(smokeCoords, minSizeX, minSizeY, growRatio, imgSize, recropType):
-    cropCoords = []
+def getCropCoords(smokeCoords, minSizeX, minSizeY, growRatio, imgSize, recropType, augmentPercentage):
     (minX, minY, maxX, maxY) = smokeCoords
     (imgSizeX, imgSizeY) = imgSize
     # ensure bounds are within image size (no negatives or greater than image size)
@@ -142,7 +142,7 @@ def getCropCoords(smokeCoords, minSizeX, minSizeY, growRatio, imgSize, recropTyp
         offsetY = int(random.random()*maxShift) - maxShift/2
         (newMinX, newMaxX) = rect_to_squares.getRangeFromCenter(centerX + offsetX, origSizeX, 0, imgSizeX)
         (newMinY, newMaxY) = rect_to_squares.getRangeFromCenter(centerY + offsetY, origSizeY, 0, imgSizeY)
-        appendIfDifferent(cropCoords, (newMinX, newMinY, newMaxX, newMaxY))
+        cropCoords = [(newMinX, newMinY, newMaxX, newMaxY)]
         return cropCoords
 
     sizeX = max(minSizeX, int(origSizeX*growRatio))
@@ -150,7 +150,7 @@ def getCropCoords(smokeCoords, minSizeX, minSizeY, growRatio, imgSize, recropTyp
     #centered box
     (newMinX, newMaxX) = rect_to_squares.getRangeFromCenter(centerX, sizeX, 0, imgSizeX)
     (newMinY, newMaxY) = rect_to_squares.getRangeFromCenter(centerY, sizeY, 0, imgSizeY)
-    appendIfDifferent(cropCoords, (newMinX, newMinY, newMaxX, newMaxY))
+    cropCoords = [(newMinX, newMinY, newMaxX, newMaxY)]
     if recropType == 'center':
         return cropCoords
 
@@ -164,22 +164,22 @@ def getCropCoords(smokeCoords, minSizeX, minSizeY, growRatio, imgSize, recropTyp
     (randX, randY) = randomInRange((borderX, borderY), (avoidCenterX, avoidCenterY), (sizeX, sizeY))
     (newMinX, newMaxX) = rect_to_squares.getRangeFromCenter(centerX - randX, sizeX, 0, imgSizeX)
     (newMinY, newMaxY) = rect_to_squares.getRangeFromCenter(centerY - randY, sizeY, 0, imgSizeY)
-    appendIfDifferent(cropCoords, (newMinX, newMinY, newMaxX, newMaxY))
+    appendIfDifferent(cropCoords, (newMinX, newMinY, newMaxX, newMaxY), augmentPercentage)
     #top right box
     (randX, randY) = randomInRange((borderX, borderY), (avoidCenterX, avoidCenterY), (sizeX, sizeY))
     (newMinX, newMaxX) = rect_to_squares.getRangeFromCenter(centerX + randX, sizeX, 0, imgSizeX)
     (newMinY, newMaxY) = rect_to_squares.getRangeFromCenter(centerY - randY, sizeY, 0, imgSizeY)
-    appendIfDifferent(cropCoords, (newMinX, newMinY, newMaxX, newMaxY))
+    appendIfDifferent(cropCoords, (newMinX, newMinY, newMaxX, newMaxY), augmentPercentage)
     #bottom left box
     (randX, randY) = randomInRange((borderX, borderY), (avoidCenterX, avoidCenterY), (sizeX, sizeY))
     (newMinX, newMaxX) = rect_to_squares.getRangeFromCenter(centerX - randX, sizeX, 0, imgSizeX)
     (newMinY, newMaxY) = rect_to_squares.getRangeFromCenter(centerY + randY, sizeY, 0, imgSizeY)
-    appendIfDifferent(cropCoords, (newMinX, newMinY, newMaxX, newMaxY))
+    appendIfDifferent(cropCoords, (newMinX, newMinY, newMaxX, newMaxY), augmentPercentage)
     #bottom right box
     (randX, randY) = randomInRange((borderX, borderY), (avoidCenterX, avoidCenterY), (sizeX, sizeY))
     (newMinX, newMaxX) = rect_to_squares.getRangeFromCenter(centerX + randX, sizeX, 0, imgSizeX)
     (newMinY, newMaxY) = rect_to_squares.getRangeFromCenter(centerY + randY, sizeY, 0, imgSizeY)
-    appendIfDifferent(cropCoords, (newMinX, newMinY, newMaxX, newMaxY))
+    appendIfDifferent(cropCoords, (newMinX, newMinY, newMaxX, newMaxY), augmentPercentage)
     return cropCoords
 
 
@@ -210,7 +210,7 @@ def getArchiveImage(googleServices, downloadDirCache, camArchives, cameraID, exp
 
 def findAlignedImage(baseImgFilePath, filePaths, fullImage):
     for filePath in filePaths:
-        img = img_archive.alignImageObj(filePath, baseImgFilePath, noShift=fullImage)
+        img = img_archive.alignImageObj(filePath, baseImgFilePath)
         if img:
             return img
     return None
@@ -228,9 +228,10 @@ def main():
         ["y", "minSizeY", "(optional) override default minSizeY of 299"],
         ["a", "minArea", "(optional) override default 0 for minimum area"],
         ["t", "throwSize", "(optional) override default throw away size of 598x598"],
-        ["g", "growRatio", "(optional) override default grow ratio of 1.2"],
+        ["g", "growRatio", "(optional) override default grow ratio of 1.0"],
         ["m", "minusMinutes", "(optional) subtract images from given number of minutes ago"],
         ["r", "recropType", "recrop type: 'raw', 'center', 'full', 'shift', 'augment' (default)"],
+        ["p", "augmentPercentage", "(optional) override augmentPercentage value of 100", int],
     ]
     args = collect_args.collectArgs(reqArgs, optionalArgs=optArgs, parentParsers=[goog_helper.getParentParser()])
     startRow = int(args.startRow) if args.startRow else 0
@@ -238,10 +239,13 @@ def main():
     minSizeX = int(args.minSizeX) if args.minSizeX else 299
     minSizeY = int(args.minSizeY) if args.minSizeY else 299
     throwSize = int(args.throwSize) if args.throwSize else 299*2
-    growRatio = float(args.growRatio) if args.growRatio else 1.2
+    growRatio = float(args.growRatio) if args.growRatio else 1.0
     minArea = int(args.minArea) if args.minArea else 0
     minusMinutes = int(args.minusMinutes) if args.minusMinutes else 0
     recropType = args.recropType if args.recropType else 'augment'
+    augmentPercentage = int(args.augmentPercentage) if args.augmentPercentage else 100
+    assert augmentPercentage >= 0
+    assert augmentPercentage <= 100
 
     random.seed(0)
     googleServices = goog_helper.getGoogleServices(settings, args)
@@ -290,13 +294,13 @@ def main():
             if recropType == 'raw':
                 cropCoords = [oldCoords]
                 # use "center" for coords for extra calculation otherwise region may be too small for proper evaluation
-                coordsForExtrema = getCropCoords((minX, minY, maxX, maxY), minSizeX, minSizeY, growRatio, (imgOrig.size[0], imgOrig.size[1]), 'center')
+                coordsForExtrema = getCropCoords((minX, minY, maxX, maxY), minSizeX, minSizeY, growRatio, (imgOrig.size[0], imgOrig.size[1]), 'center', augmentPercentage)
             elif recropType == 'full': # useful for generating full diffs
                 cropCoords = [(0, 0, imgOrig.size[0], imgOrig.size[1])]
             else:
                 # crop the full sized image to show just the smoke, but shifted and flipped
                 # shifts and flips increase number of segments for training and also prevent overfitting by perturbing data
-                cropCoords = getCropCoords((minX, minY, maxX, maxY), minSizeX, minSizeY, growRatio, (imgOrig.size[0], imgOrig.size[1]), recropType)
+                cropCoords = getCropCoords((minX, minY, maxX, maxY), minSizeX, minSizeY, growRatio, (imgOrig.size[0], imgOrig.size[1]), recropType, augmentPercentage)
             fullImage = False
             if len(cropCoords) == 1 and cropCoords[0][0] == 0 and cropCoords[0][1] == 0 and cropCoords[0][2] == imgOrig.size[0] and cropCoords[0][3] == imgOrig.size[1]:
                 fullImage = True
@@ -358,7 +362,7 @@ def main():
                                             newCoords[2] - extremaCoords[0], newCoords[3] - extremaCoords[1]))
                 cropped_img.save(cropImgPath, format='JPEG', quality=95)
                 if recropType == 'augment':
-                    flipped_img = cropped_img.transpose(Image.FLIP_LEFT_RIGHT)
+                    flipped_img = cropped_img.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
                     flipImgName = cropImgName.replace('.jpg', '_Flip.jpg')
                     flipImgPath = os.path.join(args.outputDir, flipImgName)
                     flipped_img.save(flipImgPath, format='JPEG', quality=95)
