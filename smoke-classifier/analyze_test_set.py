@@ -47,9 +47,11 @@ def listJpegs(dirName):
             jpegs += [os.path.join(dirName, x)]
     return jpegs
 
-def segmentImage(imgPath):
+def imageSize(imgPath):
     img = Image.open(imgPath)
-    return rect_to_squares.cutBoxesArray(img)
+    size = (img.size[0], img.size[1])
+    img.close()
+    return size
 
     
 def classifyImages(detectionPolicy, checkShifts, imageList, className, outFile):
@@ -66,14 +68,27 @@ def classifyImages(detectionPolicy, checkShifts, imageList, className, outFile):
         image_spec[-1]['path'] = image
         image_spec[-1]['timestamp'] = nameParsed['unixTime']
         image_spec[-1]['cameraID'] = nameParsed['cameraID']
+        if imageSize(image)[1] > 299: # if image is larger than single segment, apply same offsets as detect_fire.py
+            image_spec[-1]['startY'] = 50
+            image_spec[-1]['endY'] = -50
 
         detectionResult = detectionPolicy.detect(image_spec, checkShifts=checkShifts, silent=True)
         # logging.warning('dr %s', str(detectionResult))
-        image_spec[-1]['startY'] = 140
-        image_spec[-1]['endY'] = -140
-        detectionResultOffset = detectionPolicy.detect(image_spec, checkShifts=checkShifts, silent=True)
+        if imageSize(image)[1] > 299: # if image is larger than single segment
+            # Offset by another 150 (half of 299 InceptionV3 size) 50 + 150 = 200
+            image_spec[-1]['startY'] = 200
+            image_spec[-1]['endY'] = -200
+            detectionResultOffset = detectionPolicy.detect(image_spec, checkShifts=checkShifts, silent=True)
+        else:
+            detectionResultOffset = detectionResult
         if len(detectionResultOffset['segments']) == 0: # happens with tiny images
             detectionResultOffset = detectionResult
+        # logging.warning('Reg nsegs %d', len(detectionResult['segments']))
+        # logging.warning('Reg seg0 %s', str(detectionResult['segments'][0]))
+        # logging.warning('Reg fire %s', str(detectionResult['fireSegment']))
+        # logging.warning('Offset nsegs %d', len(detectionResultOffset['segments']))
+        # logging.warning('Offset seg0 %s', str(detectionResultOffset['segments'][0]))
+        # logging.warning('Offset fire %s', str(detectionResultOffset['fireSegment']))
         scores = [detectionResult['segments'][0]['score'], detectionResultOffset['segments'][0]['score']]
         if detectionResult['fireSegment'] and detectionResultOffset['fireSegment']:
             status = 'smoke'
