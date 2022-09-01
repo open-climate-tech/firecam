@@ -61,7 +61,7 @@ def classifySegments(model, cropsNormalized, segments):
         list of results of classification
     """
     # assuming crops is alrady normalized (done by cutBoxesArray)
-    results = model.predict(cropsNormalized)
+    results = model.predict(cropsNormalized, verbose=0)
     # logging.warning('Results: %s', str(results))
     for i,scores in enumerate(results):
         segments[i]['score'] = scores[1]
