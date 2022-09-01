@@ -53,14 +53,20 @@ def fetchUrlHPWren(cameraID, cameraUrl, imgDir, timestamp, imgPath):
     img = Image.open(imgPath)
     imgExif = ('exif' in img.info) and img.info['exif']
     img.close()
-    timeMatch = imgExif and re.findall('(\d+) UTC', imgExif.decode('utf-8','ignore'))
-    if timeMatch and len(timeMatch):
-        newTimestamp = int(timeMatch[0])
-        if (newTimestamp > timestamp - 5*60) and (newTimestamp < timestamp + 5*60):
-            newImgPath = getImgPath(imgDir, cameraID, newTimestamp)
-            timestamp = newTimestamp
-            os.rename(imgPath, newImgPath)
-            imgPath = newImgPath
+    imgExifStr = imgExif.decode('utf-8','ignore')
+    utcMatch = imgExifStr and re.findall('(\d+) UTC', imgExifStr)
+    dateStrMatch = imgExifStr and re.findall('(20\d\d):(\d\d):(\d\d) (\d\d:\d\d:\d\d)', imgExifStr)
+    newTimestamp = None
+    if utcMatch and len(utcMatch):
+        newTimestamp = int(utcMatch[0])
+    elif dateStrMatch and len(dateStrMatch):
+        dateStrUtc = '%s-%s-%s %sZ' % (dateStrMatch[0][0], dateStrMatch[0][1], dateStrMatch[0][2], dateStrMatch[0][3])
+        newTimestamp = int(dateutil.parser.parse(dateStrUtc).timestamp())
+    if newTimestamp and (newTimestamp > timestamp - 5*60) and (newTimestamp < timestamp + 5*60):
+        newImgPath = getImgPath(imgDir, cameraID, newTimestamp)
+        timestamp = newTimestamp
+        os.rename(imgPath, newImgPath)
+        imgPath = newImgPath
     return (imgPath, heading, timestamp)
 
 
