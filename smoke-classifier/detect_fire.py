@@ -128,7 +128,7 @@ getNextImage.queueCamera = None
 # getNextImage.tmpDir = Tdir('c:/tmp/dftest')
 
 
-def isProto(cameraID, sources=None):
+def isProto(cameraID, sources=None, protoNum=None):
     if not isProto.prodTypesArr:
         isProto.prodTypesArr = settings.prodTypes.split(',')
     if sources and not isProto.sourcesDict:
@@ -136,6 +136,10 @@ def isProto(cameraID, sources=None):
         for entry in sources:
             sourcesDict[entry['name']] = entry
         isProto.sourcesDict = sourcesDict
+    if protoNum and not isProto.protoNum:
+        isProto.protoNum = protoNum
+    if isProto.protoNum:
+        return isProto.protoNum
     type = None
     if isProto.sourcesDict and cameraID in isProto.sourcesDict:
         type = isProto.sourcesDict[cameraID]['type']
@@ -144,6 +148,7 @@ def isProto(cameraID, sources=None):
     return not isProd
 isProto.sourcesDict = None
 isProto.prodTypesArr = None
+isProto.protoNum = None
 
 
 def drawRect(imgDraw, x0, y0, x1, y1, width, color):
@@ -1292,15 +1297,18 @@ def fetchDiffImage(constants, cameraID, heading, timestamp, baseImgPath, outputD
     return img_archive.diffWithChecks(imgOrig, priorImg)
 
 
-def getGroupConfig():
-    groupName = goog_helper.getInstanceGroup()
+def getGroupConfig(detectGroup):
+    if detectGroup:
+        groupName = detectGroup
+    else:
+        groupName = goog_helper.getInstanceGroup()
     if not groupName:
         return None
     groupName = groupName.split('/').pop() # get last path component
     if not settings.detectGroups:
         return None
     groupConfig = next(filter(lambda x: x[0] == groupName, settings.detectGroups), None)
-    if not groupConfig:
+    if (not groupConfig) or (len(groupConfig) == 0):
         return None
     groupParams = {
         'name': groupConfig[0],
@@ -1308,6 +1316,12 @@ def getGroupConfig():
         'counterName': groupConfig[2],
         'restrictType': groupConfig[3],
     }
+    if len(groupConfig) > 4:
+        protoModelInfo = groupConfig[4]
+        protoModelParts = protoModelInfo.split(';')
+        groupParams['protoNum'] = protoModelParts[0]
+        groupParams['protoPolicy'] = protoModelParts[1]
+        groupParams['protoModel'] = protoModelParts[2]
     logging.warning('GroupConfig %s', groupParams)
     return groupParams
 
@@ -1325,6 +1339,7 @@ def main():
         ["z", "randomSeed", "(optional) override random seed"],
         ["o", "randomOffset", "(optional) random offset - skip given number of random images", int],
         ["l", "limitImages", "(optional) stop after processing given number of images", int],
+        ["g", "detectGroup", "(optional) detectGroup to use vs. checking GCP instance group"],
     ]
     args = collect_args.collectArgs([], optionalArgs=optArgs, parentParsers=[goog_helper.getParentParser()])
     limitImages = args.limitImages if args.limitImages else 1e9
@@ -1334,7 +1349,7 @@ def main():
     dbManager = db_manager.DbManager(sqliteFile=settings.db_file,
                                     psqlHost=settings.psqlHost, psqlDb=settings.psqlDb,
                                     psqlUser=settings.psqlUser, psqlPasswd=settings.psqlPasswd)
-    groupConfig = getGroupConfig()
+    groupConfig = getGroupConfig(args.detectGroup)
     if args.restrictType:
         restrictType = args.restrictType
     elif groupConfig:
@@ -1347,7 +1362,8 @@ def main():
     logging.warning('Found %d cameras', len(cameras))
     if len(cameras) == 0:
         return
-    isProto(None, sources=cameras)
+    protoNum = groupConfig['protoNum'] if (groupConfig and 'protoNum' in groupConfig) else None
+    isProto(None, sources=cameras, protoNum=protoNum)
     usableRegions = dbManager.get_usable_regions_dict()
     ignoredViews = dbManager.get_ignoredViews()
 
@@ -1381,8 +1397,12 @@ def main():
                 random.random()
                 random.random()
     camArchives = img_archive.getHpwrenCameraArchives(settings.hpwrenArchives)
-    DetectionPolicyClass = policies.get_policies()[settings.detectionPolicy]
-    detectionPolicy = DetectionPolicyClass(args, dbManager, stateless=stateless)
+    if groupConfig and 'protoPolicy' in groupConfig:
+        DetectionPolicyClass = policies.get_policies()[groupConfig['protoPolicy']]
+        detectionPolicy = DetectionPolicyClass(args, dbManager, stateless=stateless, modelLocation=groupConfig['protoModel'])
+    else:
+        DetectionPolicyClass = policies.get_policies()[settings.detectionPolicy]
+        detectionPolicy = DetectionPolicyClass(args, dbManager, stateless=stateless)
     logging.warning('weatherModel %s threshold %s', settings.weather_model, settings.weatherThreshold)
     weatherModel = tf_helper.loadModel(settings.weather_model)
     fireUpdateQueue = []
