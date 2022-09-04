@@ -35,7 +35,7 @@ def insert_entire_images(csvFile):
     csvreader = csv.reader(csvFile)
     for row in csvreader:
         dt = dateutil.parser.parse(row[4])
-        unixTime = int(time.mktime(dt.timetuple()))
+        unixTime = int(dt.timestamp())
         parsed = {
             'ImageID': row[0],
             'ImageClass': row[1],

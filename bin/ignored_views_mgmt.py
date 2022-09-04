@@ -41,7 +41,7 @@ def execCameraSql(dbManager, sqlTemplate, cameraID, isQuery):
 
 def getRecentFalse(dbManager, numFalse, startTimeStr=None, restrictType=None):
     if startTimeStr:
-        startTime = time.mktime(dateutil.parser.parse(startTimeStr).timetuple())
+        startTime = int(dateutil.parser.parse(startTimeStr).timestamp())
     else:
         startTime = int(time.time()-3600*24*30) # one month ago
     typesConstraint = dbManager.restrictTypeClause(restrictType)

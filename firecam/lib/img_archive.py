@@ -125,8 +125,8 @@ def fetchImageAndMeta(dbManager, cameraID, cameraUrl, imgDir, newOnly=False):
 def getDBImages(dbManager, outputDir, cameraID, heading, startTimeDT, endTimeDT, gapMinutes):
     sqlTemplate = """SELECT timestamp, imagepath FROM archive
         where CameraID='%s' and heading=%s and timestamp >= %s and timestamp <= %s order by timestamp"""
-    startTime = int(time.mktime(startTimeDT.timetuple()))
-    endTime = int(time.mktime(endTimeDT.timetuple()))
+    startTime = int(startTimeDT.timestamp())
+    endTime = int(endTimeDT.timestamp())
     sqlStr = sqlTemplate % (cameraID, heading, startTime, endTime)
     # logging.warning('getDBImages camera %s query %s', cameraID, sqlStr)
     dbResult = dbManager.query(sqlStr)
@@ -225,7 +225,7 @@ def parseFilename(fileName):
         }
         isoStr = '{date}T{hour}:{min}:{sec}'.format(date=parsed['date'],hour=parsed['hours'],min=parsed['minutes'],sec=parsed['seconds'])
         dt = dateutil.parser.parse(isoStr)
-        unixTime = time.mktime(dt.timetuple())
+        unixTime = int(dt.timestamp())
         parsed['diffMinutes'] = int(match[6] or 0)
         cropInfo = match[-4:]
     elif len(matchesUnix) == 1:
@@ -593,7 +593,7 @@ def downloadFilesForDate(googleServices, settings, outputDir, hpwrenSource, gapM
         if outputDir == outputDirCheckOnly:
             downloaded_files.append(outputDirCheckOnly)
         else:
-            desiredTime = time.mktime(curTimeDT.timetuple())
+            desiredTime = int(curTimeDT.timestamp())
             closestEntry = min(imgTimes, key=lambda x: abs(x['time']-desiredTime))
             closestTime = closestEntry['time']
             downloaded = None
@@ -748,7 +748,7 @@ def getHpwrenImages(googleServices, settings, outputDir, camArchives, cameraID, 
         timeGapDelta = datetime.timedelta(seconds = 60*gapMinutes)
         downloaded_files = []
         while curTimeDT <= endTimeDT:
-            filePath = cacheFindEntry(cache, cameraID, time.mktime(curTimeDT.timetuple()))
+            filePath = cacheFindEntry(cache, cameraID, int(curTimeDT.timestamp()))
             if filePath:
                 downloaded_files.append(filePath)
             else:

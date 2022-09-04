@@ -43,7 +43,7 @@ def getLocationMatches(dbManager, longitude, latitude, startTime):
     sqlStr = sqlTemplate
     if longitude and latitude and startTime:
         timeDT = dateutil.parser.parse(startTime)
-        tstamp = int(time.mktime(timeDT.timetuple()))
+        tstamp = int(timeDT.timestamp())
         sqlTemplate = """SELECT "%s" as name, %d as timestamp, cameras.cameraIDs,
         %f - cameras.latitude AS lat_diff, %f - cameras.longitude AS long_diff,
         round((%f-cameras.Latitude)*(%f-cameras.Latitude)+(%f-cameras.Longitude)*(%f-cameras.Longitude),4) AS distance

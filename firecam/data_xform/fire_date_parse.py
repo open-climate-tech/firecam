@@ -41,7 +41,7 @@ def parseDates(dbManager, fires):
     for fire in fires:
         stripped = fire['started'].replace('\\xa0', '')
         dt = dateutil.parser.parse(stripped)
-        tstamp = int(time.mktime(dt.timetuple()))
+        tstamp = int(dt.timestamp())
         logging.warning('FIRE: %s, started %s, stripped %s, dt %s', fire['name'],fire['started'], stripped, dt)
         sqlStr = sqlTemplate % (dt.year, dt.month, dt.day, dt.hour, dt.minute, tstamp, fire['started'])
         logging.warning('sql: %s', sqlStr)

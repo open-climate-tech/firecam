@@ -145,7 +145,7 @@ def main():
                 if mode == 'camdir':
                     [cameraID, isoTime, direction] = csvRow[:3]
                     logging.warning('Processing row: %d, cam: %s, ts: %s', rowIndex, cameraID, isoTime)
-                    timestamp = time.mktime(dateutil.parser.parse(isoTime).timetuple())
+                    timestamp = int(dateutil.parser.parse(isoTime).timestamp())
                     if 'center left' in direction:
                         offset = -20
                     elif 'center right' in direction:

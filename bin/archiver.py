@@ -133,8 +133,8 @@ deleteOld.lastRun = 0
 
 
 def getTimeType():
-    detectStartTime = time.mktime(dateutil.parser.parse(settings.detectStartTime).timetuple())
-    detectEndTime = time.mktime(dateutil.parser.parse(settings.detectEndTime).timetuple())
+    detectStartTime = int(dateutil.parser.parse(settings.detectStartTime).timestamp())
+    detectEndTime = int(dateutil.parser.parse(settings.detectEndTime).timestamp())
     # add extra 10 minutes for things to start and shut down properly
     archiveStartTime = detectStartTime - 60 * 10
     archiveEndTime = detectEndTime + 60 * 10
@@ -208,7 +208,7 @@ def updateStats(dbManager):
         return
 
     # get stats
-    fromTimestamp = int(time.mktime(dateutil.parser.parse(settings.detectStartTime).timetuple()))
+    fromTimestamp = int(dateutil.parser.parse(settings.detectStartTime).timestamp())
 
     # images
     sqlTemplate = "SELECT count(*) as ct FROM (SELECT cameraname, timestamp FROM scores WHERE timestamp > %s group by cameraname,timestamp) as q0"
@@ -283,7 +283,7 @@ def deleteOldScores(dbManager):
 
 
 def checkDailyPostWork(dbManager):
-    detectEndTime = time.mktime(dateutil.parser.parse(settings.detectEndTime).timetuple())
+    detectEndTime = int(dateutil.parser.parse(settings.detectEndTime).timestamp())
     postWorkStartTime = detectEndTime + 60*60 # 1 hour after detect ends
     postWorkActive = time.time() > postWorkStartTime
     if checkDailyPostWork.prevActive == None:

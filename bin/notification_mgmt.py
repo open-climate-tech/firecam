@@ -67,7 +67,7 @@ def parseTimeStr(timeStr):
         int (timestamp)
     """
     dt = dateutil.parser.parse(timeStr)
-    return time.mktime(dt.timetuple())
+    return int(dt.timestamp())
 
 
 def main():
