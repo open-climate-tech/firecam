@@ -54,10 +54,11 @@ class InceptionV3AndHistoricalThreshold:
             modelLocation = argParts[0]
             if len(argParts) > 1:
                 self.collectPositivesRatio = float(argParts[1])
+                logging.warning('InceptionV3 init collectPositive %f', self.collectPositivesRatio)
         else:
             modelLocation = settings.model_file
         self.modelId = '/'.join(modelLocation.split('/')[-2:]) # the last two dirpath components
-        logging.warning('InceptionV3 init %s', self.modelId)
+        logging.warning('InceptionV3 init model %s', self.modelId)
         if testMode:
             self.model = None
         else:
