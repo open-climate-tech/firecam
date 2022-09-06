@@ -638,7 +638,7 @@ def getRecentDetections(dbManager, timestamp):
     return dbResult
 
 
-def isDuplicateDetection(dbManager, cameraID, fireHeading, rangeAngle, timestamp):
+def isDuplicateDetection(dbManager, cameraID, fireHeading, rangeAngle, timestamp, protoNum):
     """Check if the location and heading for this event has been recently (last two hours) detected
 
     Args:
@@ -650,7 +650,7 @@ def isDuplicateDetection(dbManager, cameraID, fireHeading, rangeAngle, timestamp
     Returns:
         True if recently alerted, False otherwise
     """
-    sqlTemplate = """SELECT fireheading, angularwidth FROM detections
+    sqlTemplate = """SELECT fireheading, angularwidth, isproto FROM detections
                         WHERE timestamp > %s and timestamp < %s and CameraName in (
                             SELECT name FROM sources WHERE locationid = (SELECT locationid FROM sources WHERE name='%s')
                             )"""
@@ -660,6 +660,10 @@ def isDuplicateDetection(dbManager, cameraID, fireHeading, rangeAngle, timestamp
     if len(dbResult) == 0:
         return False
     for entry in dbResult:
+        if protoNum == 0 and int(entry['isproto']) > 1: # for prod model ensure isproto generated from official model (0 or 1)
+            continue
+        elif protoNum > 0 and protoNum != int(entry['isproto']): # for proto models ensure earlier one matches same proto model
+            continue
         if img_archive.intersectsAngleRange(entry['fireheading'], entry['angularwidth'], fireHeading, rangeAngle):
             logging.warning('Supressing due to recent alert')
             return True
@@ -950,12 +954,12 @@ def smsFireNotification(dbManager, cameraID):
             sms_helper.sendSms(settings, phone, message)
 
 
-def publishAlert(dbManager, cameraID, fireHeading, rangeAngle, timestamp, weatherScore, cameraViewPoly, rxBurns):
+def publishAlert(dbManager, cameraID, fireHeading, rangeAngle, timestamp, weatherScore, cameraViewPoly, rxBurns, protoNum):
     if isProto(cameraID):
         return False
     if weatherScore < settings.weatherThreshold:
         return False
-    if isDuplicateDetection(dbManager, cameraID, fireHeading, rangeAngle, timestamp):
+    if isDuplicateDetection(dbManager, cameraID, fireHeading, rangeAngle, timestamp, protoNum):
         return False
     # don't publish if rxBurn inside cameraViewPoly
     viewPolygon = Polygon(cameraViewPoly)
@@ -979,6 +983,7 @@ def fireDetected(constants, cameraID, cameraHeading, timestamp, fov, imgPath, fi
     """
     dbManager = constants['dbManager']
     weatherModel = constants['weatherModel']
+    protoNum = constants['protoNum']
 
     # copy annotated image to publicly accessible settings.noticationsDir
     notificationsDateDir = goog_helper.dateSubDir(settings.noticationsDir)
@@ -1030,7 +1035,7 @@ def fireDetected(constants, cameraID, cameraHeading, timestamp, fov, imgPath, fi
 
     updateDetectionsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, imgIDs)
     enqueueFireUpdate(constants, cameraID, cameraHeading, timestamp, finalTimestamp, fireSegment)
-    if publishAlert(dbManager, cameraID, fireHeading, rangeAngle, timestamp, weatherScore, cameraViewPoly, rxBurns):
+    if publishAlert(dbManager, cameraID, fireHeading, rangeAngle, timestamp, weatherScore, cameraViewPoly, rxBurns, protoNum):
         insertAlertsDB(dbManager, cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon, sourcePolygons, sortId, fireHeading, rangeAngle)
         pubsubFireNotification(cameraID, timestamp, croppedUrl, annotatedUrl, mapUrl, fireSegment, polygon, sourcePolygons, sortId, fireHeading)
         emailFireNotification(constants, cameraID, timestamp, imgPath, annotatedUrl, fireSegment)
@@ -1105,6 +1110,7 @@ def updateMovie(constants, cameraID, cameraHeading, timestamp, fireSegment):
 def processEnqueuedUpdates(constants):
     fireUpdateQueue = constants['fireUpdateQueue']
     dbManager = constants['dbManager']
+    protoNum = constants['protoNum']
     fireEvent = popFireUpdate(fireUpdateQueue)
     if not fireEvent:
         return
@@ -1123,7 +1129,7 @@ def processEnqueuedUpdates(constants):
             sourcePolygons = detectData['sourcePolygons']
             cameraViewPoly = sourcePolygons[-1]
             rxBurns = rx_burns.getCurrentBurns(dbManager)
-            if publishAlert(dbManager, cameraID, detectData['fireHeading'], detectData['angularWidth'], timestamp, detectData['weatherScore'], cameraViewPoly, rxBurns):
+            if publishAlert(dbManager, cameraID, detectData['fireHeading'], detectData['angularWidth'], timestamp, detectData['weatherScore'], cameraViewPoly, rxBurns, protoNum):
                 updateDBMovie(dbManager, 'alerts', cameraID, timestamp, movieUrls)
                 pubsubFireNotification(cameraID, timestamp, movieUrls, detectData['annotatedUrl'], detectData['mapUrl'], fireSegment, detectData['polygon'], detectData['sourcePolygons'], detectData['sortId'], detectData['fireHeading'])
         else:
@@ -1415,6 +1421,7 @@ def main():
         'weatherModel': weatherModel,
         'ignoredViews': ignoredViews,
         'fireUpdateQueue': fireUpdateQueue,
+        'protoNum': protoNum,
     }
 
     numImages = 0
