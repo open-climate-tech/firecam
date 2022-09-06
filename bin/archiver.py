@@ -226,12 +226,12 @@ def updateStats(dbManager):
     sqlTemplate = "SELECT count(*) as ct FROM probables WHERE timestamp > %s"
     probables = queryCount(dbManager, sqlTemplate % fromTimestamp)
 
-    # detections
-    sqlTemplate = "SELECT count(*) as ct FROM detections WHERE timestamp > %s"
+    # detections (isproto < 2 remove prototype models)
+    sqlTemplate = "SELECT count(*) as ct FROM detections WHERE timestamp > %s and isproto < 2"
     detections = queryCount(dbManager, sqlTemplate % fromTimestamp)
 
     # proxy total alerts (currently detections > threshold)
-    sqlTemplate = "SELECT count(*) as ct FROM detections WHERE timestamp > %s and weatherscore > %s"
+    sqlTemplate = "SELECT count(*) as ct FROM detections WHERE timestamp > %s and weatherscore > %s and isproto < 2"
     alerts = queryCount(dbManager, sqlTemplate % (fromTimestamp, settings.weatherThreshold))
 
     # prod alerts
