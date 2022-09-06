@@ -223,7 +223,7 @@ def updateStats(dbManager):
     positiveSegments = queryCount(dbManager, sqlTemplate % fromTimestamp)
 
     # probables
-    sqlTemplate = "SELECT count(*) as ct FROM probables WHERE timestamp > %s"
+    sqlTemplate = "SELECT count(*) as ct FROM probables WHERE timestamp > %s and protonum = 0"
     probables = queryCount(dbManager, sqlTemplate % fromTimestamp)
 
     # detections (isproto < 2 remove prototype models)
