@@ -164,6 +164,7 @@ class DbManager(object):
             ('ModelId', 'TEXT'),
             ('Heading', 'REAL'),
             ('Hostname', 'TEXT'),
+            ('ProtoNum', 'INT'),
         ]
 
         # detections are subset of probables likely to be new fires

@@ -128,7 +128,7 @@ getNextImage.queueCamera = None
 # getNextImage.tmpDir = Tdir('c:/tmp/dftest')
 
 
-def isProto(cameraID, sources=None, protoNum=None):
+def isProto(cameraID, sources=None, protoNum=0):
     if not isProto.prodTypesArr:
         isProto.prodTypesArr = settings.prodTypes.split(',')
     if sources and not isProto.sourcesDict:
@@ -148,7 +148,7 @@ def isProto(cameraID, sources=None, protoNum=None):
     return not isProd
 isProto.sourcesDict = None
 isProto.prodTypesArr = None
-isProto.protoNum = None
+isProto.protoNum = 0
 
 
 def drawRect(imgDraw, x0, y0, x1, y1, width, color):
@@ -554,7 +554,7 @@ def getTriangleVertices(latitude, longitude, heading, rangeAngle):
     return vertices
 
 
-def recordProbables(dbManager, cameraID, heading, timestamp, imgPath, fireSegment, modelId, stateless):
+def recordProbables(dbManager, cameraID, heading, timestamp, imgPath, fireSegment, modelId, stateless, protoNum):
     """Record that a probable smoke/fire has been observed
 
     Record the probable detection with useful metrics in 'probables' table in SQL DB.
@@ -589,13 +589,14 @@ def recordProbables(dbManager, cameraID, heading, timestamp, imgPath, fireSegmen
             'Score': fireSegment['score'],
             'ImageID': fileID,
             'ModelId': modelId,
+            'ProtoNum': protoNum,
             'Hostname': socket.gethostname()
         }
         dbManager.add_data('probables', dbRow)
     return fileID
 
 
-def isDuplicateProbables(dbManager, cameraID, heading, timestamp):
+def isDuplicateProbables(dbManager, cameraID, heading, timestamp, protoNum):
     """Check if this event has already been recently (last hour) discovered for given camera
        This prevents spam from long lasting fires
 
@@ -609,8 +610,8 @@ def isDuplicateProbables(dbManager, cameraID, heading, timestamp):
         True if this is a duplicate probables, False otherwise
     """
     sqlTemplate = """SELECT * FROM probables
-    where CameraName='%s' and Heading=%s and timestamp > %s and timestamp < %s"""
-    sqlStr = sqlTemplate % (cameraID, heading, timestamp - 60*60, timestamp)
+    where CameraName='%s' and Heading=%s and timestamp > %s and timestamp < %s and ProtoNum=%s"""
+    sqlStr = sqlTemplate % (cameraID, heading, timestamp - 60*60, timestamp, protoNum)
 
     dbResult = dbManager.query(sqlStr)
     if len(dbResult) > 0:
@@ -1362,7 +1363,7 @@ def main():
     logging.warning('Found %d cameras', len(cameras))
     if len(cameras) == 0:
         return
-    protoNum = groupConfig['protoNum'] if (groupConfig and 'protoNum' in groupConfig) else None
+    protoNum = groupConfig['protoNum'] if (groupConfig and 'protoNum' in groupConfig) else 0
     isProto(None, sources=cameras, protoNum=protoNum)
     usableRegions = dbManager.get_usable_regions_dict()
     ignoredViews = dbManager.get_ignoredViews()
@@ -1462,8 +1463,8 @@ def main():
         if fireSegment:
             numProbables += 1
         if fireSegment and not useArchivedImages:
-            recordProbables(dbManager, cameraID, heading, timestamp, imgPath, fireSegment, detectionPolicy.modelId, stateless)
-            if not (isDuplicateProbables(dbManager, cameraID, heading, timestamp) or stateless):
+            recordProbables(dbManager, cameraID, heading, timestamp, imgPath, fireSegment, detectionPolicy.modelId, stateless, protoNum)
+            if not (isDuplicateProbables(dbManager, cameraID, heading, timestamp, protoNum) or stateless):
                 fireDetected(constants, cameraID, heading, timestamp, fov, imgPath, fireSegment)
                 numAlerts += 1
         if not stateless and not protoNum:
