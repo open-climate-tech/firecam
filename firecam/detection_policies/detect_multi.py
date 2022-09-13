@@ -28,11 +28,12 @@ import logging
 
 class DetectMulti:
 
-    def __init__(self, args, dbManager, stateless):
+    def __init__(self, args, dbManager, stateless, modelLocation=None):
         self.mainPolicy = None
         self.confirmationPolicies = []
+        multiPolicySpec = modelLocation if modelLocation else settings.multiPolicySpec
         modelIDs = []
-        for counter, spec in enumerate(settings.multiPolicySpec):
+        for counter, spec in enumerate(multiPolicySpec):
             policyType = spec[0]
             policyArg = spec[1]
             logging.warning('Multi init %s: %s, %s', counter, policyType, policyArg)

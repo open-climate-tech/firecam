@@ -1315,8 +1315,7 @@ def getGroupConfig(detectGroup):
     if not settings.detectGroups:
         return None
     groupConfig = next(filter(lambda x: x[0] == groupName, settings.detectGroups), None)
-    if (not groupConfig) or (len(groupConfig) == 0):
-        return None
+    assert groupConfig and len(groupConfig) > 0
     groupParams = {
         'name': groupConfig[0],
         'numInstances': groupConfig[1],
@@ -1328,7 +1327,7 @@ def getGroupConfig(detectGroup):
         protoModelParts = protoModelInfo.split(';')
         groupParams['protoNum'] = protoModelParts[0]
         groupParams['protoPolicy'] = protoModelParts[1]
-        groupParams['protoModel'] = protoModelParts[2]
+        groupParams['protoPolicyParams'] = protoModelParts[2]
     logging.warning('GroupConfig %s', groupParams)
     return groupParams
 
@@ -1406,7 +1405,8 @@ def main():
     camArchives = img_archive.getHpwrenCameraArchives(settings.hpwrenArchives)
     if groupConfig and 'protoPolicy' in groupConfig:
         DetectionPolicyClass = policies.get_policies()[groupConfig['protoPolicy']]
-        detectionPolicy = DetectionPolicyClass(args, dbManager, stateless=stateless, modelLocation=groupConfig['protoModel'])
+        protoPolicyParams = getattr(settings, groupConfig['protoPolicyParams'])
+        detectionPolicy = DetectionPolicyClass(args, dbManager, stateless=stateless, modelLocation=protoPolicyParams)
     else:
         DetectionPolicyClass = policies.get_policies()[settings.detectionPolicy]
         detectionPolicy = DetectionPolicyClass(args, dbManager, stateless=stateless)
