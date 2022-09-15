@@ -29,6 +29,8 @@ import logging
 class DetectMulti:
 
     def __init__(self, args, dbManager, stateless, modelLocation=None):
+        self.dbManager = dbManager
+        self.stateless = stateless
         self.mainPolicy = None
         self.confirmationPolicies = []
         multiPolicySpec = modelLocation if modelLocation else settings.multiPolicySpec
@@ -54,8 +56,23 @@ class DetectMulti:
         if not mainFireSegment:
             return mainDetectionResult
 
-        # update image_spec to restrict search area centered around detected region
         last_image_spec = image_spec[-1]
+        dbRows = []
+        if not self.stateless:
+            dbRow = {
+                'CameraName': last_image_spec['cameraID'],
+                'Heading': last_image_spec['heading'],
+                'Timestamp': last_image_spec['timestamp'],
+                'MinX': mainFireSegment['MinX'],
+                'MinY': mainFireSegment['MinY'],
+                'MaxX': mainFireSegment['MaxX'],
+                'MaxY': mainFireSegment['MaxY'],
+                'Score': mainFireSegment['score'],
+                'ModelId': self.modelId,
+                'ModelLevel': 0,
+            }
+            dbRows.append(dbRow)
+        # update image_spec to restrict search area centered around detected region
         centerX = int((mainFireSegment['MinX'] + mainFireSegment['MaxX']) / 2)
         sizeX = 299
         (newMinX, newMaxX) = rect_to_squares.getRangeFromCenter(centerX, sizeX, 0, 1e9)
@@ -81,4 +98,22 @@ class DetectMulti:
                 mainFireSegment['MinY'] = detectionResult['fireSegment']['MinY']
                 mainFireSegment['MaxX'] = detectionResult['fireSegment']['MaxX']
                 mainFireSegment['MaxY'] = detectionResult['fireSegment']['MaxY']
+                if not self.stateless:
+                    dbRow = {
+                        'CameraName': last_image_spec['cameraID'],
+                        'Heading': last_image_spec['heading'],
+                        'Timestamp': last_image_spec['timestamp'],
+                        'MinX': mainFireSegment['MinX'],
+                        'MinY': mainFireSegment['MinY'],
+                        'MaxX': mainFireSegment['MaxX'],
+                        'MaxY': mainFireSegment['MaxY'],
+                        'Score': detectionResult['fireSegment']['score'],
+                        'ModelId': self.modelId,
+                        'ModelLevel': counter + 1,
+                    }
+                    dbRows.append(dbRow)
+
+        if len(dbRows) > 0:
+            self.dbManager.add_data('multi_policy', dbRows)
+
         return mainDetectionResult

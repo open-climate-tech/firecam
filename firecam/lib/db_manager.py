@@ -151,6 +151,19 @@ class DbManager(object):
             ('Heading', 'REAL'),
         ]
 
+        multi_poilicy_schema = [
+            ('CameraName', 'TEXT'),
+            ('Timestamp', 'INT'),
+            ('MinX', 'INT'),
+            ('MinY', 'INT'),
+            ('MaxX', 'INT'),
+            ('MaxY', 'INT'),
+            ('Score', 'REAL'),
+            ('ModelId', 'TEXT'),
+            ('ModelLevel', 'INT'),
+            ('Heading', 'REAL'),
+        ]
+
         # probables above halfway between historical max and 1.0
         probables_schema = [
             ('CameraName', 'TEXT'),
@@ -307,6 +320,7 @@ class DbManager(object):
             'cameras': cameras_schema,
             'bbox': bbox_schema,
             'scores': scores_schema,
+            'multi_policy': multi_poilicy_schema,
             'probables': probables_schema,
             'detections': detections_schema,
             'alerts': alerts_schema,
