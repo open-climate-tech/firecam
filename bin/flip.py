@@ -65,7 +65,7 @@ def main():
         if random.random() > randomRatio:
             continue
         img = Image.open(os.path.join(args.inputDir,fileName))
-        flipped_img = img.transpose(Image.FLIP_LEFT_RIGHT)
+        flipped_img = img.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
         flippedPath = os.path.join(args.outputDir,os.path.splitext(fileName)[0] + '_Flip.jpg')
         flipped_img.save(flippedPath, format='JPEG', quality=95)
         logging.warning('Processed row: %d, file: %s', rowIndex, fileName)

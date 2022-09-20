@@ -86,6 +86,7 @@ def main():
         ["s", "startEpoch", "epoch to resume from (epoch from resumeModel)"],
         ["t", "stepsPerEpoch", "(optional) number of steps per epoch", int],
         ["v", "valStepsPerEpoch", "(optional) number of validation steps per epoch", int],
+        ["e", "everyModel", "(optional) save every model vs. just best so far", int],
     ]
 
     args = collect_args.collectArgs(reqArgs, optionalArgs=optArgs, parentParsers=[goog_helper.getParentParser()])
@@ -95,6 +96,7 @@ def main():
     steps_per_epoch = args.stepsPerEpoch if args.stepsPerEpoch else 2000
     overshoot_epochs = 30 #number of epochs over which validation loss hasnt decreased to stop training at
     val_steps = args.valStepsPerEpoch if args.valStepsPerEpoch else 200
+    save_best_only = False if args.everyModel else True
     #val_steps only needed for now because of a bug in tf2.0, which should be fixed in next version
     #TODO: either set this to # of validation examples /batch size (i.e. figure out num validation examples)
     #or upgrade to TF2.1 when its ready and automatically go thorugh the whole set
@@ -136,7 +138,7 @@ def main():
     logdir = os.path.join(args.outputDir, datetime.datetime.now().strftime("%Y%m%d-%H%M%S"))
     callbacks = [keras.callbacks.EarlyStopping(monitor='val_loss', patience=overshoot_epochs),
                  keras.callbacks.ModelCheckpoint(filepath=os.path.join(args.outputDir, 'model_{epoch}'),
-                                                 monitor='val_loss', save_best_only=True),
+                                                 monitor='val_loss', save_best_only=save_best_only),
                  LRTensorBoard(log_dir=logdir)]
 
     logging.warning('Start training')
