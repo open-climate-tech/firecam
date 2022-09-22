@@ -100,17 +100,17 @@ def fetchImage(dbManager, cameraInfo, lastFetchTime, dirName):
 
 DELETE_CHECK_INTERVAL = 2*60  # 2 minutes
 DELETE_AFTER = 1*60*60 # 1 hour
-def deleteOld(dbManager):
+def deleteOldFiles(dbManager):
     timestamp = int(time.time())
     # run every N minutes
-    # logging.warning('Delete %s: %s, %s', (timestamp - deleteOld.lastRun) < DELETE_CHECK_INTERVAL, timestamp - deleteOld.lastRun, DELETE_CHECK_INTERVAL)
-    if (timestamp - deleteOld.lastRun) < DELETE_CHECK_INTERVAL:
+    # logging.warning('Delete %s: %s, %s', (timestamp - deleteOldFiles.lastRun) < DELETE_CHECK_INTERVAL, timestamp - deleteOldFiles.lastRun, DELETE_CHECK_INTERVAL)
+    if (timestamp - deleteOldFiles.lastRun) < DELETE_CHECK_INTERVAL:
         return
-    deleteOld.lastRun = timestamp
+    deleteOldFiles.lastRun = timestamp
 
     # check DB for old images
     sqlTemplate = """SELECT imagepath FROM archive
-        where timestamp < %s"""
+        where imagepath != '' and timestamp < %s"""
     sqlStr = sqlTemplate % (timestamp - DELETE_AFTER)
     dbResult = dbManager.query(sqlStr)
     logging.warning('delete dbR %s: top %s', len(dbResult), len(dbResult) and dbResult[0])
@@ -121,7 +121,7 @@ def deleteOld(dbManager):
         try:
             os.remove(entry['imagepath'])
         except Exception as e:
-            pass
+            logging.error('Error deleting %s: %s', entry['imagepath'], str(e))
 
     # delete from DB
     sqlTemplate = """DELETE FROM archive
@@ -129,7 +129,7 @@ def deleteOld(dbManager):
     sqlStr = sqlTemplate % (timestamp - DELETE_AFTER)
     dbResult = dbManager.execute(sqlStr)
     return
-deleteOld.lastRun = 0
+deleteOldFiles.lastRun = 0
 
 
 def getTimeType():
@@ -282,9 +282,18 @@ def deleteOldScores(dbManager):
     #     dbManager.execute(sqlStr)
 
 
-def checkDailyPostWork(dbManager):
+def deleteFilesInDir(archiveDir):
+    staleFiles = os.listdir(archiveDir)
+    logging.warning('deleteFilesInDir: Found %d files', len(staleFiles))
+    logging.warning('deleteFilesInDir: Sample name: %s', staleFiles[int(len(staleFiles)*random.random())])
+    for name in staleFiles:
+        os.remove(os.path.join(archiveDir, name))
+
+
+def checkDailyPostWork(dbManager, archiveDir):
     detectEndTime = int(dateutil.parser.parse(settings.detectEndTime).timestamp())
-    postWorkStartTime = detectEndTime + 60*60 # 1 hour after detect ends
+    # 80 minutes after detect ends (60 for deleteOldFiles to trigger plus 10 for grace period in getTimeType() plus another 10 for margin)
+    postWorkStartTime = detectEndTime + 80*60
     postWorkActive = time.time() > postWorkStartTime
     if checkDailyPostWork.prevActive == None:
         checkDailyPostWork.prevActive = postWorkActive
@@ -292,6 +301,8 @@ def checkDailyPostWork(dbManager):
     if postWorkActive and not checkDailyPostWork.prevActive:
         updateStats(dbManager)
         deleteOldScores(dbManager)
+        deleteOldFiles(dbManager)
+        deleteFilesInDir(archiveDir)
         logging.warning('Daily postWork done')
     checkDailyPostWork.prevActive = postWorkActive
     return
@@ -336,7 +347,7 @@ def main():
         else:
             assert timeType == 'inactive'
             checkDetectGroups(False)
-            checkDailyPostWork(dbManager)
+            checkDailyPostWork(dbManager, args.archiveDir)
             checkDailyExit()
             time.sleep(1*60)
             continue
@@ -379,7 +390,7 @@ def main():
             time.sleep(MIN_CYCLE_SECONDS - (endTime - startTime))
         else:
             logging.warning('Sleep overdue by %.1f', (endTime - startTime) - MIN_CYCLE_SECONDS)
-        deleteOld(dbManager)
+        deleteOldFiles(dbManager)
         if (numIterations % 10) == 0:
             sqlStr = """SELECT count(*) FROM archive"""
             dbResult = dbManager.query(sqlStr)
