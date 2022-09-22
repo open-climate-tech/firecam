@@ -744,6 +744,8 @@ def intersectLand(triangle):
 
 
 def checkWeatherInfo(weatherModel, dbManager, cameraID, timestamp, fireSegment, polygon, sourcePolygons, cameraLatLong):
+    if not weatherModel:
+        return 1
     centroidLatLong = getCentroid(polygon)
     (weatherCentroid, weatherCamera) = weather.getWeatherData(dbManager, cameraID, timestamp, centroidLatLong, cameraLatLong)
     if (not weatherCentroid) or (not weatherCamera):
@@ -1328,6 +1330,7 @@ def getGroupConfig(detectGroup):
         groupParams['protoNum'] = protoModelParts[0]
         groupParams['protoPolicy'] = protoModelParts[1]
         groupParams['protoPolicyParams'] = protoModelParts[2]
+        groupParams['useWeatherModel'] = protoModelParts[3] == '1'
     logging.warning('GroupConfig %s', groupParams)
     return groupParams
 
@@ -1423,6 +1426,9 @@ def main():
         'fireUpdateQueue': fireUpdateQueue,
         'protoNum': protoNum,
     }
+    if protoNum and not groupConfig['useWeatherModel']:
+        constants['weatherModel'] = None
+        logging.warning('Clearning weatherModel for proto')
 
     numImages = 0
     numProbables = 0
