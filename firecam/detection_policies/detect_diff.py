@@ -30,7 +30,7 @@ class DetectDiff:
     def __init__(self, args, dbManager, stateless, modelLocation=None):
         logging.warning('Diff init %s', modelLocation)
         BasePolicy = inception_and_threshold.InceptionV3AndHistoricalThreshold
-        self.basePolicy = BasePolicy(args, dbManager, stateless=True, modelLocation=modelLocation)
+        self.basePolicy = BasePolicy(args, dbManager, stateless=stateless, modelLocation=modelLocation)
         self.modelId = self.basePolicy.modelId
         self.outputDirObj = tempfile.TemporaryDirectory()
 
