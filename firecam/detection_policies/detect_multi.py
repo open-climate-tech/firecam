@@ -91,6 +91,8 @@ class DetectMulti:
             # logging.warning('Multi confirm %s res %s', counter, detectionResult['fireSegment'])
             if not detectionResult['fireSegment']:
                 # return result as is if last policy or no fire detected
+                if len(dbRows) > 0:
+                    self.dbManager.add_data('multi_policy', dbRows)
                 return detectionResult
             else:
                 # overwrite location with confirmationModel's location
