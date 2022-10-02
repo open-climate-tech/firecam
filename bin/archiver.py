@@ -222,6 +222,10 @@ def updateStats(dbManager):
     sqlTemplate = "SELECT count(*) as ct FROM scores WHERE score >.5 and timestamp > %s"
     positiveSegments = queryCount(dbManager, sqlTemplate % fromTimestamp)
 
+    # multi_policy0
+    sqlTemplate = "SELECT count(*) as ct FROM multi_policy WHERE timestamp > %s and modellevel=0"
+    multiZero = queryCount(dbManager, sqlTemplate % fromTimestamp)
+
     # probables
     sqlTemplate = "SELECT count(*) as ct FROM probables WHERE timestamp > %s and protonum = 0"
     probables = queryCount(dbManager, sqlTemplate % fromTimestamp)
@@ -247,6 +251,7 @@ def updateStats(dbManager):
         'Images': images,
         'AllSegments': segments,
         'PositiveSegments': positiveSegments,
+        'MultiZero': multiZero,
         'Probables': probables,
         'Detections': detections,
         'Alerts': alerts,
@@ -257,19 +262,22 @@ def updateStats(dbManager):
     logging.warning('Stats inserted for %s: %s', todayStr, dbRow)
 
 
-def deleteOldScores(dbManager):
-    logging.warning('checking old scores for deletion')
-    firstTimestamp = int(time.time()-3600*24*7*3) # 3 weeks
-    sqlTemplate = "SELECT count(*) as ct FROM scores WHERE timestamp < %s"
-    oldEntries = queryCount(dbManager, sqlTemplate % firstTimestamp)
+def deleteOldSqlEntries(dbManager, tableName, firstTimestamp):
+    logging.warning('Counting old %s entries', tableName)
+    sqlTemplate = "SELECT count(*) as ct FROM %s WHERE timestamp < %s"
+    oldEntries = queryCount(dbManager, sqlTemplate % (tableName, firstTimestamp))
     if oldEntries == 0:
         logging.warning('No old entries.  All done')
         return
-
-    logging.warning('deleting %s old scores', oldEntries)
-    sqlTemplate = "DELETE FROM scores WHERE timestamp < %s"
-    sqlStr = sqlTemplate % (firstTimestamp)
+    logging.warning('deleting %s old %s entries', oldEntries, tableName)
+    sqlTemplate = "DELETE FROM %s WHERE timestamp < %s"
+    sqlStr = sqlTemplate % (tableName, firstTimestamp)
     dbManager.execute(sqlStr)
+
+
+def deleteOldScores(dbManager):
+    firstTimestamp = int(time.time()-3600*24*7*3) # 3 weeks
+    deleteOldSqlEntries(dbManager, 'scores', firstTimestamp)
     # vacuum and reindex code is here (in case needed in future) but disabled for now
     # System already uses autovacuum, so manual vacuum should not be needed
     # Also scores table should not need daily reindex
@@ -280,6 +288,11 @@ def deleteOldScores(dbManager):
     #     logging.warning('reindexing scores')
     #     sqlStr = "REINDEX INDEX scores_camera_heading_model_time"
     #     dbManager.execute(sqlStr)
+
+
+def deleteOldMultiPolicy(dbManager):
+    firstTimestamp = int(time.time()-3600*24*365) # 1 year
+    deleteOldSqlEntries(dbManager, 'multi_policy', firstTimestamp)
 
 
 def deleteFilesInDir(archiveDir):
@@ -301,6 +314,7 @@ def checkDailyPostWork(dbManager, archiveDir):
     if postWorkActive and not checkDailyPostWork.prevActive:
         updateStats(dbManager)
         deleteOldScores(dbManager)
+        deleteOldMultiPolicy(dbManager)
         deleteOldFiles(dbManager)
         deleteFilesInDir(archiveDir)
         logging.warning('Daily postWork done')

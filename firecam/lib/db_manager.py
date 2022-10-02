@@ -295,6 +295,7 @@ class DbManager(object):
             ('Images', 'INT'),
             ('AllSegments', 'INT'),
             ('PositiveSegments', 'INT'),
+            ('MultiZero', 'INT'),
             ('Probables', 'INT'),
             ('Detections', 'INT'),
             ('Alerts', 'INT'),
