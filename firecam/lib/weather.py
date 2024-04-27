@@ -56,7 +56,7 @@ def getHistoricalWeatherExternal(timestamp, centroidLatLong):
 
 
 def getCurrentWeatherExternal(centroidLatLong):
-    urlTemplate = 'https://api.openweathermap.org/data/2.5/onecall?lat=%s&lon=%s&units=%s&exclude=minutely,hourly,daily&appid=%s'
+    urlTemplate = 'https://api.openweathermap.org/data/3.0/onecall?lat=%s&lon=%s&units=%s&exclude=minutely,hourly,daily&appid=%s'
     urlStr = urlTemplate % (centroidLatLong[0], centroidLatLong[1], 'imperial', settings.weatherCurrentKey)
     weatherInfo = None
     try:
