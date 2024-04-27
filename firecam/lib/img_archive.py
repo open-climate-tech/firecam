@@ -33,6 +33,7 @@ from PIL import Image, ImageMath, ImageStat
 import numpy as np
 import cv2
 import shutil
+import json
 
 def isPTZ(cameraID):
     return False
@@ -71,6 +72,18 @@ def fetchUrlHPWren(cameraID, cameraUrl, imgDir, timestamp, imgPath):
     else:
         logging.warning('Error: Missing EXIF from camera %s', cameraID)
     return (imgPath, heading, timestamp)
+
+
+def fetchAlertCamsInfo(alertUrl, alertApiKey):
+    try:
+        req = urllib.request.Request(alertUrl, headers={'X-Api-Key': alertApiKey})
+        resp = urllib.request.urlopen(req)
+        camInfoStr = resp.read().decode('utf-8')
+        camInfoJson = json.loads(camInfoStr)
+        return camInfoJson
+    except Exception as e:
+        logging.error('Error fetching Alert Info: %s', str(e))
+        return []
 
 
 def fetchCurrentFromDB(dbManager, cameraID, imgDir, timestamp):
