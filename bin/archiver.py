@@ -53,14 +53,17 @@ chooseCamera.cycleTime = 0
 
 def getFetchInfo(dbManager, cameraInfo, timestamp):
     sqlTemplate = """SELECT heading,timestamp FROM archive
-        where CameraID='%s' and timestamp > %s order by timestamp desc limit 1"""
+        where CameraID='%s' and timestamp > %s order by timestamp desc limit 3"""
     sqlStr = sqlTemplate % (cameraInfo['name'], timestamp - 60*60)
     dbResult = dbManager.query(sqlStr)
     # logging.warning('arch dbR %s: %s', len(dbResult), dbResult)
     if len(dbResult) == 0:
         return 0
+    rot = True
+    if dbResult[0]['heading'] == dbResult[1]['heading'] == dbResult[2]['heading']:
+        rot = False
     fetchTime = dbResult[0]['timestamp']
-    return fetchTime
+    return (rot, fetchTime)
 
 
 def fetchImage(dbManager, cameraInfo, lastFetchTime, dirName):
@@ -350,6 +353,7 @@ def main():
         logging.warning('Exiting child thread %s', threading.get_ident())
 
     MAX_INTERVAL_MINUTES = 1
+    MAX_INTERVAL_SEC_ROTATE = 15
     numIterations = 0
     numFetches = 0
     while True:
@@ -373,16 +377,21 @@ def main():
 
         numIterations += 1
         startTime = time.time()
+        updatedAlert = []
         for cameraInfo in cameras:
             timestamp = int(time.time())
             # logging.warning('Check camera %s, ts %s', cameraInfo['name'], timestamp)
             lastFetchTime = getFetchInfo(dbManager, cameraInfo, timestamp)
-            if (lastFetchTime < timestamp - 60*MAX_INTERVAL_MINUTES):
-                # fetchImage(dbManager, cameraInfo, lastFetchTime, args.archiveDir)
-                # queue the fetching work to a thread and change the thread for enqueueing next fetch
-                threadParams[nextThread].append([cameraInfo, lastFetchTime])
-                nextThread = (nextThread + 1) % args.numThreads
-                numFetches += 1
+            if not lastFetchTime[0]:
+                if (lastFetchTime[1] < timestamp - 60*MAX_INTERVAL_MINUTES):
+                    # fetchImage(dbManager, cameraInfo, lastFetchTime, args.archiveDir)
+                    # queue the fetching work to a thread and change the thread for enqueueing next fetch
+                    threadParams[nextThread].append([cameraInfo, lastFetchTime[1]])
+                    nextThread = (nextThread + 1) % args.numThreads
+                    numFetches += 1
+            else:
+                if (lastFetchTime[1] < timestamp - MAX_INTERVAL_SEC_ROTATE):
+                    updatedAlertNames.append([cameraInfo['name'], lastFetchTime[1]])
 
         # start all the threads to work concurrently
         threads = []
@@ -393,6 +402,17 @@ def main():
             thread.start()
             logging.warning('started thread %d: %s with %d fetches', threadNum, thread.ident, len(threadParams[threadNum]))
 
+        alertCams = img_archive.fetchAlertCamsInfo()
+        alertCamsDict = {}
+        for cam in alertCams:
+            alertCamsDict[cam['name']] = cam['updated_time']
+
+        for cam in updatedAlert:
+            if cam[0] in alertCamsDict:
+                if alertCamsDict[cam[0]] is not cam[1]:
+                    # fetch the updated image
+                    numFetches += 1
+    
         # wait for all threads to finish
         for thread in threads:
             thread.join()
