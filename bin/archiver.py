@@ -32,26 +32,9 @@ import logging
 import threading
 from google.cloud import compute_v1
 
-MIN_CYCLE_SECONDS = 13 # some cameras have new views every 13-14 seconds
-def chooseCamera(dbManager, cameras, stateless):
-    chooseCamera.counter += 1
-    if stateless:
-        camera = cameras[int(len(cameras)*random.random())]
-    else:
-        index = chooseCamera.counter % len(cameras)
-        camera = cameras[index]
-        if index == 0:
-            timestamp = int(time.time())
-            if timestamp - chooseCamera.cycleTime < MIN_CYCLE_SECONDS:
-                logging.warning('Sleeping for %s', MIN_CYCLE_SECONDS - (timestamp - chooseCamera.cycleTime))
-                time.sleep(MIN_CYCLE_SECONDS - (timestamp - chooseCamera.cycleTime))
-            chooseCamera.cycleTime = int(time.time())
-    return camera
-chooseCamera.counter = -1
-chooseCamera.cycleTime = 0
-
-
-def getFetchInfo(dbManager, cameraInfo, timestamp):
+def getSpinFetchInfo(dbManager, cameraInfo, timestamp):
+    # check DB for last 3 entries from this camera
+    # if all three have same heading, spinning is False
     sqlTemplate = """SELECT heading,timestamp FROM archive
         where CameraID='%s' and timestamp > %s order by timestamp desc limit 3"""
     sqlStr = sqlTemplate % (cameraInfo['name'], timestamp - 60*60)
@@ -66,13 +49,13 @@ def getFetchInfo(dbManager, cameraInfo, timestamp):
     return (rot, fetchTime)
 
 
-def fetchImage(dbManager, cameraInfo, lastFetchTime, dirName):
+def fetchImage(dbManager, cameraInfo, lastFetchTime, dirName, latestCamInfo):
     # fetch image to given path
     imgPath = None
     heading = None
     timestamp = None
     try:
-        imgInfo = img_archive.fetchImageAndMeta(dbManager, cameraInfo['name'], cameraInfo['url'], dirName, newOnly=True)
+        imgInfo = img_archive.fetchImageAndMeta(dbManager, cameraInfo['name'], cameraInfo['url'], dirName, newOnly=True, latestCamInfo=latestCamInfo)
         (imgPath, heading, timestamp, fov) = imgInfo
     except Exception as e:
         logging.error('Error fetching image from %s %s', cameraInfo['name'], str(e))
@@ -341,6 +324,7 @@ def main():
                                     psqlHost=settings.psqlHost, psqlDb=settings.psqlDb,
                                     psqlUser=settings.psqlUser, psqlPasswd=settings.psqlPasswd)
     cameras = dbManager.get_sources(activeOnly=True, restrictType=args.restrictType)
+    camerasPTZ = list(filter (lambda x: img_archive.isPTZ(x['name']), cameras))
 
     # cameras = cameras[0:4]
     logging.warning('cameras %s: %s', len(cameras), cameras[0:2])
@@ -348,12 +332,12 @@ def main():
     # images are fetched with multiple threads to overlap network wait time
     def threadFn(threadParams):
         logging.warning('Child thread %s with %d fetches', threading.get_ident(), len(threadParams))
-        for (cameraInfo, lastFetchTime) in threadParams:
-            fetchImage(dbManager, cameraInfo, lastFetchTime, args.archiveDir)
+        for (cameraInfo, lastFetchTime, latestCamInfo) in threadParams:
+            fetchImage(dbManager, cameraInfo, lastFetchTime, args.archiveDir, latestCamInfo)
         logging.warning('Exiting child thread %s', threading.get_ident())
 
-    MAX_INTERVAL_MINUTES = 1
-    MAX_INTERVAL_SEC_ROTATE = 15
+    MAX_INTERVAL_SEC_FIXED = 60
+    MAX_INTERVAL_SEC_ROTATE = 13
     numIterations = 0
     numFetches = 0
     while True:
@@ -377,21 +361,30 @@ def main():
 
         numIterations += 1
         startTime = time.time()
-        updatedAlert = []
+        alertCamsDict = {}
+        if len(camerasPTZ) > 0:
+            alertCams = img_archive.fetchAlertCamsInfo()
+            # convert list to dict for faster lookup
+            for cam in alertCams:
+                alertCamsDict[cam['name']] = cam
+
         for cameraInfo in cameras:
             timestamp = int(time.time())
+            latestCamInfo = None
+            if cameraInfo['name'] in alertCamsDict:
+                latestCamInfo = alertCamsDict[cameraInfo['name']]
             # logging.warning('Check camera %s, ts %s', cameraInfo['name'], timestamp)
-            lastFetchTime = getFetchInfo(dbManager, cameraInfo, timestamp)
-            if not lastFetchTime[0]:
-                if (lastFetchTime[1] < timestamp - 60*MAX_INTERVAL_MINUTES):
-                    # fetchImage(dbManager, cameraInfo, lastFetchTime, args.archiveDir)
-                    # queue the fetching work to a thread and change the thread for enqueueing next fetch
-                    threadParams[nextThread].append([cameraInfo, lastFetchTime[1]])
-                    nextThread = (nextThread + 1) % args.numThreads
-                    numFetches += 1
-            else:
-                if (lastFetchTime[1] < timestamp - MAX_INTERVAL_SEC_ROTATE):
-                    updatedAlertNames.append([cameraInfo['name'], lastFetchTime[1]])
+            isSpinning, lastFetchTime = getSpinFetchInfo(dbManager, cameraInfo, timestamp)
+            checkTimeDiff = MAX_INTERVAL_SEC_ROTATE if isSpinning else MAX_INTERVAL_SEC_FIXED
+            if latestCamInfo:
+                timeStr = latestCamInfo['image']['time']
+                timestamp = min(timestamp, int(dateutil.parser.parse(timeStr).timestamp()))
+            if (lastFetchTime < timestamp - checkTimeDiff):
+                # fetchImage(dbManager, cameraInfo, lastFetchTime, args.archiveDir)
+                # queue the fetching work to a thread and change the thread for enqueueing next fetch
+                threadParams[nextThread].append([cameraInfo, lastFetchTime, latestCamInfo])
+                nextThread = (nextThread + 1) % args.numThreads
+                numFetches += 1
 
         # start all the threads to work concurrently
         threads = []
@@ -402,23 +395,13 @@ def main():
             thread.start()
             logging.warning('started thread %d: %s with %d fetches', threadNum, thread.ident, len(threadParams[threadNum]))
 
-        alertCams = img_archive.fetchAlertCamsInfo()
-        alertCamsDict = {}
-        for cam in alertCams:
-            alertCamsDict[cam['name']] = cam['updated_time']
-
-        for cam in updatedAlert:
-            if cam[0] in alertCamsDict:
-                if alertCamsDict[cam[0]] is not cam[1]:
-                    # fetch the updated image
-                    numFetches += 1
-    
         # wait for all threads to finish
         for thread in threads:
             thread.join()
         logging.warning('All threads ended')
 
         endTime = time.time()
+        MIN_CYCLE_SECONDS = min(MAX_INTERVAL_SEC_FIXED, MAX_INTERVAL_SEC_ROTATE)
         if endTime - startTime < MIN_CYCLE_SECONDS:
             logging.warning('Sleeping for %.1f', MIN_CYCLE_SECONDS - (endTime - startTime))
             time.sleep(MIN_CYCLE_SECONDS - (endTime - startTime))

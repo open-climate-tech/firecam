@@ -178,7 +178,7 @@ def main():
                         logging.warning('Skip missing file %s, row %s', fileName, rowIndex)
                         continue
                     img = Image.open(localFilePath)
-                    degreesInView = img_archive.getCameraFov(cameraID)
+                    degreesInView = img_archive.getApproxCameraFov(cameraID)
                     centerX = (minX + maxX) / 2
                     offset = centerX / img.size[0] * degreesInView - degreesInView/2
                     img.close()

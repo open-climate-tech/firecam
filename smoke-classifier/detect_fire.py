@@ -1443,7 +1443,7 @@ def main():
                 getArchivedImages(constants, cameras, startTimeDT, timeRangeSeconds)
             if cameraID:
                 heading = img_archive.getHeading(cameraID)
-            fov = img_archive.getCameraFov(cameraID)
+            fov = img_archive.getApproxCameraFov(cameraID)
         else: # regular (non diff mode), grab image and process
             (cameraID, heading, timestamp, fov, imgPath) = getNextImage(dbManager, cameras, stateless, counterName)
             classifyImgPath = imgPath

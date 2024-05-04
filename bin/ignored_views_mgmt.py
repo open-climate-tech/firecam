@@ -113,8 +113,8 @@ def main():
         recents = getRecentFalse(dbManager, numFalse, startTimeStr=args.startTime, restrictType=args.restrictType)
         for entry in recents:
             logging.warning('count %d: cam %s, camHead %s, min %s, max %s', entry['ct'], entry['cameraname'], entry['camheading'], entry['minx'], entry['maxx'])
-            fov = img_archive.getCameraFov(entry['cameraname'])
-            imgSizeX = img_archive.getCameraSizeX(entry['cameraname'])
+            fov = img_archive.getApproxCameraFov(entry['cameraname'])
+            imgSizeX = img_archive.getApproxCameraSizeX(entry['cameraname'])
             # logging.warning('cam %s: fov %s, sizeX %s', entry['cameraname'], fov, imgSizeX)
             (fireHeading, rangeAngle) = img_archive.getHeadingRange(entry['camheading'], fov, entry['minx'], entry['maxx'], imgSizeX)
             logging.warning('cam %s: fireHeading %s, rangeAngle %s', entry['cameraname'], round(fireHeading), round(rangeAngle))

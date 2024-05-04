@@ -36,15 +36,19 @@ import shutil
 import json
 
 def isPTZ(cameraID):
-    return False
+    return cameraID[0:5] == 'Axis-'
 
 
-def getCameraFov(cameraID):
-    return 110 # camera horizontal field of view is 110 for most Mobotix cameras
+def getApproxCameraFov(cameraID):
+    # camera horizontal field of view is 60 degrees for most PTZ and 110 degrees for most Mobotix cameras
+    # PTZ cameras have variable zoom and field of view, but approximation is not used for live detection,
+    # but only for archive processing, where we don't have the actual FOV
+    return 60 if isPTZ(cameraID) else 110
 
 
-def getCameraSizeX(cameraID):
-    return 3072 # camera horizontal pixel size. Most Mobotix are 3072 x 2048
+def getApproxCameraSizeX(cameraID):
+    # This approximation is only used for determining ranges for ignored views
+    return 2048 if isPTZ(cameraID) else 3072
 
 
 def fetchUrlHPWren(cameraID, cameraUrl, imgDir, timestamp, imgPath):
@@ -86,6 +90,32 @@ def fetchAlertCamsInfo(alertUrl, alertApiKey):
         return []
 
 
+MAX_VALID_OLD_IMAGE_SECS = 60
+def fetchPTZ(cameraID, latestCamInfo, imgDir, timestamp, imgPath):
+    cameraUrl = latestCamInfo['image']['url']
+    urllib.request.urlretrieve(cameraUrl, imgPath)
+    fov = latestCamInfo['view']['field_angle']
+    if fov < 30:
+        logging.error('Bad fov value %s: %s', cameraID, fov)
+        os.remove(imgPath)
+        return (None, None, None, None)
+    pan = latestCamInfo['position']['pan']
+    heading = (pan % 360) # handles negative values correctly
+    newTimestamp = int(dateutil.parser.parse(latestCamInfo['image']['time']).timestamp())
+    if timestamp != newTimestamp:
+        if (timestamp - newTimestamp) > MAX_VALID_OLD_IMAGE_SECS:
+            logging.error('Really old image %s: %s', cameraID, timestamp - newTimestamp)
+            os.remove(imgPath)
+            return (None, None, None, None)
+        newImgPath = getImgPath(imgDir, cameraID, newTimestamp)
+        os.rename(imgPath, newImgPath)
+        timestamp = newTimestamp
+        imgPath = newImgPath
+    isoTime = datetime.datetime.fromtimestamp(timestamp).isoformat()
+    logging.warning('camera: %s, head: %s, fov: %s, iso: %s', cameraID, str(heading), str(fov), isoTime)
+    return (imgPath, heading, timestamp, fov)
+
+
 def fetchCurrentFromDB(dbManager, cameraID, imgDir, timestamp):
     sqlTemplate = """SELECT i.heading as heading, i.maxts as maxts, o.fieldofview as fov, o.imagepath as maxpath, o.processed as processed
                        FROM archive o
@@ -112,7 +142,7 @@ def fetchCurrentFromDB(dbManager, cameraID, imgDir, timestamp):
         return None
 
 
-def fetchImageAndMeta(dbManager, cameraID, cameraUrl, imgDir, newOnly=False):
+def fetchImageAndMeta(dbManager, cameraID, cameraUrl, imgDir, newOnly=False, latestCamInfo=None):
     """Fetch the image file and metadata for given camera
 
     Args:
@@ -123,17 +153,22 @@ def fetchImageAndMeta(dbManager, cameraID, cameraUrl, imgDir, newOnly=False):
     Returns:
         Tuple containing filepath of the image, current heading and timestamp
     """
-    fov = getCameraFov(cameraID)
     timestamp = int(time.time())
     imgPath = getImgPath(imgDir, cameraID, timestamp)
     # logging.warning('Fetching camera %s', cameraID)
     if newOnly:
-        (imgPath, heading, timestamp) = fetchUrlHPWren(cameraID, cameraUrl, imgDir, timestamp, imgPath)
+        if isPTZ(cameraID):
+            (imgPath, heading, timestamp, fov) = fetchPTZ(cameraID, latestCamInfo, imgDir, timestamp, imgPath)
+        else: # HPWREN Mobotix
+            fov = getApproxCameraFov(cameraID)
+            (imgPath, heading, timestamp) = fetchUrlHPWren(cameraID, cameraUrl, imgDir, timestamp, imgPath)
         return (imgPath, heading, timestamp, fov)
     else:
         result = fetchCurrentFromDB(dbManager, cameraID, imgDir, timestamp)
         if result:
             return result
+        if isPTZ(cameraID):
+            return # don't bother trying new images from PTZ if cache unavailable
         # try newOnly=True
         return fetchImageAndMeta(dbManager, cameraID, cameraUrl, imgDir, newOnly=True)
 
@@ -797,12 +832,15 @@ def getHpwrenImages(googleServices, settings, outputDir, camArchives, cameraID, 
 
 
 def getArchiveImages(googleServices, settings, dbManager, outputDir, camArchives, cameraID, heading, startTimeDT, endTimeDT, gapMinutes):
+    if isPTZ(cameraID):
+        startTimeDT = startTimeDT - datetime.timedelta(seconds = 5*60) # go back extra time because PTZ frequency is less
     dbImages = getDBImages(dbManager, outputDir, cameraID, heading, startTimeDT, endTimeDT, gapMinutes)
     if dbImages:
         return dbImages
-    result = getHpwrenImages(googleServices, settings, outputDir, camArchives, cameraID, startTimeDT, endTimeDT, gapMinutes)
-    result = result or []
-    return result
+    if not isPTZ(cameraID):
+        result = getHpwrenImages(googleServices, settings, outputDir, camArchives, cameraID, startTimeDT, endTimeDT, gapMinutes)
+        result = result or []
+        return result
 
 
 def cacheInsert(cache, fileName):
