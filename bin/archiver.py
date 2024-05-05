@@ -41,10 +41,13 @@ def getSpinFetchInfo(dbManager, cameraInfo, timestamp):
     dbResult = dbManager.query(sqlStr)
     # logging.warning('arch dbR %s: %s', len(dbResult), dbResult)
     if len(dbResult) == 0:
-        return 0
-    rot = True
-    if dbResult[0]['heading'] == dbResult[1]['heading'] == dbResult[2]['heading']:
-        rot = False
+        return (False, 0)
+    rot = False
+    topHeading = dbResult[0]['heading']
+    for entry in dbResult:
+        if entry['heading'] != topHeading:
+            rot = True
+            break
     fetchTime = dbResult[0]['timestamp']
     return (rot, fetchTime)
 
@@ -363,7 +366,7 @@ def main():
         startTime = time.time()
         alertCamsDict = {}
         if len(camerasPTZ) > 0:
-            alertCams = img_archive.fetchAlertCamsInfo()
+            alertCams = img_archive.fetchAlertCamsInfo(settings.alertCamsUrl, settings.alertCamsKey)
             # convert list to dict for faster lookup
             for cam in alertCams:
                 alertCamsDict[cam['name']] = cam
