@@ -156,7 +156,7 @@ def drawRect(imgDraw, x0, y0, x1, y1, width, color):
         imgDraw.rectangle((x0 + i, y0 + i, x1 - i, y1 -i), outline=color)
 
 
-def drawFireBox(img, destPath, fireBoxCoords, timestamp=None, fireSegment=None, color='red', message=''):
+def drawFireBox(img, destPath, fireBoxCoords, timestamp=None, fireSegment=None, color='red', message='', cameraProvider=''):
     """Draw bounding box with fire detection and optionally write scores
 
     Also watermarks the image and stores the resulting annotated image as new file
@@ -198,25 +198,27 @@ def drawFireBox(img, destPath, fireBoxCoords, timestamp=None, fireSegment=None, 
         timeStr = datetime.datetime.fromtimestamp(timestamp).strftime('%H:%M:%S')
         fullStr = timeStr + ' ' + message
         # first little bit of black outline
-        color = "black"
-        for i in range(0,5):
-            for j in range(0,5):
-                imgDraw.text((margin + i, j), fullStr, font=font, fill=color)
-
+        drawBlackBorder(font, imgDraw, fullStr, margin + 2, 2)
         # now actual data in orange
         color = "orange"
         imgDraw.text((margin + 2, 2), fullStr, font=font, fill=color)
 
     # "watermark" the image
     color = "orange"
-    fontSize=20
+    fontSize=16
     font = ImageFont.truetype(fontPath, size=fontSize)
     margin = int(fontSize/2)
+    drawBlackBorder(font, imgDraw, "Open Climate Tech - WildfireCheck", margin, img.size[1] - fontSize - margin)
     imgDraw.text((margin, img.size[1] - fontSize - margin), "Open Climate Tech - WildfireCheck", font=font, fill=color)
-
+    drawBlackBorder(font, imgDraw, cameraProvider, img.size[0] - font.getlength(cameraProvider) - margin, img.size[1] - fontSize - margin)
+    imgDraw.text((img.size[0] - font.getlength(cameraProvider) - margin, img.size[1] - fontSize - margin), cameraProvider, font=font, fill=color)
     img.save(destPath, format="JPEG", quality=95)
     del imgDraw
 
+def drawBlackBorder(font, imgDraw, text, x, y):
+    for i in range(-2, 3):
+        for j in range(-2, 3):
+            imgDraw.text((x + i, y + j), text, font=font, fill="black")
 
 def firePixelCoords(img, fireSegment):
     x0 = fireSegment['MinX'] if 'MinX' in fireSegment else 0
