@@ -174,11 +174,12 @@ def fetchImageAndMeta(dbManager, cameraID, cameraUrl, imgDir, newOnly=False, lat
 
 
 def getDBImages(dbManager, outputDir, cameraID, heading, startTimeDT, endTimeDT, gapMinutes):
+    # heading is approximate, so we get images within 1 degree of heading
     sqlTemplate = """SELECT timestamp, imagepath FROM archive
-        where CameraID='%s' and heading=%s and timestamp >= %s and timestamp <= %s order by timestamp"""
+        where CameraID='%s' and heading >= %s and heading <= %s and timestamp >= %s and timestamp <= %s order by timestamp"""
     startTime = int(startTimeDT.timestamp())
     endTime = int(endTimeDT.timestamp())
-    sqlStr = sqlTemplate % (cameraID, heading, startTime, endTime)
+    sqlStr = sqlTemplate % (cameraID, heading-1, heading+1, startTime, endTime)
     # logging.warning('getDBImages camera %s query %s', cameraID, sqlStr)
     dbResult = dbManager.query(sqlStr)
     # logging.warning('getDBImages camera %s, reslen %s res %s', cameraID, len(dbResult), len(dbResult) and str(dbResult))
