@@ -156,6 +156,16 @@ def drawRect(imgDraw, x0, y0, x1, y1, width, color):
         imgDraw.rectangle((x0 + i, y0 + i, x1 - i, y1 -i), outline=color)
 
 
+def drawBorderedText(font, imgDraw, text, x, y):
+    # first little bit of black outline
+    for i in range(-2, 3):
+        for j in range(-2, 3):
+            imgDraw.text((x + i, y + j), text, font=font, fill="black")
+    # now actual data in orange
+    color = "orange"
+    imgDraw.text((x, y), text, font=font, fill=color)
+
+
 def drawFireBox(img, destPath, fireBoxCoords, timestamp=None, fireSegment=None, color='red', message='', cameraProvider=''):
     """Draw bounding box with fire detection and optionally write scores
 
@@ -197,28 +207,17 @@ def drawFireBox(img, destPath, fireBoxCoords, timestamp=None, fireSegment=None, 
         font = ImageFont.truetype(fontPath, size=fontSize)
         timeStr = datetime.datetime.fromtimestamp(timestamp).strftime('%H:%M:%S')
         fullStr = timeStr + ' ' + message
-        # first little bit of black outline
-        drawBlackBorder(font, imgDraw, fullStr, margin + 2, 2)
-        # now actual data in orange
-        color = "orange"
-        imgDraw.text((margin + 2, 2), fullStr, font=font, fill=color)
+        drawBorderedText(font, imgDraw, fullStr, margin + 2, 2)
 
     # "watermark" the image
-    color = "orange"
     fontSize=16
     font = ImageFont.truetype(fontPath, size=fontSize)
     margin = int(fontSize/2)
-    drawBlackBorder(font, imgDraw, "Open Climate Tech - WildfireCheck", margin, img.size[1] - fontSize - margin)
-    imgDraw.text((margin, img.size[1] - fontSize - margin), "Open Climate Tech - WildfireCheck", font=font, fill=color)
-    drawBlackBorder(font, imgDraw, cameraProvider, img.size[0] - font.getlength(cameraProvider) - margin, img.size[1] - fontSize - margin)
-    imgDraw.text((img.size[0] - font.getlength(cameraProvider) - margin, img.size[1] - fontSize - margin), cameraProvider, font=font, fill=color)
+    drawBorderedText(font, imgDraw, "Open Climate Tech - WildfireCheck", margin, img.size[1] - fontSize - margin)
+    drawBorderedText(font, imgDraw, cameraProvider, img.size[0] - font.getlength(cameraProvider) - margin, img.size[1] - fontSize - margin)
     img.save(destPath, format="JPEG", quality=95)
     del imgDraw
 
-def drawBlackBorder(font, imgDraw, text, x, y):
-    for i in range(-2, 3):
-        for j in range(-2, 3):
-            imgDraw.text((x + i, y + j), text, font=font, fill="black")
 
 def firePixelCoords(img, fireSegment):
     x0 = fireSegment['MinX'] if 'MinX' in fireSegment else 0
@@ -243,6 +242,11 @@ def genMovie(notificationsDateDir, constants, cameraID, cameraHeading, timestamp
     Returns:
         Filepath of cropped movie
     """
+    cameras = constants['cameras']
+    cameraInfo = next((item for item in cameras if item["name"] == cameraID), None)
+    if not cameraInfo or 'network' not in cameraInfo or not cameraInfo['network']:
+        return ('', imgIDs, finalTimestamp, len(postImages))
+
     (x0, y0, x1, y1) = firePixelCoords(img, fireSegment)
     (cropX0, cropX1) = rect_to_squares.getRangeFromCenter(round((x0 + x1)/2), 640, 0, img.size[0])
     # 412 pixels because that is minimum pixel height in landscape mode for most mobile phones
@@ -300,7 +304,7 @@ def genMovie(notificationsDateDir, constants, cameraID, cameraHeading, timestamp
             elif imgParsed['unixTime'] >= timestamp:
                 color = 'red'
                 message = 'Potential fire'
-            drawFireBox(croppedImg, croppedPath, fireBoxCoords, timestamp=imgParsed['unixTime'], color=color, message=message)
+            drawFireBox(croppedImg, croppedPath, fireBoxCoords, timestamp=imgParsed['unixTime'], color=color, message=message, cameraProvider=cameraInfo['network'])
             imgSeq.close()
             croppedImg.close()
             mspecFile.write("file '" + croppedPath + "'\n")
@@ -428,7 +432,7 @@ def cropCentered(mapImg, leftLongitude, rightLongitude, topLatitude, bottomLatit
 
 
 def getMapSize(mapImgGCS):
-    zoomRegex = 'map640z([0-9]+)\.jpg$'
+    zoomRegex = 'map640z([0-9]+)\\.jpg$'
     matches = re.findall(zoomRegex, mapImgGCS)
     if len(matches) != 1:
         return (None, None, None)
@@ -1415,8 +1419,12 @@ def main():
     else:
         DetectionPolicyClass = policies.get_policies()[settings.detectionPolicy]
         detectionPolicy = DetectionPolicyClass(args, dbManager, stateless=stateless)
-    logging.warning('weatherModel %s threshold %s', settings.weather_model, settings.weatherThreshold)
-    weatherModel = tf_helper.loadModel(settings.weather_model)
+    if protoNum and not groupConfig['useWeatherModel']:
+        logging.warning('Clearning weatherModel for proto')
+        weatherModel = None
+    else:
+        logging.warning('weatherModel %s threshold %s', settings.weather_model, settings.weatherThreshold)
+        weatherModel = tf_helper.loadModel(settings.weather_model)
     fireUpdateQueue = []
     constants = { # dictionary of constants to reduce parameters in various functions
         'args': args,
@@ -1427,10 +1435,8 @@ def main():
         'ignoredViews': ignoredViews,
         'fireUpdateQueue': fireUpdateQueue,
         'protoNum': protoNum,
+        'cameras': cameras,
     }
-    if protoNum and not groupConfig['useWeatherModel']:
-        constants['weatherModel'] = None
-        logging.warning('Clearning weatherModel for proto')
 
     numImages = 0
     numProbables = 0

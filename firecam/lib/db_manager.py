@@ -337,7 +337,6 @@ class DbManager(object):
             'auth': auth_schema,
         }
 
-        self.sources_table_name = 'sources'
         self._check_local_db()
 
 
@@ -476,7 +475,7 @@ class DbManager(object):
             constraints.append('dormant = 0')
         if restrictType:
             constraints.append(self.restrictTypeClause(restrictType))
-        sqlStr = "SELECT * FROM %s" % self.sources_table_name
+        sqlStr = "SELECT sources.*, network FROM sources join cameras on sources.locationid=cameras.locationid"
         if constraints:
             sqlStr += ' where ' + ' and '.join(constraints)
         sqlStr += ' order by randomID, name'
