@@ -32,9 +32,10 @@ from urllib.request import urlretrieve
 import googlemaps
 import re
 
-def getCameraLocations(dbManager):
+def getCameraLocations(dbManager, constraint=''):
     sqlStr = "select locationID, latitude, longitude from cameras where locationID !='' "
-
+    if constraint:
+        sqlStr += ' and ' + constraint
     dbResult = dbManager.query(sqlStr)
     # print('dbr', len(dbResult), dbResult)
     if len(dbResult) == 0:
@@ -109,13 +110,15 @@ def main():
     ]
     optArgs = [
         ["l", "locationID", "camera locationID"],
+        ["c", "constraint", "Extra SQL constraint for camera selection"],
     ]
     args = collect_args.collectArgs(reqArgs, optionalArgs=optArgs)
     dbManager = db_manager.DbManager(sqliteFile=settings.db_file,
                                     psqlHost=settings.psqlHost, psqlDb=settings.psqlDb,
                                     psqlUser=settings.psqlUser, psqlPasswd=settings.psqlPasswd)
     gmaps = googlemaps.Client(key=settings.mapsKey)
-    locations = getCameraLocations(dbManager)
+    locations = getCameraLocations(dbManager, args.constraint)
+    logging.warning('Constraints %s results in %d locaitons', args.constraint, len(locations))
     if args.locationID:
         locations = list(filter(lambda x: x['locationid'] == args.locationID.strip(), locations))
     for location in locations:
