@@ -381,6 +381,9 @@ def main():
             checkTimeDiff = MAX_INTERVAL_SEC_ROTATE if isSpinning else MAX_INTERVAL_SEC_FIXED
             if latestCamInfo:
                 timeStr = latestCamInfo['image']['time']
+                if not timeStr:
+                    logging.error('No time/url for %s, %s', cameraInfo['name'], latestCamInfo['image'])
+                    continue
                 timestamp = min(timestamp, int(dateutil.parser.parse(timeStr).timestamp()))
             if (lastFetchTime < timestamp - checkTimeDiff):
                 # fetchImage(dbManager, cameraInfo, lastFetchTime, args.archiveDir)
