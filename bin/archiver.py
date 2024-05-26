@@ -45,7 +45,7 @@ def getSpinFetchInfo(dbManager, cameraInfo, timestamp):
     rot = False
     topHeading = dbResult[0]['heading']
     for entry in dbResult:
-        if entry['heading'] != topHeading:
+        if abs(entry['heading'] - topHeading) % 360 > 1: # allow 1 degree difference
             rot = True
             break
     fetchTime = dbResult[0]['timestamp']
@@ -69,7 +69,7 @@ def fetchImage(dbManager, cameraInfo, lastFetchTime, dirName, latestCamInfo):
         return
     dbRow = {
         'CameraId': cameraInfo['name'],
-        'Heading': heading,
+        'Heading': heading % 360,
         'Timestamp': timestamp,
         'ImagePath': imgPath,
         'FieldOfView': fov,
