@@ -60,6 +60,9 @@ def fetchImage(dbManager, cameraInfo, lastFetchTime, dirName, latestCamInfo):
     try:
         imgInfo = img_archive.fetchImageAndMeta(dbManager, cameraInfo['name'], cameraInfo['url'], dirName, newOnly=True, latestCamInfo=latestCamInfo)
         (imgPath, heading, timestamp, fov) = imgInfo
+        if not imgPath:
+            logging.error('No image path for %s', cameraInfo['name'])
+            return
     except Exception as e:
         logging.error('Error fetching image from %s %s', cameraInfo['name'], str(e))
         return
