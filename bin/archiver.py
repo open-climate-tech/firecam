@@ -69,7 +69,7 @@ def fetchImage(dbManager, cameraInfo, lastFetchTime, dirName, latestCamInfo):
         return
     dbRow = {
         'CameraId': cameraInfo['name'],
-        'Heading': heading % 360,
+        'Heading': round(heading) % 360,
         'Timestamp': timestamp,
         'ImagePath': imgPath,
         'FieldOfView': fov,
