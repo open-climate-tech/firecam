@@ -115,6 +115,8 @@ def getRawBurnsDataCached(dbManager):
 def filterActiveBurns(burnsStr):
     csvreader = csv.reader(burnsStr.splitlines())
     burnsList = list(csvreader)
+    if len(burnsList) < 2:
+        return []
     header = burnsList[0]
     latIndex = header.index('Latitude')
     longIndex = header.index('Longitude')
