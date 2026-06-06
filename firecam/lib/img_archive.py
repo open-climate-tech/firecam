@@ -60,8 +60,8 @@ def fetchUrlHPWren(cameraID, cameraUrl, imgDir, timestamp, imgPath):
     img.close()
     if imgExif:
         imgExifStr = imgExif.decode('utf-8','ignore')
-        utcMatch = imgExifStr and re.findall('(\d+) UTC', imgExifStr)
-        dateStrMatch = imgExifStr and re.findall('(20\d\d):(\d\d):(\d\d) (\d\d:\d\d:\d\d)', imgExifStr)
+        utcMatch = imgExifStr and re.findall(r'(\d+) UTC', imgExifStr)
+        dateStrMatch = imgExifStr and re.findall(r'(20\d\d):(\d\d):(\d\d) (\d\d:\d\d:\d\d)', imgExifStr)
         newTimestamp = None
         if utcMatch and len(utcMatch):
             newTimestamp = int(utcMatch[0])
@@ -256,14 +256,14 @@ def parseFilename(fileName):
     """
     # regex to match names like Axis-BaldCA_2018-05-29T16_02_30_129496.jpg
     # and bm-n-mobo-c__2017-06-25z11;53;33.jpg
-    regexExpanded = '([A-Za-z0-9-_]+[^_])_+(\d{4}-\d\d-\d\d)T(\d\d)[_;](\d\d)[_;](\d\d)'
+    regexExpanded = r'([A-Za-z0-9-_]+[^_])_+(\d{4}-\d\d-\d\d)T(\d\d)[_;](\d\d)[_;](\d\d)'
     # regex to match diff minutes spec for subtracted images
-    regexDiff = '(_Diff(\d+))?'
+    regexDiff = r'(_Diff(\d+))?'
     # regex to match optional crop information e.g., Axis-Cowles_2019-02-19T16;23;49_Crop_270x521x569x820.jpg
-    regexOptionalCrop = '(_Crop_(-?\d+)x(-?\d+)x(\d+)x(\d+))?'
+    regexOptionalCrop = r'(_Crop_(-?\d+)x(-?\d+)x(\d+)x(\d+))?'
     matchesExp = re.findall(regexExpanded + regexDiff + regexOptionalCrop, fileName)
     # regex to match names like 1499546263.jpg
-    regexUnixTime = '(1\d{9})'
+    regexUnixTime = r'(1\d{9})'
     matchesUnix = re.findall(regexUnixTime + regexDiff + regexOptionalCrop, fileName)
     cropInfo = None
     if len(matchesExp) == 1:
