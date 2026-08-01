@@ -90,7 +90,7 @@ def fetchAlertCamsInfo(alertUrl, alertApiKey):
         return []
 
 
-MAX_VALID_OLD_IMAGE_SECS = 60
+MAX_VALID_OLD_IMAGE_SECS = 200
 def fetchPTZ(cameraID, latestCamInfo, imgDir, timestamp, imgPath):
     cameraUrl = latestCamInfo['image']['url']
     urllib.request.urlretrieve(cameraUrl, imgPath)
