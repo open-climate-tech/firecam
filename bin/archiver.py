@@ -399,15 +399,23 @@ def main():
         threads = []
         for threadNum in range(args.numThreads):
             # logging.warning('params for thread %d: %s', threadNum, threadParams[threadNum])
-            thread = threading.Thread(target=threadFn, args=(threadParams[threadNum],))
+            thread = threading.Thread(target=threadFn, args=(threadParams[threadNum],), daemon=True)
             threads.append(thread)
             thread.start()
             logging.warning('started thread %d: %s with %d fetches', threadNum, thread.ident, len(threadParams[threadNum]))
 
         # wait for all threads to finish
+        # Use a generous timeout so a stuck network fetch cannot hang the
+        # main loop forever. Threads are daemonized; stragglers are logged
+        # and abandoned (they will finish or die on their own).
+        JOIN_TIMEOUT_SEC = 10 * 60
+        hungThreads = []
         for thread in threads:
-            thread.join()
-        logging.warning('All threads ended')
+            thread.join(JOIN_TIMEOUT_SEC)
+            if thread.is_alive():
+                logging.error('Thread %s still alive after %ds; abandoning', thread.ident, JOIN_TIMEOUT_SEC)
+                hungThreads.append(thread)
+        logging.warning('All threads ended (hung: %d)', len(hungThreads))
 
         endTime = time.time()
         MIN_CYCLE_SECONDS = min(MAX_INTERVAL_SEC_FIXED, MAX_INTERVAL_SEC_ROTATE)

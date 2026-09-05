@@ -52,7 +52,9 @@ def getApproxCameraSizeX(cameraID):
 
 
 def fetchUrlHPWren(cameraID, cameraUrl, imgDir, timestamp, imgPath):
-    urllib.request.urlretrieve(cameraUrl, imgPath)
+    resp = urllib.request.urlopen(cameraUrl, timeout=60)
+    with open(imgPath, 'wb') as f:
+        f.write(resp.read())
     heading = getHeading(cameraID)
     # read EXIF header for original timestamp and rename file
     img = Image.open(imgPath)
@@ -81,7 +83,7 @@ def fetchUrlHPWren(cameraID, cameraUrl, imgDir, timestamp, imgPath):
 def fetchAlertCamsInfo(alertUrl, alertApiKey):
     try:
         req = urllib.request.Request(alertUrl, headers={'X-Api-Key': alertApiKey})
-        resp = urllib.request.urlopen(req)
+        resp = urllib.request.urlopen(req, timeout=60)
         camInfoStr = resp.read().decode('utf-8')
         camInfoJson = json.loads(camInfoStr)
         return camInfoJson
@@ -93,7 +95,9 @@ def fetchAlertCamsInfo(alertUrl, alertApiKey):
 MAX_VALID_OLD_IMAGE_SECS = 200
 def fetchPTZ(cameraID, latestCamInfo, imgDir, timestamp, imgPath):
     cameraUrl = latestCamInfo['image']['url']
-    urllib.request.urlretrieve(cameraUrl, imgPath)
+    resp = urllib.request.urlopen(cameraUrl, timeout=60)
+    with open(imgPath, 'wb') as f:
+        f.write(resp.read())
     fov = latestCamInfo['view']['field_angle']
     if fov < 30:
         logging.error('Bad fov value %s: %s', cameraID, fov)
@@ -388,7 +392,7 @@ def fetchImgOrDir(url, verboseLogs):
         Tuple indicating image or directory and the data
     """
     try:
-        resp = urllib.request.urlopen(url)
+        resp = urllib.request.urlopen(url, timeout=60)
     except Exception as e:
         if verboseLogs:
             logging.error('Result of fetch from %s: %s', url, str(e))
@@ -465,7 +469,7 @@ def downloadHttpFileAtTime(outputDir, urlPartsQ, cameraID, closestTime, verboseL
     logging.warning('File URL %s', url)
 
     # urllib.request.urlretrieve(url, imgPath)
-    resp = requests.get(url, stream=True)
+    resp = requests.get(url, stream=True, timeout=(10, 60))
     with open(imgPath, 'wb') as f:
         for chunk in resp.iter_content(chunk_size=8192):
             if chunk: # filter out keep-alive new chunks
@@ -545,7 +549,7 @@ def gcfFfmpeg(gcfUrl, googleServices, hpwrenSource, qNum, folderID):
     while retriesLeft > 0:
         token = goog_helper.getIdToken(googleServices, gcfUrl, retriesLeft != maxRetries)
         headers = {'Authorization': 'bearer {}'.format(token)}
-        rawResponse = requests.post(gcfUrl, headers=headers, data=gcfParams)
+        rawResponse = requests.post(gcfUrl, headers=headers, data=gcfParams, timeout=(10, 120))
         response = rawResponse.content.decode()
         if response == 'done':
             return response
